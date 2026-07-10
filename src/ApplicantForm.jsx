@@ -2,7 +2,7 @@ import{useState,useEffect}from"react";
 import{supabase}from"./supabase";
 import{DISTRICT_LIST,SAUDI_CITIES,calcGeoScore,ZONE_COLORS}from"./geoScoring";
 const STEPS=[{id:1,icon:"👋",ar:"مرحباً"},{id:2,icon:"👤",ar:"بياناتك"},{id:3,icon:"🏍️",ar:"الرخصة"},{id:4,icon:"📄",ar:"المستندات"},{id:5,icon:"🔧",ar:"الكفاءة"},{id:6,icon:"🧠",ar:"سلوكيات"},{id:7,icon:"✅",ar:"تأكيد"}];
-const INIT={full_name:"",whatsapp:"",location:"",age:"",height_cm:"",weight_kg:"",passport_or_iqama:"",marital_status:"",children_count:"",has_license:"",licenseFile:null,photoFile:null,iqamaFile:null,passportFile:null,car_wash_description:"",videoFile:null,q1:"",q2:"",q3:"",q4:"",q5:"",q6:"",declaration:false,bangladesh_district:"",bangladesh_city:"",saudi_city:"",ready_for_riyadh:""};
+const INIT={full_name:"",whatsapp:"",location:"",age:"",height_cm:"",weight_kg:"",passport_or_iqama:"",marital_status:"",children_count:"",has_license:"",licenseFile:null,photoFile:null,iqamaFile:null,passportFile:null,car_wash_description:"",videoFile:null,q1:"",q2:"",q3:"",q4:"",q5:"",q6:"",declaration:false,bangladesh_district:"",bangladesh_city:"",map_link:"",saudi_city:"",ready_for_riyadh:""};
 const CC=[{c:"+880",f:"🇧🇩",a:"BD"},{c:"+966",f:"🇸🇦",a:"SA"},{c:"+971",f:"🇦🇪",a:"AE"},{c:"+965",f:"🇰🇼",a:"KW"},{c:"+974",f:"🇶🇦",a:"QA"},{c:"+973",f:"🇧🇭",a:"BH"},{c:"+968",f:"🇴🇲",a:"OM"}];
 function PhoneF({form,set,errors}){const[cc,setCc]=useState("+880");const[num,setNum]=useState("");useEffect(()=>{if(num)set("whatsapp",`${cc}${num}`);else set("whatsapp","");},[cc,num]);return(<div style={{display:"flex",gap:8,direction:"ltr"}}><select value={cc} onChange={e=>setCc(e.target.value)} style={{...s.inp,width:110,flex:"0 0 auto",direction:"ltr",textAlign:"left",padding:"12px 8px",...(errors.whatsapp?s.err:{})}}>{CC.map(c=><option key={c.c} value={c.c}>{c.f} {c.c}</option>)}</select><input type="tel" value={num} onChange={e=>setNum(e.target.value.replace(/\D/g,""))} placeholder="XXXXXXXXXX" dir="ltr" style={{...s.inp,flex:1,direction:"ltr",textAlign:"left",...(errors.whatsapp?s.err:{})}}/></div>);}
 export default function ApplicantForm({onBack}){
@@ -87,17 +87,38 @@ function S2({form,set,errors}){
       <div style={{color:"#1d4ed8",fontSize:12,fontWeight:800,marginBottom:10,textAlign:"right"}}>📍 موقعك في بنغلادش / আপনার বাংলাদেশের অবস্থান</div>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <div><div style={s.lbl}>المحافظة / المنطقة <span style={{color:"#E8712B"}}>*</span></div><div style={s.lbl2}>District / জেলা</div>
-          <select value={form.bangladesh_district} onChange={e=>set("bangladesh_district",e.target.value)} style={{...s.inp,...(errors.bangladesh_district?s.err:{})}}>
-            <option value="">اختر المحافظة / জেলা নির্বাচন</option>
-            <optgroup label="🟢 مناطق خضراء (موصى بها)">{["كيشوريغانج","كوميلا","براهمانباريا","تشاندبور","ناريسينغدي","نواخالي","تانغيل","ماداريبور","باريسال","فيني"].map(d=><option key={d} value={d}>{d}</option>)}</optgroup>
-            <optgroup label="🟡 مناطق أخرى">{["دهاكا","مومينشاهي","جيسور","راجشاهي","سيلهيت","أخرى"].map(d=><option key={d} value={d}>{d}</option>)}</optgroup>
-            <optgroup label="🔴 مناطق محظورة">{["رانغاماتي","باندربان","كوكس بازار"].map(d=><option key={d} value={d}>{d}</option>)}</optgroup>
-          </select>
-          {geo&&<div style={{marginTop:8,padding:"8px 12px",borderRadius:10,background:ZONE_COLORS[geo.zone].bg,border:`1px solid ${ZONE_COLORS[geo.zone].border}`}}><div style={{color:ZONE_COLORS[geo.zone].text,fontSize:11,fontWeight:700}}>{ZONE_COLORS[geo.zone].label}</div><div style={{color:ZONE_COLORS[geo.zone].text,fontSize:11,marginTop:2}}>نقاط المنطقة: {geo.score}/100</div>{geo.instant_reject&&<div style={{color:"#dc2626",fontSize:11,fontWeight:700,marginTop:4}}>⚠️ خطر صحي أو أمني — سيُرفض الطلب</div>}</div>}
+          <input value={form.bangladesh_district} onChange={e=>set("bangladesh_district",e.target.value)}
+            style={{...s.inp,...(errors.bangladesh_district?s.err:{})}}
+            placeholder="مثال: Kishoreganj أو Cumilla أو Dhaka..."/>
+          {geo&&<div style={{marginTop:6,padding:"8px 12px",borderRadius:10,background:ZONE_COLORS[geo.zone].bg,border:`1px solid ${ZONE_COLORS[geo.zone].border}`}}><div style={{color:ZONE_COLORS[geo.zone].text,fontSize:11,fontWeight:700}}>{ZONE_COLORS[geo.zone].label}</div><div style={{color:ZONE_COLORS[geo.zone].text,fontSize:11,marginTop:2}}>نقاط المنطقة: {geo.score}/100</div>{geo.instant_reject&&<div style={{color:"#dc2626",fontSize:11,fontWeight:700,marginTop:4}}>⚠️ خطر — سيُرفض الطلب</div>}</div>}
         </div>
         <div><div style={s.lbl}>المدينة / القرية <span style={{color:"#E8712B"}}>*</span></div><div style={s.lbl2}>City / Village / শহর/গ্রাম</div>
           <input value={form.bangladesh_city} onChange={e=>set("bangladesh_city",e.target.value)} style={{...s.inp,...(errors.bangladesh_city?s.err:{})}} placeholder="مثال: Brahmanbaria Sadar"/>
-          {form.bangladesh_city&&<a href={mapUrl} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:6,marginTop:6,color:"#2563eb",fontSize:11,fontWeight:700,textDecoration:"none"}}>🗺️ عرض على الخريطة / মানচিত্রে দেখুন ←</a>}
+        </div>
+
+        {/* رابط الخريطة */}
+        <div>
+          <div style={s.lbl}>رابط موقعك على خرائط جوجل</div>
+          <div style={s.lbl2}>Google Maps Link / মানচিত্র লিংক (اختياري)</div>
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+            <input value={form.map_link||""} onChange={e=>set("map_link",e.target.value)}
+              style={{...s.inp,flex:1,direction:"ltr",textAlign:"left",fontSize:11}}
+              placeholder="https://maps.google.com/..."/>
+            <a href={`https://maps.google.com/maps?q=${encodeURIComponent((form.bangladesh_city||"")+" "+(form.bangladesh_district||"")+" Bangladesh")}`}
+              target="_blank" rel="noreferrer"
+              style={{flexShrink:0,padding:"11px 12px",background:"linear-gradient(135deg,#2563eb,#1d4ed8)",borderRadius:10,color:"#fff",fontSize:11,fontWeight:700,textDecoration:"none"}}>
+              🗺️ افتح
+            </a>
+          </div>
+          <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"8px 12px"}}>
+            <div style={{color:"#16a34a",fontSize:11,fontWeight:700,marginBottom:2}}>كيف تحصل على الرابط؟</div>
+            <div style={{color:"#15803d",fontSize:10,lineHeight:1.8,textAlign:"right"}}>
+              ١. افتح Google Maps وابحث عن منطقتك<br/>
+              ٢. اضغط "مشاركة" أو "Share"<br/>
+              ٣. انسخ الرابط والصقه هنا<br/>
+              <span style={{textAlign:"left",display:"block",marginTop:2}}>Google Maps এ এলাকা খুঁজুন → Share → লিংক কপি করুন</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
