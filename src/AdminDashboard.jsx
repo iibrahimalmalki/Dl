@@ -41,6 +41,95 @@ function Card({a,onClick,onAnalyze,analyzing}){const st=ST[a.status]||ST.pending
 
 function Detail({a,onBack,onStatus,onAnalyze,onSaveNotes,onDelete,analyzing}){
   const[notes,setNotes]=useState(a.admin_notes||"");const[saving,setSaving]=useState(false);const[del,setDel]=useState(false);const[showInvite,setShowInvite]=useState(false);const[showIQ,setShowIQ]=useState(false);const[iLink,setILink]=useState("");const[editMode,setEditMode]=useState(false);const[ed,setEd]=useState({full_name:a.full_name||"",whatsapp:a.whatsapp||"",age:a.age||"",height_cm:a.height_cm||"",weight_kg:a.weight_kg||"",marital_status:a.marital_status||"",children_count:a.children_count||0,passport_or_iqama:a.passport_or_iqama||""});const[eSaving,setESaving]=useState(false);
+  const[session,setSession]=useState(null);const[aiReport,setAiReport]=useState(null);const[loadingReport,setLoadingReport]=useState(false);
+
+  useEffect(()=>{
+    supabase.from("interview_sessions").select("*").eq("applicant_id",a.id).eq("status","completed").order("created_at",{ascending:false}).limit(1).single()
+    .then(({data})=>{if(data)setSession(data);});
+  },[a.id]);
+
+  const genReport=async()=>{
+    setLoadingReport(true);
+    try{
+      const res=await fetch("https://cnmggdrlkgsyrjxmvydv.supabase.co/functions/v1/analyze",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({applicant:{...a,interview_answers:session?.answers||a.interview_answers,interview_questions:session?.questions}})
+      });
+      const ev=await res.json();
+      setAiReport(ev);
+      await supabase.from("applicants").update({ai_score_total:ev.score_total,ai_score_technical:ev.score_technical,ai_score_behavioral:ev.score_behavioral,score_physical:ev.score_physical,score_responsibility:ev.score_responsibility,ai_classification:ev.classification,ai_notes:ev.recommendation,ai_evaluation_json:ev}).eq("id",a.id);
+    }catch(e){alert("خطأ: "+e.message);}
+    setLoadingReport(false);
+  };
+
+  const exportMD=()=>{
+    const geo=a.bangladesh_district?calcGeoScore(a.bangladesh_district):null;
+    const qs=session?.questions||[];
+    const ans=session?.answers||a.interview_answers||{};
+    const md=`# تقرير المتقدم — ${a.full_name}
+**رقم الطلب:** #${a.application_number} | **التاريخ:** ${new Date().toLocaleDateString("ar-SA")}
+
+---
+
+## البيانات الأساسية
+| البند | القيمة |
+|---|---|
+| العمر | ${a.age} سنة |
+| الطول | ${a.height_cm} سم |
+| الوزن | ${a.weight_kg} كغ |
+| الموقع | ${a.location==="inside_ksa"?"داخل المملكة":"خارج"} |
+| الرخصة | ${a.has_license?"✅ نعم":"❌ لا"} |
+| الحالة | ${a.marital_status==="married"?`متزوج — ${a.children_count||0} أبناء`:"أعزب"} |
+| المحافظة | ${a.bangladesh_district||"—"} |
+| المدينة | ${a.bangladesh_city||"—"} |
+| نقاط المنطقة | ${geo?.score||"—"}/100 (${geo?.zone||"—"}) |
+
+---
+
+## الأسئلة السلوكية
+| # | السؤال | الإجابة |
+|---|---|---|
+| 1 | رفض عميل فجأة | ${a.q1_client_refusal||"—"} |
+| 2 | فواحة/مناديل خارج الطلب | ${a.q2_equipment_damage||"—"} |
+| 3 | سبب ترك العمل | ${a.q3_left_previous_job||"—"} |
+| 4 | خصم من الراتب | ${a.q4_salary_deduction||"—"} |
+| 5 | هدف بعد سنة | ${a.q5_one_year_goal||"—"} |
+| 6 | زميل مشكلة | ${a.q6_difficult_colleague||"—"} |
+
+---
+
+## وصف الغسيل
+${a.car_wash_description||"لم يُجب"}
+
+---
+
+## إجابات المقابلة الشخصية
+${qs.map((q,i)=>`**س${i+1}:** ${q.ar}\n**الإجابة:** ${ans[i]||"—"}`).join("\n\n")}
+
+---
+
+## تحليل الذكاء الاصطناعي
+- **الدرجة الكلية:** ${a.ai_score_total?.toFixed(1)||"لم يُحلل"}/10
+- **التصنيف:** ${a.ai_classification||"—"}
+- **اللياقة:** ${a.score_physical?.toFixed(1)||"—"}/10
+- **المسؤولية:** ${a.score_responsibility?.toFixed(1)||"—"}/10
+- **الكفاءة الفنية:** ${a.ai_score_technical?.toFixed(1)||"—"}/10
+- **السلوكيات:** ${a.ai_score_behavioral?.toFixed(1)||"—"}/10
+
+${a.ai_evaluation_json?.recommendation?`**التوصية:** ${a.ai_evaluation_json.recommendation}`:""}
+${a.ai_evaluation_json?.ariful_comparison?`**مقارنة بأريفول:** ${a.ai_evaluation_json.ariful_comparison}`:""}
+
+---
+
+## ملاحظاتي
+${a.admin_notes||"لا توجد"}
+`;
+    const blob=new Blob([md],{type:"text/markdown"});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=url;link.download=`applicant-${a.application_number}-${a.full_name.replace(/\s/g,"-")}.md`;
+    link.click();URL.revokeObjectURL(url);
+  };
   const ev=a.ai_evaluation_json;const st=ST[a.status]||ST.pending;const geo=a.bangladesh_district?calcGeoScore(a.bangladesh_district):null;
   const save=async()=>{setSaving(true);await onSaveNotes(a.id,notes);setSaving(false);};
   const saveEdit=async()=>{setESaving(true);const{error}=await supabase.from("applicants").update(ed).eq("id",a.id);if(error)alert("خطأ: "+error.message);else{setEditMode(false);Object.assign(a,ed);}setESaving(false);};
@@ -77,12 +166,84 @@ function Detail({a,onBack,onStatus,onAnalyze,onSaveNotes,onDelete,analyzing}){
       {/* الأسئلة */}
       <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>🧠 الأسئلة السلوكية</div>{[["رفض عميل",a.q1_client_refusal],["فواحة/مناديل",a.q2_equipment_damage],["سبب ترك العمل",a.q3_left_previous_job],["خصم الراتب",a.q4_salary_deduction],["هدف بعد سنة",a.q5_one_year_goal],["زميل مشكلة",a.q6_difficult_colleague]].map(([q,ans],i)=><div key={i} style={{background:"#f8fafc",borderRadius:10,padding:"8px 12px",marginBottom:6}}><div style={{color:"#E8712B",fontSize:10,fontWeight:700,marginBottom:3}}>{i+1}. {q}</div><div style={{color:"#1e293b",fontSize:12,lineHeight:1.6}}>{ans||"—"}</div></div>)}</div>
 
-      {/* إجابات المقابلة */}
-      {a.interview_answers&&<div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>🎯 إجابات المقابلة</div><div style={{background:"#eff6ff",borderRadius:8,padding:"6px 12px",marginBottom:10}}><span style={{color:"#1d4ed8",fontSize:11,fontWeight:700}}>✅ اكتملت المقابلة</span></div>{Object.entries(a.interview_answers).map(([i,ans])=><div key={i} style={{background:"#f8fafc",borderRadius:10,padding:"8px 12px",marginBottom:6}}><div style={{color:"#7c3aed",fontSize:10,fontWeight:700,marginBottom:3}}>سؤال {+i+1}</div><div style={{color:"#1e293b",fontSize:12,lineHeight:1.6}}>{ans||"—"}</div></div>)}</div>}
+      {/* إجابات المقابلة — السؤال + الجواب */}
+      {(session||a.interview_answers)&&<div style={s.sec}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <button onClick={exportMD} style={{padding:"6px 12px",background:"linear-gradient(135deg,#475569,#334155)",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>📄 تصدير MD</button>
+          <div style={{color:"#1e293b",fontSize:13,fontWeight:800}}>🎯 إجابات المقابلة</div>
+        </div>
+        <div style={{background:"#eff6ff",borderRadius:8,padding:"6px 12px",marginBottom:10}}><span style={{color:"#1d4ed8",fontSize:11,fontWeight:700}}>✅ اكتملت المقابلة — {(session?.questions||[]).length} سؤال</span></div>
+        {(session?.questions||[]).map((q,i)=>{
+          const ans=(session?.answers||a.interview_answers||{})[i];
+          return(
+            <div key={i} style={{background:"#f8fafc",borderRadius:10,padding:"10px 12px",marginBottom:8,border:"1px solid #e2e8f0"}}>
+              <div style={{color:"#7c3aed",fontSize:10,fontWeight:800,marginBottom:4}}>سؤال {i+1}</div>
+              <div style={{color:"#1e293b",fontSize:12,fontWeight:700,marginBottom:6,lineHeight:1.5}}>{q.ar}</div>
+              <div style={{background:"#fff",borderRadius:8,padding:"8px 10px",borderRight:"3px solid #7c3aed"}}>
+                <div style={{color:"#475569",fontSize:12,lineHeight:1.6}}>{ans||<span style={{color:"#94a3b8",fontStyle:"italic"}}>لم يُجب</span>}</div>
+              </div>
+            </div>
+          );
+        })}
+        {/* إذا كانت الإجابات فقط بدون أسئلة */}
+        {!session&&a.interview_answers&&Object.entries(a.interview_answers).map(([i,ans])=>(
+          <div key={i} style={{background:"#f8fafc",borderRadius:10,padding:"8px 12px",marginBottom:6}}>
+            <div style={{color:"#7c3aed",fontSize:10,fontWeight:700,marginBottom:3}}>سؤال {+i+1}</div>
+            <div style={{color:"#1e293b",fontSize:12,lineHeight:1.6}}>{ans||"—"}</div>
+          </div>
+        ))}
+      </div>}
 
       {/* تحليل AI */}
       <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:12}}>🤖 تحليل الذكاء الاصطناعي</div>
-        {a.ai_score_total!=null?(<div><div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:42,fontWeight:900,color:"#E8712B"}}>{Number(a.ai_score_total).toFixed(1)}</div><div style={{color:"#64748b",fontSize:11}}>الدرجة الكلية من 10</div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[{l:"🏃 اللياقة",k:"score_physical",w:"15%",c:"#16a34a"},{l:"👨‍👩‍👧 المسؤولية",k:"score_responsibility",w:"25%",c:"#7c3aed"},{l:"🔧 الفني",k:"ai_score_technical",w:"30%",c:"#2563eb"},{l:"🧠 السلوكي",k:"ai_score_behavioral",w:"30%",c:"#E8712B"}].map(d=>{const val=ev?.[d.k.replace("ai_","score_")]||ev?.[d.k]||a[d.k]||0;return(<div key={d.k} style={{background:"#f8fafc",borderRadius:12,padding:"10px 12px"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:10,color:"#64748b"}}>{d.l}</span><span style={{fontSize:10,color:"#94a3b8"}}>{d.w}</span></div><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{flex:1,height:5,background:"#e2e8f0",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${(val/10)*100}%`,background:d.c,borderRadius:3}}/></div><span style={{fontSize:13,fontWeight:800,color:d.c}}>{Number(val).toFixed(1)}</span></div></div>);})}</div>{a.ai_classification&&<div style={{textAlign:"center",fontSize:14,fontWeight:800,color:CL[a.ai_classification]?.color,padding:"6px 0 12px"}}>{CL[a.ai_classification]?.ar}</div>}{ev&&<>{ev.technical_notes&&<EB c="#2563eb" t="🔧 الكفاءة الفنية" txt={ev.technical_notes}/>}{ev.behavioral_notes&&<EB c="#7c3aed" t="🧠 السلوكيات" txt={ev.behavioral_notes}/>}{ev.strengths?.length>0&&<EB c="#16a34a" t="✅ نقاط القوة" list={ev.strengths}/>}{ev.weaknesses?.length>0&&<EB c="#dc2626" t="⚠️ نقاط الضعف" list={ev.weaknesses}/>}{ev.recommendation&&<EB c="#1e293b" t="📋 التوصية" txt={ev.recommendation}/>}{ev.ariful_comparison&&<EB c="#7c3aed" t="⭐ مقارنة بأريفول" txt={ev.ariful_comparison} accent/>}</>}<button onClick={()=>onAnalyze(a)} disabled={analyzing} style={{...s.bFull,background:"linear-gradient(135deg,#7c3aed,#6d28d9)",marginTop:8}}>{analyzing?"⟳ جاري...":"🔄 إعادة التحليل"}</button></div>):<button onClick={()=>onAnalyze(a)} disabled={analyzing} style={{...s.bFull,background:"linear-gradient(135deg,#7c3aed,#6d28d9)"}}>{analyzing?"⟳ جاري التحليل...":"🤖 تحليل بالذكاء الاصطناعي"}</button>}
+
+        {/* زر التحليل الذكي الكامل */}
+        <button onClick={genReport} disabled={loadingReport}
+          style={{...s.bFull,background:"linear-gradient(135deg,#7c3aed,#6d28d9)",marginBottom:12,opacity:loadingReport?0.6:1}}>
+          {loadingReport?"⟳ جاري التحليل الشامل...":"🧠 تحليل ذكي شامل + توصيات"}
+        </button>
+
+        {/* عرض التقرير الذكي */}
+        {(aiReport||a.ai_evaluation_json)&&(()=>{const ev=aiReport||a.ai_evaluation_json;return(<div>
+          <div style={{textAlign:"center",marginBottom:14}}>
+            <div style={{fontSize:42,fontWeight:900,color:"#E8712B"}}>{Number(a.ai_score_total||ev?.score_total||0).toFixed(1)}</div>
+            <div style={{color:"#64748b",fontSize:11}}>الدرجة الكلية من 10</div>
+          </div>
+          {/* أشرطة الأداء */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+            {[{l:"🏃 اللياقة",v:a.score_physical||ev?.score_physical||0,c:"#16a34a",w:"15%"},
+              {l:"👨‍👩‍👧 المسؤولية",v:a.score_responsibility||ev?.score_responsibility||0,c:"#7c3aed",w:"25%"},
+              {l:"🔧 الفني",v:a.ai_score_technical||ev?.score_technical||0,c:"#2563eb",w:"30%"},
+              {l:"🧠 السلوكي",v:a.ai_score_behavioral||ev?.score_behavioral||0,c:"#E8712B",w:"30%"}
+            ].map(d=><div key={d.l} style={{background:"#f8fafc",borderRadius:12,padding:"10px 12px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                <span style={{fontSize:10,color:"#64748b"}}>{d.w}</span>
+                <span style={{fontSize:10,color:"#94a3b8"}}>{d.l}</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{flex:1,height:6,background:"#e2e8f0",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${(+d.v/10)*100}%`,background:d.c,borderRadius:3,transition:"width 0.5s"}}/>
+                </div>
+                <span style={{fontSize:14,fontWeight:900,color:d.c}}>{Number(d.v).toFixed(1)}</span>
+              </div>
+            </div>)}
+          </div>
+          {a.ai_classification&&<div style={{textAlign:"center",fontSize:14,fontWeight:800,color:CL[a.ai_classification]?.color,padding:"6px 0 10px"}}>{CL[a.ai_classification]?.ar}</div>}
+          {ev&&<>
+            {ev.technical_notes&&<EB c="#2563eb" t="🔧 الكفاءة الفنية" txt={ev.technical_notes}/>}
+            {ev.behavioral_notes&&<EB c="#7c3aed" t="🧠 السلوكيات" txt={ev.behavioral_notes}/>}
+            {ev.strengths?.length>0&&<EB c="#16a34a" t="✅ نقاط القوة" list={ev.strengths}/>}
+            {ev.weaknesses?.length>0&&<EB c="#dc2626" t="⚠️ نقاط الضعف" list={ev.weaknesses}/>}
+            {ev.recommendation&&<EB c="#1e293b" t="📋 التوصية النهائية" txt={ev.recommendation} accent/>}
+            {ev.ariful_comparison&&<EB c="#7c3aed" t="⭐ مقارنة بأريفول" txt={ev.ariful_comparison} accent/>}
+          </>}
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <button onClick={genReport} disabled={loadingReport} style={{...s.bFull,background:"linear-gradient(135deg,#7c3aed,#6d28d9)",flex:2}}>{loadingReport?"⟳ جاري...":"🔄 إعادة التحليل"}</button>
+            <button onClick={exportMD} style={{...s.bFull,background:"linear-gradient(135deg,#475569,#334155)",flex:1}}>📄 MD</button>
+          </div>
+        </div>);})()}
+
+        {!a.ai_score_total&&!aiReport&&<p style={{color:"#94a3b8",fontSize:12,textAlign:"center",padding:"8px 0"}}>اضغط "تحليل ذكي شامل" للبدء</p>}
       </div>
 
       {/* إدارة المقابلة */}
