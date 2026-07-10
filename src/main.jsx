@@ -2,6 +2,7 @@ import React,{useState,useEffect,lazy,Suspense}from"react";
 import ReactDOM from"react-dom/client";
 import LandingPage from"./LandingPage";
 import EmployeePage from"./EmployeePage";
+import RecruitmentAd from"./RecruitmentAd";
 const ApplicantForm=lazy(()=>import("./ApplicantForm"));
 const AdminDashboard=lazy(()=>import("./AdminDashboard"));
 const InterviewPage=lazy(()=>import("./InterviewPage"));
@@ -19,6 +20,6 @@ function App(){
     window.addEventListener("hashchange",h);
     return()=>window.removeEventListener("hashchange",h);
   },[]);
-  return(<Suspense fallback={<Spin/>}>{page==="landing"&&<LandingPage onRecruit={()=>setPage("recruit")} onEmployee={()=>setPage("employee")}/>}{page==="recruit"&&<ApplicantForm onBack={()=>setPage("landing")}/>}{page==="employee"&&<EmployeePage onBack={()=>setPage("landing")}/>}{page==="interview"&&sessionId&&<InterviewPage sessionId={sessionId}/>}{page==="admin"&&(!loggedIn?<Login onLogin={()=>setLoggedIn(true)}/>:<AdminDashboard onLogout={()=>{localStorage.removeItem("dalu_admin");setLoggedIn(false);setPage("landing");window.location.hash="";}}/>)}</Suspense>);
+  return(<Suspense fallback={<Spin/>}>{page==="landing"&&<LandingPage onRecruit={()=>setPage("ad")} onEmployee={()=>setPage("employee")}/>}{page==="ad"&&<RecruitmentAd onApply={()=>setPage("recruit")} onBack={()=>setPage("landing")}/>}{page==="recruit"&&<ApplicantForm onBack={()=>setPage("ad")}/>}{page==="employee"&&<EmployeePage onBack={()=>setPage("landing")}/>}{page==="interview"&&sessionId&&<InterviewPage sessionId={sessionId}/>}{page==="admin"&&(!loggedIn?<Login onLogin={()=>setLoggedIn(true)}/>:<AdminDashboard onLogout={()=>{localStorage.removeItem("dalu_admin");setLoggedIn(false);setPage("landing");window.location.hash="";}}/>)}</Suspense>);
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<React.StrictMode><App/></React.StrictMode>);
