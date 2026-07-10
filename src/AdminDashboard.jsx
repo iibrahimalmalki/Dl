@@ -1,6 +1,7 @@
 import{useState,useEffect}from"react";
 import{supabase,SITE_URL}from"./supabase";
 import{calcGeoScore,ZONE_COLORS}from"./geoScoring";
+import{analyzeApplicantLocal,logOutcome,getLearningStats,ARIFUL_BENCHMARK}from"./localAI";
 const ST={pending:{ar:"قيد المراجعة",color:"#f59e0b",bg:"#fffbeb"},shortlisted:{ar:"مرشح",color:"#2563eb",bg:"#eff6ff"},interview:{ar:"مقابلة",color:"#7c3aed",bg:"#f5f3ff"},accepted:{ar:"مقبول",color:"#16a34a",bg:"#f0fdf4"},rejected:{ar:"مرفوض",color:"#dc2626",bg:"#fff5f5"}};
 const CL={strong:{ar:"مرشح قوي ⭐",color:"#16a34a"},accepted:{ar:"مقبول ✅",color:"#2563eb"},needs_interview:{ar:"يحتاج مقابلة 🔍",color:"#f59e0b"},rejected:{ar:"غير مناسب ❌",color:"#dc2626"}};
 export default function AdminDashboard({onLogout}){
@@ -60,6 +61,12 @@ function Detail({a,onBack,onStatus,onAnalyze,onSaveNotes,onDelete,analyzing}){
       await supabase.from("applicants").update({ai_score_total:ev.score_total,ai_score_technical:ev.score_technical,ai_score_behavioral:ev.score_behavioral,score_physical:ev.score_physical,score_responsibility:ev.score_responsibility,ai_classification:ev.classification,ai_notes:ev.recommendation,ai_evaluation_json:ev}).eq("id",a.id);
     }catch(e){alert("خطأ: "+e.message);}
     setLoadingReport(false);
+  };
+
+  const runLocalAnalysis=()=>{
+    const ev=analyzeApplicantLocal({...a,interview_answers:session?.answers||a.interview_answers},calcGeoScore);
+    setAiReport(ev);
+    supabase.from("applicants").update({ai_score_total:ev.score_total,ai_score_technical:ev.score_technical,ai_score_behavioral:ev.score_behavioral,score_physical:ev.score_physical,score_responsibility:ev.score_responsibility,ai_classification:ev.classification,ai_notes:ev.recommendation,ai_evaluation_json:ev}).eq("id",a.id);
   };
 
   const exportMD=()=>{
@@ -197,11 +204,18 @@ ${a.admin_notes||"لا توجد"}
       {/* تحليل AI */}
       <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:12}}>🤖 تحليل الذكاء الاصطناعي</div>
 
-        {/* زر التحليل الذكي الكامل */}
-        <button onClick={genReport} disabled={loadingReport}
-          style={{...s.bFull,background:"linear-gradient(135deg,#7c3aed,#6d28d9)",marginBottom:12,opacity:loadingReport?0.6:1}}>
-          {loadingReport?"⟳ جاري التحليل الشامل...":"🧠 تحليل ذكي شامل + توصيات"}
-        </button>
+        {/* أزرار التحليل */}
+        <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <button onClick={runLocalAnalysis}
+            style={{...s.bFull,background:"linear-gradient(135deg,#0891b2,#0e7490)",flex:1}}>
+            ⚙️ محرك محلي (فوري)
+          </button>
+          <button onClick={genReport} disabled={loadingReport}
+            style={{...s.bFull,background:"linear-gradient(135deg,#7c3aed,#6d28d9)",flex:1,opacity:loadingReport?0.6:1}}>
+            {loadingReport?"⟳ جاري...":"🧠 Claude AI"}
+          </button>
+        </div>
+        {aiReport?.engine==="local"&&<div style={{background:"#ecfeff",border:"1px solid #67e8f9",borderRadius:10,padding:"6px 12px",marginBottom:10,textAlign:"center"}}><span style={{color:"#0e7490",fontSize:11,fontWeight:700}}>⚙️ تحليل بالمحرك المحلي — بدون API خارجي، فوري ومجاني</span></div>}
 
         {/* عرض التقرير الذكي */}
         {(aiReport||a.ai_evaluation_json)&&(()=>{const ev=aiReport||a.ai_evaluation_json;return(<div>
@@ -250,7 +264,9 @@ ${a.admin_notes||"لا توجد"}
       <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:12}}>📅 إدارة المقابلة</div><div style={{display:"flex",flexDirection:"column",gap:10}}><button onClick={()=>setShowInvite(true)} style={{...s.bFull,background:"linear-gradient(135deg,#16a34a,#15803d)"}}>📱 إرسال دعوة مقابلة</button><button onClick={()=>setShowIQ(!showIQ)} style={{...s.bFull,background:"linear-gradient(135deg,#2563eb,#1d4ed8)"}}>🎯 إرسال أسئلة المقابلة</button>{iLink&&<div style={{background:"#eff6ff",border:"1px solid #93c5fd",borderRadius:12,padding:"10px 14px"}}><div style={{color:"#1d4ed8",fontSize:11,fontWeight:700,marginBottom:4}}>رابط المقابلة:</div><div style={{color:"#1e40af",fontSize:10,wordBreak:"break-all",marginBottom:8}}>{iLink}</div><button onClick={()=>{const msg=`🇸🇦 يرجى الإجابة على هذه الأسئلة:\n${iLink}\n\n🇬🇧 Please answer these questions:\n${iLink}\n\n🇧🇩 দয়া করে এই প্রশ্নগুলোর উত্তর দিন:\n${iLink}`;window.open(`https://wa.me/${a.whatsapp?.replace(/[^0-9]/g,"")}?text=${encodeURIComponent(msg)}`);}} style={{...s.bFull,background:"linear-gradient(135deg,#16a34a,#15803d)"}}>📱 إرسال على واتساب</button></div>}</div>{showIQ&&<IQPanel applicant={a} onGenerated={l=>{setILink(l);setShowIQ(false);}}/>}</div>
 
       {/* تغيير الحالة */}
-      <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>📌 تغيير الحالة</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{Object.entries(ST).map(([k,v])=><button key={k} onClick={()=>onStatus(a.id,k)} style={{padding:"8px 14px",border:`2px solid ${v.color}`,borderRadius:12,fontSize:11,fontWeight:700,cursor:"pointer",background:a.status===k?v.color:"#fff",color:a.status===k?"#fff":v.color}}>{v.ar}</button>)}</div></div>
+      <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>📌 تغيير الحالة</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{Object.entries(ST).map(([k,v])=><button key={k} onClick={()=>{onStatus(a.id,k);logOutcome(a.id,k,a.ai_classification);}} style={{padding:"8px 14px",border:`2px solid ${v.color}`,borderRadius:12,fontSize:11,fontWeight:700,cursor:"pointer",background:a.status===k?v.color:"#fff",color:a.status===k?"#fff":v.color}}>{v.ar}</button>)}</div>
+        {(()=>{const stats=getLearningStats();return stats.total_decisions>0?<div style={{marginTop:10,background:"#f8fafc",borderRadius:10,padding:"8px 12px"}}><div style={{color:"#64748b",fontSize:10}}>📊 قرارات مسجّلة للتعلم: <strong>{stats.total_decisions}</strong> {stats.ready_for_calibration?"— جاهز للمعايرة! 🎉":`(يحتاج ${30-stats.total_decisions} إضافية للمعايرة)`}</div></div>:null;})()}
+      </div>
 
       {/* ملاحظات */}
       <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>📝 ملاحظاتي</div><textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder="أضف ملاحظاتك..." style={{...s.inp,resize:"vertical",width:"100%",boxSizing:"border-box"}}/><button onClick={save} disabled={saving} style={{...s.bFull,marginTop:8,background:"linear-gradient(135deg,#16a34a,#15803d)"}}>{saving?"جاري الحفظ...":"💾 حفظ الملاحظات"}</button></div>
