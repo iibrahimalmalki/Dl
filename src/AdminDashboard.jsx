@@ -351,20 +351,7 @@ ${a.admin_notes||"لا توجد"}
       {/* تحليل AI */}
       <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:12}}>🤖 تحليل الذكاء الاصطناعي</div>
 
-        {/* أزرار التحليل */}
-        <div style={{display:"flex",gap:8,marginBottom:12}}>
-          <button onClick={runLocalAnalysis}
-            style={{...s.bFull,background:"linear-gradient(135deg,#0891b2,#0e7490)",flex:1}}>
-            ⚙️ محرك محلي (فوري)
-          </button>
-          <button onClick={genReport} disabled={loadingReport}
-            style={{...s.bFull,background:"linear-gradient(135deg,#7c3aed,#6d28d9)",flex:1,opacity:loadingReport?0.6:1}}>
-            {loadingReport?"⟳ جاري...":"🧠 Claude AI"}
-          </button>
-        </div>
-        {aiReport?.engine==="local"&&<div style={{background:"#ecfeff",border:"1px solid #67e8f9",borderRadius:10,padding:"6px 12px",marginBottom:10,textAlign:"center"}}><span style={{color:"#0e7490",fontSize:11,fontWeight:700}}>⚙️ تحليل بالمحرك المحلي — بدون API خارجي، فوري ومجاني</span></div>}
-
-        {/* عرض التقرير الذكي */}
+        {/* عرض التقرير */}
         {(aiReport||a.ai_evaluation_json)&&(()=>{const ev=aiReport||a.ai_evaluation_json;return(<div>
           <div style={{textAlign:"center",marginBottom:14}}>
             <div style={{fontSize:42,fontWeight:900,color:"#E8712B"}}>{Number(a.ai_score_total||ev?.score_total||0).toFixed(1)}</div>
@@ -398,13 +385,10 @@ ${a.admin_notes||"لا توجد"}
             {ev.recommendation&&<EB c="#1e293b" t="📋 التوصية النهائية" txt={ev.recommendation} accent/>}
             {ev.ariful_comparison&&<EB c="#7c3aed" t="⭐ مقارنة بأريفول" txt={ev.ariful_comparison} accent/>}
           </>}
-          <div style={{display:"flex",gap:8,marginTop:10}}>
-            <button onClick={genReport} disabled={loadingReport} style={{...s.bFull,background:"linear-gradient(135deg,#7c3aed,#6d28d9)",flex:2}}>{loadingReport?"⟳ جاري...":"🔄 إعادة التحليل"}</button>
-            <button onClick={exportMD} style={{...s.bFull,background:"linear-gradient(135deg,#475569,#334155)",flex:1}}>📄 MD</button>
-          </div>
+          <button onClick={exportMD} style={{...s.bFull,background:"linear-gradient(135deg,#475569,#334155)",marginTop:10}}>📄 تصدير MD</button>
         </div>);})()}
 
-        {!a.ai_score_total&&!aiReport&&<p style={{color:"#94a3b8",fontSize:12,textAlign:"center",padding:"8px 0"}}>اضغط "تحليل ذكي شامل" للبدء</p>}
+        {!a.ai_score_total&&!aiReport&&<p style={{color:"#94a3b8",fontSize:12,textAlign:"center",padding:"8px 0"}}>لا يوجد تحليل بعد لهذا المتقدم</p>}
       </div>
 
       {/* إدارة المقابلة */}
