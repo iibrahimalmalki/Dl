@@ -13,8 +13,10 @@ function App(){
   const[loggedIn,setLoggedIn]=useState(localStorage.getItem("dalu_admin")==="dalu-admin-ibrahim-2026");
   const urlParams=new URLSearchParams(window.location.search);
   const sessionId=urlParams.get("interview");
+  const directApply=urlParams.get("apply");
   useEffect(()=>{
     if(sessionId){setPage("interview");return;}
+    if(directApply){setPage("ad");return;}
     if(window.location.hash==="#admin")setPage("admin");
     const h=()=>{if(window.location.hash==="#admin")setPage("admin");};
     window.addEventListener("hashchange",h);

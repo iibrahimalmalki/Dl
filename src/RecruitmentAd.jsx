@@ -169,7 +169,7 @@ export default function RecruitmentAd({onApply,onBack}){
   useEffect(()=>{setVisible(true);},[]);
 
   const shareWA=()=>{
-    const msg="🪣 রিয়াদে গাড়ি ধোয়ার চাকরি — নির্দিষ্ট বেতন + বিনামূল্যে বাসস্থান + মোটরসাইকেল\nএখনই আবেদন করুন: "+window.location.origin;
+    const msg="🪣 রিয়াদে গাড়ি ধোয়ার চাকরি — নির্দিষ্ট বেতন + বিনামূল্যে বাসস্থান + মোটরসাইকেল\nএখনই আবেদন করুন: "+window.location.origin+"/?apply=1";
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`);
   };
 
@@ -195,8 +195,7 @@ export default function RecruitmentAd({onApply,onBack}){
     <div style={{minHeight:"100dvh",background:"linear-gradient(170deg,#FFF9F0 0%,#FFF3DC 55%,#FFEACC 100%)",fontFamily:"'Segoe UI',Tahoma,sans-serif",opacity:visible?1:0,transition:"opacity 0.4s"}}>
 
       {/* شريط علوي */}
-      <div style={{position:"sticky",top:0,zIndex:50,background:"rgba(255,249,240,0.95)",backdropFilter:"blur(8px)",borderBottom:"1px solid #fde4c4",padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <button onClick={onBack} style={{background:"none",border:"none",color:"#78716c",fontSize:13,fontWeight:700,cursor:"pointer"}}>← ফিরে</button>
+      <div style={{position:"sticky",top:0,zIndex:50,background:"rgba(255,249,240,0.95)",backdropFilter:"blur(8px)",borderBottom:"1px solid #fde4c4",padding:"12px 20px",display:"flex",justifyContent:"center",alignItems:"center"}}>
         <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#E8712B,#f5a35f)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🪣</div>
       </div>
 
