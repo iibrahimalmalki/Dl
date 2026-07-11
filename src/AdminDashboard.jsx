@@ -11,7 +11,7 @@ export default function AdminDashboard({onLogout}){
   useEffect(()=>{load();},[]);
   const load=async()=>{setLoading(true);const{data}=await supabase.from("applicants").select("*").order("application_number",{ascending:true});setList(data||[]);setLoading(false);};
   const loadEmp=async()=>{setEmpLoading(true);const{data}=await supabase.from("employees").select("*").order("created_at",{ascending:false});setEmpList(data||[]);setEmpLoading(false);};
-  const loadVisits=async()=>{const{data}=await supabase.from("page_visits").select("*").order("created_at",{ascending:false}).limit(500);setVisits(data||[]);};
+  const loadVisits=async()=>{const{data}=await supabase.from("page_visits").select("*").order("created_at",{ascending:false}).limit(3000);setVisits(data||[]);};
   useEffect(()=>{if(tab==="employees"&&empList.length===0)loadEmp();if(tab==="visits")loadVisits();},[tab]);
 
   const transferToEmployee=async(a)=>{
@@ -124,11 +124,64 @@ function VisitsPanel({visits}){
   const todayCount=visits.filter(v=>new Date(v.created_at).toDateString()===today).length;
   const byDay={};visits.forEach(v=>{const d=new Date(v.created_at).toLocaleDateString("ar-SA");byDay[d]=(byDay[d]||0)+1;});
   const days=Object.entries(byDay).slice(0,14);
-  return(<div style={{padding:16}}>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-      <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#E8712B"}}>{visits.length}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>إجمالي الزيارات (آخر 500)</div></div>
-      <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#16a34a"}}>{todayCount}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>زيارات اليوم</div></div>
+
+  // قمع التحويل — يحسب عدد الجلسات الفريدة التي وصلت كل خطوة
+  const buildFunnel=(page,stepDefs)=>{
+    const rows=visits.filter(v=>v.page===page&&v.step);
+    return stepDefs.map(([key,label])=>{
+      const sessions=new Set(rows.filter(v=>v.step===key).map(v=>v.session_id).filter(Boolean));
+      return{key,label,count:sessions.size};
+    });
+  };
+  const adFunnel=buildFunnel("ad_page",[
+    ["0_landed","دخول الصفحة"],
+    ["1_benefits","وصل قسم المزايا"],
+    ["2_calculator","وصل الحاسبة"],
+    ["3_day_in_life","وصل يوم العمل"],
+    ["4_faq","وصل الأسئلة الشائعة"],
+    ["5_final_cta","وصل القسم الختامي"],
+  ]);
+  const formFunnel=buildFunnel("application_form",[
+    ["step_1","بياناتك"],
+    ["step_2","الرخصة"],
+    ["step_3","المستندات"],
+    ["step_4","الكفاءة"],
+    ["step_5","سلوكيات"],
+    ["step_6","تأكيد"],
+    ["step_7_submitted","✅ أُرسل فعلياً"],
+  ]);
+
+  const Funnel=({title,data})=>{
+    const max=data[0]?.count||1;
+    return(<div style={s.sec}>
+      <div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:12}}>{title}</div>
+      {data.every(d=>d.count===0)?<div style={{color:"#94a3b8",fontSize:12,textAlign:"center",padding:16}}>لا توجد بيانات كافية بعد</div>:
+      data.map((d,i)=>{
+        const prev=i>0?data[i-1].count:d.count;
+        const dropPct=prev>0?Math.round(((prev-d.count)/prev)*100):0;
+        const widthPct=max>0?Math.max(8,(d.count/max)*100):0;
+        return(<div key={d.key} style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+            <span style={{color:"#1e293b",fontSize:11,fontWeight:700}}>{d.label}</span>
+            <span style={{color:"#64748b",fontSize:11}}>{d.count} {i>0&&dropPct>0&&<span style={{color:dropPct>=40?"#dc2626":dropPct>=20?"#d97706":"#94a3b8",fontWeight:700}}> (تسرب {dropPct}%)</span>}</span>
+          </div>
+          <div style={{height:10,background:"#f1f5f9",borderRadius:6,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${widthPct}%`,background:i===data.length-1?"#16a34a":dropPct>=40?"#dc2626":"#E8712B",borderRadius:6,transition:"width 0.5s"}}/>
+          </div>
+        </div>);
+      })}
+    </div>);
+  };
+
+  return(<div style={{padding:16,display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#E8712B"}}>{visits.length}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>إجمالي الأحداث المسجّلة</div></div>
+      <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#16a34a"}}>{todayCount}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>أحداث اليوم</div></div>
     </div>
+
+    <Funnel title="📊 قمع صفحة الإعلان — أين يتوقف الزائر؟" data={adFunnel}/>
+    <Funnel title="📝 قمع استمارة التقديم — أين يتسرب المتقدم؟" data={formFunnel}/>
+
     <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>📅 آخر 14 يوماً</div>
       {days.length===0&&<div style={{color:"#94a3b8",fontSize:12,textAlign:"center",padding:20}}>لا توجد بيانات بعد</div>}
       {days.map(([d,c])=><div key={d} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f1f5f9"}}><span style={{color:"#475569",fontSize:12}}>{d}</span><span style={{color:"#E8712B",fontWeight:800,fontSize:13}}>{c}</span></div>)}

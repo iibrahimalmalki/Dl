@@ -1,5 +1,5 @@
-import{useState,useEffect}from"react";
-import{supabase}from"./supabase";
+import{useState,useEffect,useRef}from"react";
+import{supabase,logStep}from"./supabase";
 
 // عداد المشاهدين الآن — رقم لطيف يتحرك بناءً على وقت اليوم
 function WatchingNow(){
@@ -189,9 +189,24 @@ export default function RecruitmentAd({onApply,onBack}){
   const[perf,setPerf]=useState(0.5);
   const[visible,setVisible]=useState(false);
   const[sharing,setSharing]=useState(false);
+  const seenSections=useRef(new Set());
   useEffect(()=>{
     setVisible(true);
-    supabase.from("page_visits").insert({page:"recruitment_ad"}).then(()=>{});
+    logStep("ad_page","0_landed");
+    // مراقبة الأقسام — يسجّل أول مرة يظهر فيها كل قسم فعلياً على الشاشة
+    const observer=new IntersectionObserver((entries)=>{
+      entries.forEach(entry=>{
+        if(entry.isIntersecting){
+          const id=entry.target.dataset.section;
+          if(id&&!seenSections.current.has(id)){
+            seenSections.current.add(id);
+            logStep("ad_page",id);
+          }
+        }
+      });
+    },{threshold:0.4});
+    document.querySelectorAll("[data-section]").forEach(el=>observer.observe(el));
+    return()=>observer.disconnect();
   },[]);
 
   const shareWA=async()=>{
@@ -254,7 +269,7 @@ export default function RecruitmentAd({onApply,onBack}){
       </div>
 
       {/* المزايا */}
-      <div style={{maxWidth:480,margin:"0 auto",padding:"8px 20px 32px"}}>
+      <div data-section="1_benefits" style={{maxWidth:480,margin:"0 auto",padding:"8px 20px 32px"}}>
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{color:"#1e293b",fontSize:17,fontWeight:900}}>আপনি কী পাবেন?</div>
           <div style={{color:"#a8834f",fontSize:11}}>ماذا تحصل عليه؟</div>
@@ -271,12 +286,12 @@ export default function RecruitmentAd({onApply,onBack}){
       </div>
 
       {/* رحلة الدخل — العنصر المميز */}
-      <div style={{maxWidth:480,margin:"0 auto",padding:"0 20px 32px"}}>
+      <div data-section="2_calculator" style={{maxWidth:480,margin:"0 auto",padding:"0 20px 32px"}}>
         <IncomeJourney daily={daily} perf={perf} onDaily={setDaily} onPerf={setPerf}/>
       </div>
 
       {/* يوم عمل */}
-      <div style={{maxWidth:480,margin:"0 auto",padding:"0 20px 32px"}}>
+      <div data-section="3_day_in_life" style={{maxWidth:480,margin:"0 auto",padding:"0 20px 32px"}}>
         <div style={{textAlign:"center",marginBottom:18}}>
           <div style={{color:"#1e293b",fontSize:17,fontWeight:900}}>একটি সাধারণ কর্মদিবস</div>
           <div style={{color:"#a8834f",fontSize:11}}>يوم عمل عادي</div>
@@ -299,7 +314,7 @@ export default function RecruitmentAd({onApply,onBack}){
       </div>
 
       {/* الأسئلة الشائعة */}
-      <div style={{maxWidth:480,margin:"0 auto",padding:"0 20px 32px"}}>
+      <div data-section="4_faq" style={{maxWidth:480,margin:"0 auto",padding:"0 20px 32px"}}>
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{color:"#1e293b",fontSize:17,fontWeight:900}}>সবাই যা জিজ্ঞাসা করে</div>
           <div style={{color:"#a8834f",fontSize:11}}>أسئلة يسألها الجميع</div>
@@ -329,7 +344,7 @@ export default function RecruitmentAd({onApply,onBack}){
       </div>
 
       {/* قسم ختامي — الوتر العاطفي */}
-      <div style={{maxWidth:480,margin:"0 auto",padding:"0 20px 24px"}}>
+      <div data-section="5_final_cta" style={{maxWidth:480,margin:"0 auto",padding:"0 20px 24px"}}>
         <div style={{background:"linear-gradient(135deg,#E8712B,#f5a35f)",borderRadius:20,padding:"26px 22px",textAlign:"center",position:"relative",overflow:"hidden",boxShadow:"0 10px 30px rgba(232,113,43,0.25)"}}>
           <div style={{position:"absolute",top:-30,right:-30,width:140,height:140,borderRadius:"50%",background:"rgba(255,255,255,0.12)"}}/>
           <div style={{fontSize:32,marginBottom:8}}>🌅</div>
