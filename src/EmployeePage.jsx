@@ -1,15 +1,26 @@
-import{useState}from"react";import{supabase}from"./supabase";
+import{useState,useEffect}from"react";import{supabase}from"./supabase";
 const INIT={full_name:"",id_number:"",mobile:"",date_of_birth:"",nationality:"",employee_id:"",home_country:"",region:"",city:"",time_in_saudi:"",residence_riyadh:"",source:"",referrer_name:"",referrer_relation:"",has_relative_in_team:"",relative_name:"",previous_job:"",car_wash_experience:"",worked_with_app:""};
-export default function EmployeePage({onBack}){
-  const[form,setForm]=useState(INIT);const[saving,setSaving]=useState(false);const[done,setDone]=useState(false);const[errors,setErrors]=useState({});
+export default function EmployeePage({onBack,employeeId}){
+  const[form,setForm]=useState(INIT);const[saving,setSaving]=useState(false);const[done,setDone]=useState(false);const[errors,setErrors]=useState({});const[loading,setLoading]=useState(!!employeeId);const[recordId,setRecordId]=useState(null);
+  useEffect(()=>{
+    if(!employeeId)return;
+    supabase.from("employees").select("*").eq("id",employeeId).single().then(({data})=>{
+      if(data){setForm(p=>({...p,...Object.fromEntries(Object.keys(INIT).map(k=>[k,data[k]||""]))}));setRecordId(data.id);}
+      setLoading(false);
+    });
+  },[employeeId]);
   const set=(k,v)=>setForm(p=>({...p,[k]:v}));
   const validate=()=>{const e={};if(!form.full_name.trim())e.full_name=1;if(!form.mobile.trim())e.mobile=1;if(!form.nationality)e.nationality=1;setErrors(e);return!Object.keys(e).length;};
-  const save=async()=>{if(!validate())return;setSaving(true);const{error}=await supabase.from("employees").insert(form);if(error){alert("خطأ: "+error.message);setSaving(false);return;}setDone(true);setSaving(false);};
+  const save=async()=>{if(!validate())return;setSaving(true);
+    const{error}=recordId?await supabase.from("employees").update(form).eq("id",recordId):await supabase.from("employees").insert(form);
+    if(error){alert("খুলি: "+error.message);setSaving(false);return;}setDone(true);setSaving(false);};
+  if(loading)return <div style={{minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:40,height:40,border:"3px solid #fde4c4",borderTopColor:"#E8712B",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/></div>;
   if(done)return(<div style={g.page}><div style={{...g.card,margin:"80px auto",textAlign:"center",padding:48}}><div style={g.tick}>✓</div><div style={{fontSize:18,fontWeight:900,color:"#1e293b",margin:"16px 0 8px"}}>সফলভাবে সংরক্ষিত হয়েছে</div><div style={{color:"#a8834f",fontSize:12}}>تم الحفظ بنجاح</div></div></div>);
   const F=({ar,bn,req,children})=>(<div><div style={{marginBottom:5}}><div style={{color:"#1e293b",fontSize:13,fontWeight:700,textAlign:"right"}}>{bn}{req&&<span style={{color:"#E8712B"}}> *</span>}</div><div style={{color:"#a8834f",fontSize:10,textAlign:"left"}}>{ar}</div></div>{children}</div>);
   const Sec=({n,ar,bn,color,children})=>(<div style={{background:"#fff",borderRadius:16,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,borderBottom:`2px solid ${color}20`,paddingBottom:10}}><div style={{width:26,height:26,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0}}>{n}</div><div><div style={{color:"#1e293b",fontSize:13,fontWeight:900}}>{bn}</div><div style={{color:"#a8834f",fontSize:10,textAlign:"left"}}>{ar}</div></div></div><div style={{display:"flex",flexDirection:"column",gap:12}}>{children}</div></div>);
   const inp=(k,err)=>({...g.inp,...(errors[k]?{borderColor:"#dc2626",background:"#fff5f5"}:{})});
   return(<div style={g.page}>
+    {recordId&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",margin:"12px 16px 0",borderRadius:12,padding:"10px 14px"}}><div style={{color:"#16a34a",fontSize:12,fontWeight:700}}>✅ আপনার তথ্য লোড হয়েছে — শুধু খালি ঘরগুলো পূরণ করুন</div></div>}
     <div style={g.hdr}><button onClick={onBack} style={g.back}>← ফিরে</button><div style={{width:32,height:32,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🪣</div><div><div style={{color:"#fff",fontSize:16,fontWeight:900}}>কর্মী প্রোফাইল</div><div style={{color:"rgba(255,255,255,0.8)",fontSize:11}}>ملف الموظف</div></div></div>
     <div style={{background:"#fff7ed",border:"1px solid #fed7aa",margin:"12px 16px 0",borderRadius:12,padding:"12px 14px"}}><div style={{color:"#92400e",fontSize:13,fontWeight:700,marginBottom:3}}>📋 অনুগ্রহ করে আপনার সমস্ত তথ্য সঠিকভাবে পূরণ করুন</div><div style={{color:"#a8834f",fontSize:11}}>أخي الموظف — يرجى تعبئة بياناتك كاملة</div></div>
     <div style={{padding:"12px 16px 32px",display:"flex",flexDirection:"column",gap:12,maxWidth:560,margin:"0 auto"}}>

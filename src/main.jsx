@@ -14,14 +14,16 @@ function App(){
   const urlParams=new URLSearchParams(window.location.search);
   const sessionId=urlParams.get("interview");
   const directApply=urlParams.get("apply");
+  const employeeEditId=urlParams.get("employee");
   useEffect(()=>{
     if(sessionId){setPage("interview");return;}
     if(directApply){setPage("ad");return;}
+    if(employeeEditId){setPage("employee");return;}
     if(window.location.hash==="#admin")setPage("admin");
     const h=()=>{if(window.location.hash==="#admin")setPage("admin");};
     window.addEventListener("hashchange",h);
     return()=>window.removeEventListener("hashchange",h);
   },[]);
-  return(<Suspense fallback={<Spin/>}>{page==="landing"&&<LandingPage onRecruit={()=>setPage("ad")} onEmployee={()=>setPage("employee")}/>}{page==="ad"&&<RecruitmentAd onApply={()=>setPage("recruit")} onBack={()=>setPage("landing")}/>}{page==="recruit"&&<ApplicantForm onBack={()=>setPage("ad")}/>}{page==="employee"&&<EmployeePage onBack={()=>setPage("landing")}/>}{page==="interview"&&sessionId&&<InterviewPage sessionId={sessionId}/>}{page==="admin"&&(!loggedIn?<Login onLogin={()=>setLoggedIn(true)}/>:<AdminDashboard onLogout={()=>{localStorage.removeItem("dalu_admin");setLoggedIn(false);setPage("landing");window.location.hash="";}}/>)}</Suspense>);
+  return(<Suspense fallback={<Spin/>}>{page==="landing"&&<LandingPage onRecruit={()=>setPage("ad")} onEmployee={()=>setPage("employee")}/>}{page==="ad"&&<RecruitmentAd onApply={()=>setPage("recruit")} onBack={()=>setPage("landing")}/>}{page==="recruit"&&<ApplicantForm onBack={()=>setPage("ad")}/>}{page==="employee"&&<EmployeePage onBack={()=>setPage("landing")} employeeId={employeeEditId}/>}{page==="interview"&&sessionId&&<InterviewPage sessionId={sessionId}/>}{page==="admin"&&(!loggedIn?<Login onLogin={()=>setLoggedIn(true)}/>:<AdminDashboard onLogout={()=>{localStorage.removeItem("dalu_admin");setLoggedIn(false);setPage("landing");window.location.hash="";}}/>)}</Suspense>);
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<React.StrictMode><App/></React.StrictMode>);

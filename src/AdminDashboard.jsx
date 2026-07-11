@@ -17,9 +17,9 @@ export default function AdminDashboard({onLogout}){
   const transferToEmployee=async(a)=>{
     try{
       const{data:existing}=await supabase.from("employees").select("id").eq("applicant_id",a.id).maybeSingle();
-      if(existing)return;
+      if(existing)return existing.id;
       const hasWashExp=a.car_wash_description&&a.car_wash_description.trim().length>15;
-      await supabase.from("employees").insert({
+      const{data:inserted,error}=await supabase.from("employees").insert({
         applicant_id:a.id,
         full_name:a.full_name,
         id_number:a.passport_or_iqama,
@@ -32,8 +32,10 @@ export default function AdminDashboard({onLogout}){
         source:"منصة التوظيف",
         car_wash_experience:hasWashExp?"لديه خبرة (من الاستمارة)":"",
         worked_with_app:"",
-      });
-    }catch(e){console.log("transfer error",e);}
+      }).select().single();
+      if(error){console.log("transfer error",error);return null;}
+      return inserted?.id||null;
+    }catch(e){console.log("transfer error",e);return null;}
   };
 
   const upStatus=async(id,status)=>{
@@ -44,9 +46,10 @@ export default function AdminDashboard({onLogout}){
     if(sel?.id===id)setSel(p=>({...p,status,status_history:hist}));
     logOutcome(id,status,a?.ai_classification);
     if(status==="accepted"&&a){
-      await transferToEmployee(a);
+      const empId=await transferToEmployee(a);
       if(a.whatsapp){
-        const msg=`🎉 السلام عليكم ${a.full_name}،\nمبروك! تم قبولك ضمن فريقنا.\n\nيرجى إكمال ملفك عبر الرابط التالي لإتمام إجراءات التوظيف:\n${SITE_URL}\n(اختر "ملف الموظف")\n\n🎉 আসসালামু আলাইকুম ${a.full_name},\nঅভিনন্দন! আপনি আমাদের টিমে গৃহীত হয়েছেন।\n\nনিয়োগ প্রক্রিয়া সম্পন্ন করতে অনুগ্রহ করে আপনার প্রোফাইল সম্পূর্ণ করুন:\n${SITE_URL}\n("কর্মী প্রোফাইল" নির্বাচন করুন)`;
+        const link=empId?`${SITE_URL}/?employee=${empId}`:SITE_URL;
+        const msg=`🎉 السلام عليكم ${a.full_name}،\nمبروك! تم قبولك ضمن فريقنا.\n\nيرجى إكمال ملفك عبر الرابط التالي لإتمام إجراءات التوظيف:\n${link}\n\n🎉 আসসালামু আলাইকুম ${a.full_name},\nঅভিনন্দন! আপনি আমাদের টিমে গৃহীত হয়েছেন।\n\nনিয়োগ প্রক্রিয়া সম্পন্ন করতে অনুগ্রহ করে এই লিংকে গিয়ে প্রোফাইল সম্পূর্ণ করুন:\n${link}`;
         window.open(`https://wa.me/${a.whatsapp?.replace(/[^0-9]/g,"")}?text=${encodeURIComponent(msg)}`);
       }
     }
@@ -437,7 +440,8 @@ function EmpDetail({e,onBack,onDelete}){const[del,setDel]=useState(false);
   const missing=REQUIRED.filter(([k])=>!e[k]||String(e[k]).trim()==="");
   const sendCompletionRequest=()=>{
     const lines=missing.map(([k,ar,bn])=>`• ${bn} / ${ar}`).join("\n");
-    const msg=`السلام عليكم ${e.full_name}،\nيرجى إكمال المعلومات التالية في ملفك:\n\n${lines}\n\nأرسل الإجابات هنا في الرد على هذه الرسالة، وسنقوم بتحديث ملفك.\n\nআসসালামু আলাইকুম ${e.full_name},\nঅনুগ্রহ করে নিচের তথ্যগুলো পাঠান:\n\n${lines}\n\nএই বার্তার জবাবে তথ্যগুলো পাঠান, আমরা আপনার প্রোফাইল আপডেট করব।`;
+    const link=`${SITE_URL}/?employee=${e.id}`;
+    const msg=`السلام عليكم ${e.full_name}،\nيرجى إكمال ملفك عبر الرابط التالي (سيظهر ما أدخلته سابقاً، فقط أكمل الحقول الناقصة):\n\n${link}\n\nالحقول الناقصة:\n${lines}\n\nআসসালামু আলাইকুম ${e.full_name},\nঅনুগ্রহ করে এই লিংকে গিয়ে আপনার প্রোফাইল সম্পূর্ণ করুন (আগের তথ্য দেখাবে, শুধু বাকি ঘরগুলো পূরণ করুন):\n\n${link}\n\nবাকি তথ্য:\n${lines}`;
     window.open(`https://wa.me/${e.mobile?.replace(/[^0-9]/g,"")}?text=${encodeURIComponent(msg)}`);
   };
   const FIELDS=[["القسم الأول",null],["الاسم",e.full_name],["رقم الهوية",e.id_number],["الجوال",e.mobile],["الميلاد",e.date_of_birth],["الجنسية",e.nationality],["ID سويتر",e.employee_id],["القسم الثاني",null],["الدولة الأصلية",e.home_country],["المنطقة",e.region],["المدينة",e.city],["المدة في السعودية",e.time_in_saudi],["السكن الرياض",e.residence_riyadh],["القسم الثالث",null],["المصدر",e.source],["المحيل",e.referrer_name],["الصلة",e.referrer_relation],["أقارب في الفريق",e.has_relative_in_team],["اسم القريب",e.relative_name],["القسم الرابع",null],["العمل السابق",e.previous_job],["خبرة الغسيل",e.car_wash_experience],["عمل مع تطبيقات",e.worked_with_app]];
