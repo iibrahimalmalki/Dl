@@ -1,6 +1,28 @@
 import{useState,useEffect}from"react";
 import{supabase}from"./supabase";
 
+// عداد المشاهدين الآن — رقم لطيف يتحرك بناءً على وقت اليوم
+function WatchingNow(){
+  const[n,setN]=useState(0);
+  useEffect(()=>{
+    const compute=()=>{
+      const hour=new Date().getHours();
+      const base = hour>=9&&hour<=23 ? 11 : 6; // نشاط أعلى نهاراً ومساءً
+      const wobble = Math.floor(Math.sin(Date.now()/40000)*4);
+      setN(Math.max(4,base+wobble+Math.floor(Math.random()*3)));
+    };
+    compute();
+    const t=setInterval(compute,8000);
+    return()=>clearInterval(t);
+  },[]);
+  return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:10}}>
+      <div style={{width:6,height:6,borderRadius:"50%",background:"#16a34a",animation:"pulse 1.5s infinite"}}/>
+      <span style={{color:"#78716c",fontSize:11}}>{n} জন এখন এই পাতাটি দেখছেন</span>
+    </div>
+  );
+}
+
 // عداد الفرصة الحي — يجمع رقماً تصاعدياً أسبوعياً + عدد المتقدمين الحقيقيين
 const LAUNCH_DATE=new Date("2026-07-01T00:00:00Z");
 function LiveUrgencyBar(){
@@ -166,11 +188,23 @@ export default function RecruitmentAd({onApply,onBack}){
   const[daily,setDaily]=useState(6);
   const[perf,setPerf]=useState(0.5);
   const[visible,setVisible]=useState(false);
-  useEffect(()=>{setVisible(true);},[]);
+  const[sharing,setSharing]=useState(false);
+  useEffect(()=>{
+    setVisible(true);
+    supabase.from("page_visits").insert({page:"recruitment_ad"}).then(()=>{});
+  },[]);
 
-  const shareWA=()=>{
-    const msg="🪣 রিয়াদে গাড়ি ধোয়ার চাকরি — নির্দিষ্ট বেতন + বিনামূল্যে বাসস্থান + মোটরসাইকেল\nএখনই আবেদন করুন: "+window.location.origin+"/?apply=1";
+  const shareWA=async()=>{
+    setSharing(true);
+    let total="৫০+";
+    try{
+      const{count}=await supabase.from("applicants").select("id",{count:"exact",head:true});
+      const weeksSince=Math.max(0,Math.floor((Date.now()-LAUNCH_DATE.getTime())/(7*24*60*60*1000)));
+      total=((count||0)+(weeksSince*10)).toLocaleString();
+    }catch(e){}
+    const msg=`🪣 রিয়াদে গাড়ি ধোয়ার চাকরি\n\n💰 নির্দিষ্ট বেতন + কমিশন — প্রতি মাসে ১,০০০-২,০০০+ রিয়াল\n🏠 বিনামূল্যে বাসস্থান\n🏍️ নিজের মোটরসাইকেল\n\n🔥 এই মাসে ইতিমধ্যে ${total} জন আবেদন করেছেন — আসন সীমিত!\n⏳ দেরি করলে সুযোগ হারাবেন\n\n👉 এখনই আবেদন করুন: ${window.location.origin}/?apply=1`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`);
+    setSharing(false);
   };
 
   const BENEFITS=[
@@ -211,7 +245,7 @@ export default function RecruitmentAd({onApply,onBack}){
           <p style={{color:"#57534e",fontSize:13,lineHeight:1.7,marginBottom:4}}>নির্দিষ্ট আয়, বিনামূল্যে থাকার জায়গা, নিজের বাইক</p>
           <p style={{color:"#a8834f",fontSize:11,marginBottom:18}}>دخل ثابت، سكن مجاني، ودراجتك جاهزة</p>
 
-          <div style={{marginBottom:22}}><LiveUrgencyBar/></div>
+          <div style={{marginBottom:22}}><WatchingNow/><LiveUrgencyBar/></div>
 
           <button onClick={onApply} style={{width:"100%",maxWidth:340,padding:"17px",background:"linear-gradient(135deg,#E8712B,#f5a35f)",border:"none",borderRadius:16,color:"#fff",fontSize:15,fontWeight:900,cursor:"pointer",boxShadow:"0 8px 24px rgba(232,113,43,0.3)"}}>
             এখনই আবেদন করুন — قدّم الآن ←
@@ -305,8 +339,8 @@ export default function RecruitmentAd({onApply,onBack}){
           <button onClick={onApply} style={{width:"100%",padding:"15px",background:"#fff",border:"none",borderRadius:14,color:"#E8712B",fontSize:14,fontWeight:900,cursor:"pointer"}}>
             এখনই আবেদন করুন ←
           </button>
-          <button onClick={shareWA} style={{width:"100%",marginTop:10,padding:"11px",background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:12,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-            📤 বন্ধুর সাথে শেয়ার করুন
+          <button onClick={shareWA} disabled={sharing} style={{width:"100%",marginTop:10,padding:"11px",background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:12,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",opacity:sharing?0.6:1}}>
+            {sharing?"⟳ প্রস্তুত হচ্ছে...":"📤 বন্ধুর সাথে শেয়ার করুন"}
           </button>
         </div>
       </div>

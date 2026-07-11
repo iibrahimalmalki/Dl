@@ -5,40 +5,168 @@ import{analyzeApplicantLocal,logOutcome,getLearningStats,ARIFUL_BENCHMARK}from".
 const ST={pending:{ar:"قيد المراجعة",color:"#f59e0b",bg:"#fffbeb"},shortlisted:{ar:"مرشح",color:"#2563eb",bg:"#eff6ff"},interview:{ar:"مقابلة",color:"#7c3aed",bg:"#f5f3ff"},accepted:{ar:"مقبول",color:"#16a34a",bg:"#f0fdf4"},rejected:{ar:"مرفوض",color:"#dc2626",bg:"#fff5f5"}};
 const CL={strong:{ar:"مرشح قوي ⭐",color:"#16a34a"},accepted:{ar:"مقبول ✅",color:"#2563eb"},needs_interview:{ar:"يحتاج مقابلة 🔍",color:"#f59e0b"},rejected:{ar:"غير مناسب ❌",color:"#dc2626"}};
 export default function AdminDashboard({onLogout}){
-  const[list,setList]=useState([]);const[loading,setLoading]=useState(true);const[sel,setSel]=useState(null);const[filter,setFilter]=useState("all");const[search,setSearch]=useState("");const[analyzing,setAnalyzing]=useState(null);const[tab,setTab]=useState("applicants");
+  const[list,setList]=useState([]);const[loading,setLoading]=useState(true);const[sel,setSel]=useState(null);const[filter,setFilter]=useState("all");const[geoFilter,setGeoFilter]=useState("all");const[sortBy,setSortBy]=useState("number");const[search,setSearch]=useState("");const[analyzing,setAnalyzing]=useState(null);const[tab,setTab]=useState("applicants");
   const[empList,setEmpList]=useState([]);const[empLoading,setEmpLoading]=useState(false);const[selEmp,setSelEmp]=useState(null);const[empSearch,setEmpSearch]=useState("");
+  const[compareMode,setCompareMode]=useState(false);const[compareIds,setCompareIds]=useState([]);const[showCompare,setShowCompare]=useState(false);const[showStats,setShowStats]=useState(false);const[visits,setVisits]=useState([]);
   useEffect(()=>{load();},[]);
   const load=async()=>{setLoading(true);const{data}=await supabase.from("applicants").select("*").order("application_number",{ascending:true});setList(data||[]);setLoading(false);};
   const loadEmp=async()=>{setEmpLoading(true);const{data}=await supabase.from("employees").select("*").order("created_at",{ascending:false});setEmpList(data||[]);setEmpLoading(false);};
-  useEffect(()=>{if(tab==="employees"&&empList.length===0)loadEmp();},[tab]);
-  const upStatus=async(id,status)=>{await supabase.from("applicants").update({status}).eq("id",id);setList(p=>p.map(a=>a.id===id?{...a,status}:a));if(sel?.id===id)setSel(p=>({...p,status}));};
+  const loadVisits=async()=>{const{data}=await supabase.from("page_visits").select("*").order("created_at",{ascending:false}).limit(500);setVisits(data||[]);};
+  useEffect(()=>{if(tab==="employees"&&empList.length===0)loadEmp();if(tab==="visits")loadVisits();},[tab]);
+
+  const transferToEmployee=async(a)=>{
+    try{
+      const{data:existing}=await supabase.from("employees").select("id").eq("applicant_id",a.id).maybeSingle();
+      if(existing)return;
+      await supabase.from("employees").insert({
+        applicant_id:a.id,full_name:a.full_name,id_number:a.passport_or_iqama,mobile:a.whatsapp,
+        nationality:"بنغلادشي",home_country:"بنغلادش",region:a.bangladesh_district,city:a.bangladesh_city,
+        source:"منصة التوظيف",worked_with_app:a.has_license?"نعم":"لا",
+      });
+    }catch(e){console.log("transfer error",e);}
+  };
+
+  const upStatus=async(id,status)=>{
+    const a=list.find(x=>x.id===id);
+    const hist=[...(a?.status_history||[]),{status,at:new Date().toISOString()}];
+    await supabase.from("applicants").update({status,status_history:hist}).eq("id",id);
+    setList(p=>p.map(x=>x.id===id?{...x,status,status_history:hist}:x));
+    if(sel?.id===id)setSel(p=>({...p,status,status_history:hist}));
+    logOutcome(id,status,a?.ai_classification);
+    if(status==="accepted"&&a){await transferToEmployee(a);}
+    if(status==="rejected"&&a?.whatsapp){
+      const msg=`السلام عليكم ${a.full_name}،\nشكراً لاهتمامك بالانضمام لفريقنا. بعد المراجعة، لم نتمكن من المتابعة في هذه المرحلة.\nنتمنى لك التوفيق ونرحب بتقديمك مستقبلاً.\n\nআসসালামু আলাইকুম ${a.full_name},\nআমাদের টিমে আগ্রহের জন্য ধন্যবাদ। পর্যালোচনার পর, এই মুহূর্তে আমরা এগিয়ে যেতে পারছি না।\nআপনার জন্য শুভকামনা।`;
+      window.open(`https://wa.me/${a.whatsapp?.replace(/[^0-9]/g,"")}?text=${encodeURIComponent(msg)}`);
+    }
+  };
   const saveNotes=async(id,n)=>{await supabase.from("applicants").update({admin_notes:n}).eq("id",id);setList(p=>p.map(a=>a.id===id?{...a,admin_notes:n}:a));};
   const delApp=async(id)=>{await supabase.from("applicants").delete().eq("id",id);setList(p=>p.filter(a=>a.id!==id));setSel(null);};
   const delEmp=async(id)=>{await supabase.from("employees").delete().eq("id",id);setEmpList(p=>p.filter(e=>e.id!==id));setSelEmp(null);};
   const analyze=async(a)=>{setAnalyzing(a.id);try{const res=await fetch("https://cnmggdrlkgsyrjxmvydv.supabase.co/functions/v1/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({applicant:a})});if(!res.ok)throw new Error(`${res.status}`);const ev=await res.json();if(ev.error)throw new Error(ev.error);await supabase.from("applicants").update({ai_score_total:ev.score_total,ai_score_technical:ev.score_technical,ai_score_behavioral:ev.score_behavioral,score_physical:ev.score_physical,score_responsibility:ev.score_responsibility,ai_classification:ev.classification,ai_notes:ev.recommendation,ai_evaluation_json:ev}).eq("id",a.id);setList(p=>p.map(x=>x.id===a.id?{...x,ai_score_total:ev.score_total,ai_classification:ev.classification,ai_evaluation_json:ev}:x));if(sel?.id===a.id)setSel(p=>({...p,ai_evaluation_json:ev,ai_score_total:ev.score_total,ai_classification:ev.classification}));}catch(e){alert("خطأ: "+e.message);}setAnalyzing(null);};
-  const filtered=list.filter(a=>{const mf=filter==="all"||a.status===filter||a.ai_classification===filter;const ms=!search||a.full_name?.toLowerCase().includes(search.toLowerCase())||a.whatsapp?.includes(search)||String(a.application_number).includes(search);return mf&&ms;});
+
+  const geoOf=a=>a.bangladesh_district?calcGeoScore(a.bangladesh_district):null;
+  let filtered=list.filter(a=>{const mf=filter==="all"||a.status===filter||a.ai_classification===filter;const ms=!search||a.full_name?.toLowerCase().includes(search.toLowerCase())||a.whatsapp?.includes(search)||String(a.application_number).includes(search);const g=geoOf(a);const mg=geoFilter==="all"||(g&&g.zone===geoFilter);return mf&&ms&&mg;});
+  filtered=[...filtered].sort((x,y)=>{
+    if(sortBy==="score")return(y.ai_score_total||0)-(x.ai_score_total||0);
+    if(sortBy==="geo")return((geoOf(y)?.score)||0)-((geoOf(x)?.score)||0);
+    return(x.application_number||0)-(y.application_number||0);
+  });
   const stats={total:list.length,pending:list.filter(a=>a.status==="pending").length,strong:list.filter(a=>a.ai_classification==="strong").length,accepted:list.filter(a=>a.status==="accepted").length};
+
+  const exportCSV=()=>{
+    const rows=[["#","الاسم","واتساب","الحالة","تصنيف AI","الدرجة","المحافظة","نقاط المنطقة","مستعد للرياض","الرخصة"]];
+    filtered.forEach(a=>{const g=geoOf(a);rows.push([a.application_number,a.full_name,a.whatsapp,ST[a.status]?.ar||a.status,CL[a.ai_classification]?.ar||"—",a.ai_score_total||"—",a.bangladesh_district||"—",g?.score||"—",a.ready_for_riyadh==="yes"?"نعم":a.ready_for_riyadh==="no"?"لا":"—",a.has_license?"نعم":"لا"]);});
+    const csv="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+    const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=`applicants_${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);
+  };
+
+  const toggleCompare=id=>setCompareIds(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p);
+
   if(sel)return <Detail a={sel} onBack={()=>setSel(null)} onStatus={upStatus} onAnalyze={analyze} onSaveNotes={saveNotes} onDelete={delApp} analyzing={analyzing===sel.id}/>;
   if(selEmp)return <EmpDetail e={selEmp} onBack={()=>setSelEmp(null)} onDelete={delEmp}/>;
+  if(showCompare)return <ComparePanel ids={compareIds} list={list} onBack={()=>setShowCompare(false)}/>;
+  if(showStats)return <StatsPanel list={list} onBack={()=>setShowStats(false)}/>;
   return(<div style={s.root}>
-    <div style={s.hdr}><div><div style={s.hT}>لوحة التحكم</div><div style={s.hS}>دلو ورغوة</div></div><div style={{display:"flex",gap:8}}><button onClick={()=>{load();if(tab==="employees")loadEmp();}} style={s.bSm}>🔄</button><button onClick={onLogout} style={{...s.bSm,background:"rgba(0,0,0,0.2)"}}>خروج</button></div></div>
-    <div style={{display:"flex",borderBottom:"2px solid #f1f5f9",background:"#fff"}}>
-      <button onClick={()=>setTab("applicants")} style={{flex:1,padding:"12px 0",border:"none",background:"none",fontSize:13,fontWeight:700,color:tab==="applicants"?"#E8712B":"#64748b",borderBottom:tab==="applicants"?"2px solid #E8712B":"2px solid transparent",cursor:"pointer"}}>📋 المتقدمون ({list.length})</button>
-      <button onClick={()=>setTab("employees")} style={{flex:1,padding:"12px 0",border:"none",background:"none",fontSize:13,fontWeight:700,color:tab==="employees"?"#E8712B":"#64748b",borderBottom:tab==="employees"?"2px solid #E8712B":"2px solid transparent",cursor:"pointer"}}>👤 الموظفون ({empList.length})</button>
+    <div style={s.hdr}><div><div style={s.hT}>لوحة التحكم</div><div style={s.hS}>دلو ورغوة</div></div><div style={{display:"flex",gap:8}}><button onClick={()=>{load();if(tab==="employees")loadEmp();if(tab==="visits")loadVisits();}} style={s.bSm}>🔄</button><button onClick={onLogout} style={{...s.bSm,background:"rgba(0,0,0,0.2)"}}>خروج</button></div></div>
+    <div style={{display:"flex",borderBottom:"2px solid #f1f5f9",background:"#fff",overflowX:"auto"}}>
+      <button onClick={()=>setTab("applicants")} style={{flex:1,padding:"12px 8px",border:"none",background:"none",fontSize:12,fontWeight:700,color:tab==="applicants"?"#E8712B":"#64748b",borderBottom:tab==="applicants"?"2px solid #E8712B":"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap"}}>📋 المتقدمون ({list.length})</button>
+      <button onClick={()=>setTab("employees")} style={{flex:1,padding:"12px 8px",border:"none",background:"none",fontSize:12,fontWeight:700,color:tab==="employees"?"#E8712B":"#64748b",borderBottom:tab==="employees"?"2px solid #E8712B":"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap"}}>👤 الموظفون ({empList.length})</button>
+      <button onClick={()=>setTab("visits")} style={{flex:1,padding:"12px 8px",border:"none",background:"none",fontSize:12,fontWeight:700,color:tab==="visits"?"#E8712B":"#64748b",borderBottom:tab==="visits"?"2px solid #E8712B":"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap"}}>👁️ الزيارات</button>
     </div>
     {tab==="applicants"&&<>
       <div style={s.statsR}>{[{l:"إجمالي",v:stats.total,c:"#E8712B"},{l:"قيد المراجعة",v:stats.pending,c:"#f59e0b"},{l:"أقوياء",v:stats.strong,c:"#16a34a"},{l:"مقبولون",v:stats.accepted,c:"#2563eb"}].map(st=><div key={st.l} style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:st.c}}>{st.v}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>{st.l}</div></div>)}</div>
-      <div style={s.tb}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث..." style={s.sInp}/><select value={filter} onChange={e=>setFilter(e.target.value)} style={s.fSel}><option value="all">الكل</option><option value="pending">قيد المراجعة</option><option value="strong">AI: قوي</option><option value="interview">مقابلة</option><option value="accepted">مقبول</option><option value="rejected">مرفوض</option></select></div>
-      <div style={s.lst}>{loading&&<div style={s.emp}>جاري التحميل...</div>}{!loading&&filtered.length===0&&<div style={s.emp}>لا يوجد متقدمون</div>}{filtered.map(a=><Card key={a.id} a={a} onClick={()=>setSel(a)} onAnalyze={analyze} analyzing={analyzing===a.id}/>)}</div>
+      <div style={{padding:"0 16px 8px",display:"flex",gap:8}}>
+        <button onClick={()=>setShowStats(true)} style={{flex:1,padding:"8px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,fontSize:11,fontWeight:700,color:"#16a34a",cursor:"pointer"}}>📊 إحصائيات شهرية</button>
+        <button onClick={exportCSV} style={{flex:1,padding:"8px",background:"#eff6ff",border:"1px solid #93c5fd",borderRadius:10,fontSize:11,fontWeight:700,color:"#2563eb",cursor:"pointer"}}>📥 تصدير Excel</button>
+        <button onClick={()=>{setCompareMode(!compareMode);setCompareIds([]);}} style={{flex:1,padding:"8px",background:compareMode?"#7c3aed":"#f5f3ff",border:"1px solid #c4b5fd",borderRadius:10,fontSize:11,fontWeight:700,color:compareMode?"#fff":"#7c3aed",cursor:"pointer"}}>⚖️ {compareMode?"إلغاء المقارنة":"مقارنة"}</button>
+      </div>
+      {compareMode&&<div style={{padding:"0 16px 8px"}}><div style={{background:"#f5f3ff",borderRadius:10,padding:"8px 12px",fontSize:11,color:"#6d28d9",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>اختر حتى 3 متقدمين ({compareIds.length}/3)</span>{compareIds.length>=2&&<button onClick={()=>setShowCompare(true)} style={{padding:"4px 12px",background:"#7c3aed",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>قارن الآن ←</button>}</div></div>}
+      <div style={s.tb}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث..." style={s.sInp}/></div>
+      <div style={{padding:"0 16px 8px",display:"flex",gap:8}}>
+        <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...s.fSel,flex:1}}><option value="all">كل الحالات</option><option value="pending">قيد المراجعة</option><option value="strong">AI: قوي</option><option value="interview">مقابلة</option><option value="accepted">مقبول</option><option value="rejected">مرفوض</option></select>
+        <select value={geoFilter} onChange={e=>setGeoFilter(e.target.value)} style={{...s.fSel,flex:1}}><option value="all">كل المناطق</option><option value="green">🟢 خضراء</option><option value="yellow">🟡 صفراء</option><option value="red">🔴 محظورة</option></select>
+        <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...s.fSel,flex:1}}><option value="number">ترتيب الطلب</option><option value="score">الأعلى درجة</option><option value="geo">الأفضل منطقة</option></select>
+      </div>
+      <div style={s.lst}>{loading&&<div style={s.emp}>جاري التحميل...</div>}{!loading&&filtered.length===0&&<div style={s.emp}>لا يوجد متقدمون</div>}{filtered.map(a=><Card key={a.id} a={a} onClick={()=>compareMode?toggleCompare(a.id):setSel(a)} onAnalyze={analyze} analyzing={analyzing===a.id} compareMode={compareMode} selected={compareIds.includes(a.id)}/>)}</div>
     </>}
     {tab==="employees"&&<>
       <div style={{padding:"12px 16px 4px",display:"flex",gap:8}}><input value={empSearch} onChange={e=>setEmpSearch(e.target.value)} placeholder="🔍 بحث..." style={s.sInp}/><button onClick={loadEmp} style={{padding:"10px 12px",background:"#f1f5f9",border:"none",borderRadius:10,fontSize:11,cursor:"pointer",flexShrink:0}}>🔄</button></div>
       <div style={{padding:"0 16px 4px"}}><span style={{color:"#64748b",fontSize:11}}>إجمالي: <strong>{empList.length}</strong></span></div>
       <div style={s.lst}>{empLoading&&<div style={s.emp}>جاري التحميل...</div>}{!empLoading&&empList.length===0&&<div style={s.emp}>لا يوجد موظفون</div>}{empList.filter(e=>!empSearch||e.full_name?.toLowerCase().includes(empSearch.toLowerCase())||e.employee_id?.includes(empSearch)||e.mobile?.includes(empSearch)).map(e=><EmpCard key={e.id} e={e} onClick={()=>setSelEmp(e)}/>)}</div>
     </>}
+    {tab==="visits"&&<VisitsPanel visits={visits}/>}
   </div>);
 }
-function Card({a,onClick,onAnalyze,analyzing}){const st=ST[a.status]||ST.pending;const cl=a.ai_classification?CL[a.ai_classification]:null;const geo=a.bangladesh_district?calcGeoScore(a.bangladesh_district):null;return(<div style={s.card} onClick={onClick}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}><div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"flex-end",marginBottom:3}}><div style={{color:"#1e293b",fontSize:14,fontWeight:800}}>{a.full_name||"—"}</div>{a.application_number&&<div style={{background:"#fff7ed",color:"#E8712B",fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,border:"1px solid #fed7aa"}}>#{a.application_number}</div>}</div><div style={{color:"#64748b",fontSize:11,marginBottom:2}}>{a.whatsapp} · {a.age} سنة</div>{(a.bangladesh_district||a.saudi_city)&&<div style={{color:"#94a3b8",fontSize:10,marginBottom:2}}>{a.location==="inside_ksa"?`🇸🇦 ${a.saudi_city||"—"} ${a.ready_for_riyadh==="yes"?"• مستعد للرياض ✅":""}`:a.bangladesh_district?`🇧🇩 ${a.bangladesh_district} — ${a.bangladesh_city||""}`:""}</div>}{geo&&<div style={{background:ZONE_COLORS[geo.zone].bg,border:`1px solid ${ZONE_COLORS[geo.zone].border}`,borderRadius:8,padding:"2px 8px",display:"inline-block",marginTop:2}}><span style={{color:ZONE_COLORS[geo.zone].text,fontSize:10,fontWeight:700}}>{geo.zone==="green"?"🟢":geo.zone==="yellow"?"🟡":"🔴"} {geo.score}/100</span></div>}</div><div>{a.ai_score_total!=null?<div style={{width:46,height:46,borderRadius:"50%",background:"linear-gradient(135deg,#E8712B,#f59e0b)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{color:"#fff",fontSize:14,fontWeight:900,lineHeight:1}}>{Number(a.ai_score_total).toFixed(1)}</div><div style={{color:"rgba(255,255,255,0.8)",fontSize:9}}>/10</div></div>:<div style={{width:46,height:46,borderRadius:"50%",background:"#f1f5f9",display:"flex",alignItems:"center",justifyContent:"center",color:"#94a3b8",fontSize:18}}>—</div>}</div></div><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><div style={{padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,color:st.color,background:st.bg}}>{st.ar}</div>{cl&&<div style={{padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,color:cl.color,background:"#f8fafc"}}>{cl.ar}</div>}<div style={{flex:1}}/>{!a.ai_score_total&&<button onClick={e=>{e.stopPropagation();onAnalyze(a);}} disabled={analyzing} style={{padding:"5px 10px",background:"linear-gradient(135deg,#7c3aed,#6d28d9)",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>{analyzing?"⟳":"🤖 AI"}</button>}</div></div>);}
+function Card({a,onClick,onAnalyze,analyzing,compareMode,selected}){const st=ST[a.status]||ST.pending;const cl=a.ai_classification?CL[a.ai_classification]:null;const geo=a.bangladesh_district?calcGeoScore(a.bangladesh_district):null;const riyadhWarn=a.location==="inside_ksa"&&a.ready_for_riyadh==="no";return(<div style={{...s.card,...(compareMode&&selected?{border:"2px solid #7c3aed",background:"#f5f3ff"}:{}),...(riyadhWarn?{borderRight:"3px solid #dc2626"}:{})}} onClick={onClick}>{compareMode&&<div style={{marginBottom:6}}><input type="checkbox" checked={selected} readOnly style={{accentColor:"#7c3aed"}}/></div>}<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}><div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"flex-end",marginBottom:3}}><div style={{color:"#1e293b",fontSize:14,fontWeight:800}}>{a.full_name||"—"}</div>{a.application_number&&<div style={{background:"#fff7ed",color:"#E8712B",fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,border:"1px solid #fed7aa"}}>#{a.application_number}</div>}</div><div style={{color:"#64748b",fontSize:11,marginBottom:2}}>{a.whatsapp} · {a.age} سنة</div>{(a.bangladesh_district||a.saudi_city)&&<div style={{color:"#94a3b8",fontSize:10,marginBottom:2}}>{a.location==="inside_ksa"?`🇸🇦 ${a.saudi_city||"—"}`:a.bangladesh_district?`🇧🇩 ${a.bangladesh_district} — ${a.bangladesh_city||""}`:""}</div>}{riyadhWarn&&<div style={{background:"#fff5f5",border:"1px solid #fca5a5",borderRadius:8,padding:"2px 8px",display:"inline-block",marginTop:2,marginLeft:4}}><span style={{color:"#dc2626",fontSize:10,fontWeight:800}}>⚠️ غير مستعد للرياض</span></div>}{geo&&<div style={{background:ZONE_COLORS[geo.zone].bg,border:`1px solid ${ZONE_COLORS[geo.zone].border}`,borderRadius:8,padding:"2px 8px",display:"inline-block",marginTop:2}}><span style={{color:ZONE_COLORS[geo.zone].text,fontSize:10,fontWeight:700}}>{geo.zone==="green"?"🟢":geo.zone==="yellow"?"🟡":"🔴"} {geo.score}/100</span></div>}</div><div>{a.ai_score_total!=null?<div style={{width:46,height:46,borderRadius:"50%",background:"linear-gradient(135deg,#E8712B,#f59e0b)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{color:"#fff",fontSize:14,fontWeight:900,lineHeight:1}}>{Number(a.ai_score_total).toFixed(1)}</div><div style={{color:"rgba(255,255,255,0.8)",fontSize:9}}>/10</div></div>:<div style={{width:46,height:46,borderRadius:"50%",background:"#f1f5f9",display:"flex",alignItems:"center",justifyContent:"center",color:"#94a3b8",fontSize:18}}>—</div>}</div></div><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><div style={{padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,color:st.color,background:st.bg}}>{st.ar}</div>{cl&&<div style={{padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,color:cl.color,background:"#f8fafc"}}>{cl.ar}</div>}<div style={{flex:1}}/>{!compareMode&&!a.ai_score_total&&<button onClick={e=>{e.stopPropagation();onAnalyze(a);}} disabled={analyzing} style={{padding:"5px 10px",background:"linear-gradient(135deg,#7c3aed,#6d28d9)",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>{analyzing?"⟳":"🤖 AI"}</button>}</div></div>);}
+
+function VisitsPanel({visits}){
+  const today=new Date().toDateString();
+  const todayCount=visits.filter(v=>new Date(v.created_at).toDateString()===today).length;
+  const byDay={};visits.forEach(v=>{const d=new Date(v.created_at).toLocaleDateString("ar-SA");byDay[d]=(byDay[d]||0)+1;});
+  const days=Object.entries(byDay).slice(0,14);
+  return(<div style={{padding:16}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+      <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#E8712B"}}>{visits.length}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>إجمالي الزيارات (آخر 500)</div></div>
+      <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#16a34a"}}>{todayCount}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>زيارات اليوم</div></div>
+    </div>
+    <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>📅 آخر 14 يوماً</div>
+      {days.length===0&&<div style={{color:"#94a3b8",fontSize:12,textAlign:"center",padding:20}}>لا توجد بيانات بعد</div>}
+      {days.map(([d,c])=><div key={d} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f1f5f9"}}><span style={{color:"#475569",fontSize:12}}>{d}</span><span style={{color:"#E8712B",fontWeight:800,fontSize:13}}>{c}</span></div>)}
+    </div>
+  </div>);
+}
+
+function StatsPanel({list,onBack}){
+  const byMonth={};list.forEach(a=>{if(!a.created_at)return;const m=new Date(a.created_at).toLocaleDateString("ar-SA",{year:"numeric",month:"long"});byMonth[m]=byMonth[m]||{total:0,accepted:0,rejected:0};byMonth[m].total++;if(a.status==="accepted")byMonth[m].accepted++;if(a.status==="rejected")byMonth[m].rejected++;});
+  const byGeo={};list.forEach(a=>{if(!a.bangladesh_district)return;byGeo[a.bangladesh_district]=(byGeo[a.bangladesh_district]||0)+1;});
+  const topGeo=Object.entries(byGeo).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const acceptRate=list.length?Math.round((list.filter(a=>a.status==="accepted").length/list.length)*100):0;
+  return(<div style={s.root}>
+    <div style={{background:"linear-gradient(135deg,#16a34a,#15803d)",padding:"14px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:100}}><button onClick={onBack} style={s.bSm}>← رجوع</button><div style={{color:"#fff",fontSize:16,fontWeight:900}}>📊 إحصائيات شهرية</div></div>
+    <div style={{padding:16,display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#E8712B"}}>{list.length}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>إجمالي كل الوقت</div></div>
+        <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#16a34a"}}>{acceptRate}%</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>معدل القبول</div></div>
+      </div>
+      <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>📆 حسب الشهر</div>{Object.entries(byMonth).map(([m,d])=><div key={m} style={{padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:"#1e293b",fontSize:12,fontWeight:700}}>{m}</span><span style={{color:"#E8712B",fontWeight:800,fontSize:13}}>{d.total}</span></div><div style={{display:"flex",gap:10,fontSize:10,color:"#64748b"}}><span>✅ مقبول: {d.accepted}</span><span>❌ مرفوض: {d.rejected}</span></div></div>)}</div>
+      <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>🗺️ أكثر المناطق تقديماً</div>{topGeo.map(([g,c])=><div key={g} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #f1f5f9"}}><span style={{color:"#475569",fontSize:12}}>{g}</span><span style={{color:"#2563eb",fontWeight:800,fontSize:13}}>{c}</span></div>)}</div>
+    </div>
+  </div>);
+}
+
+function ComparePanel({ids,list,onBack}){
+  const items=ids.map(id=>list.find(a=>a.id===id)).filter(Boolean);
+  const geoOf=a=>a.bangladesh_district?calcGeoScore(a.bangladesh_district):null;
+  const rows=[
+    ["الاسم",a=>a.full_name],
+    ["الدرجة الكلية",a=>a.ai_score_total?Number(a.ai_score_total).toFixed(1)+"/10":"—"],
+    ["التصنيف",a=>CL[a.ai_classification]?.ar||"—"],
+    ["اللياقة",a=>a.score_physical?Number(a.score_physical).toFixed(1):"—"],
+    ["المسؤولية",a=>a.score_responsibility?Number(a.score_responsibility).toFixed(1):"—"],
+    ["الفني",a=>a.ai_score_technical?Number(a.ai_score_technical).toFixed(1):"—"],
+    ["السلوكي",a=>a.ai_score_behavioral?Number(a.ai_score_behavioral).toFixed(1):"—"],
+    ["المنطقة",a=>a.bangladesh_district||"—"],
+    ["نقاط المنطقة",a=>geoOf(a)?.score||"—"],
+    ["الرخصة",a=>a.has_license?"✅":"❌"],
+    ["الحالة الاجتماعية",a=>a.marital_status==="married"?"متزوج":a.marital_status==="single"?"أعزب":"مطلق"],
+    ["مستعد للرياض",a=>a.ready_for_riyadh==="yes"?"✅":a.ready_for_riyadh==="no"?"❌":"—"],
+  ];
+  return(<div style={s.root}>
+    <div style={{background:"linear-gradient(135deg,#7c3aed,#6d28d9)",padding:"14px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:100}}><button onClick={onBack} style={s.bSm}>← رجوع</button><div style={{color:"#fff",fontSize:16,fontWeight:900}}>⚖️ مقارنة المتقدمين</div></div>
+    <div style={{padding:16,overflowX:"auto"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        <tbody>
+          {rows.map(([label,fn],i)=><tr key={label} style={{background:i%2===0?"#f8fafc":"#fff"}}>
+            <td style={{padding:"10px 12px",fontSize:11,fontWeight:800,color:"#64748b",whiteSpace:"nowrap",borderBottom:"1px solid #f1f5f9"}}>{label}</td>
+            {items.map(a=><td key={a.id} style={{padding:"10px 12px",fontSize:12,fontWeight:700,color:"#1e293b",textAlign:"center",borderBottom:"1px solid #f1f5f9"}}>{fn(a)}</td>)}
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+  </div>);
+}
+
 
 function Detail({a,onBack,onStatus,onAnalyze,onSaveNotes,onDelete,analyzing}){
   const[notes,setNotes]=useState(a.admin_notes||"");const[saving,setSaving]=useState(false);const[del,setDel]=useState(false);const[showInvite,setShowInvite]=useState(false);const[showIQ,setShowIQ]=useState(false);const[iLink,setILink]=useState("");const[editMode,setEditMode]=useState(false);const[ed,setEd]=useState({full_name:a.full_name||"",whatsapp:a.whatsapp||"",age:a.age||"",height_cm:a.height_cm||"",weight_kg:a.weight_kg||"",marital_status:a.marital_status||"",children_count:a.children_count||0,passport_or_iqama:a.passport_or_iqama||""});const[eSaving,setESaving]=useState(false);
@@ -264,9 +392,12 @@ ${a.admin_notes||"لا توجد"}
       <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:12}}>📅 إدارة المقابلة</div><div style={{display:"flex",flexDirection:"column",gap:10}}><button onClick={()=>setShowInvite(true)} style={{...s.bFull,background:"linear-gradient(135deg,#16a34a,#15803d)"}}>📱 إرسال دعوة مقابلة</button><button onClick={()=>setShowIQ(!showIQ)} style={{...s.bFull,background:"linear-gradient(135deg,#2563eb,#1d4ed8)"}}>🎯 إرسال أسئلة المقابلة</button>{iLink&&<div style={{background:"#eff6ff",border:"1px solid #93c5fd",borderRadius:12,padding:"10px 14px"}}><div style={{color:"#1d4ed8",fontSize:11,fontWeight:700,marginBottom:4}}>رابط المقابلة:</div><div style={{color:"#1e40af",fontSize:10,wordBreak:"break-all",marginBottom:8}}>{iLink}</div><button onClick={()=>{const msg=`🇸🇦 يرجى الإجابة على هذه الأسئلة:\n${iLink}\n\n🇬🇧 Please answer these questions:\n${iLink}\n\n🇧🇩 দয়া করে এই প্রশ্নগুলোর উত্তর দিন:\n${iLink}`;window.open(`https://wa.me/${a.whatsapp?.replace(/[^0-9]/g,"")}?text=${encodeURIComponent(msg)}`);}} style={{...s.bFull,background:"linear-gradient(135deg,#16a34a,#15803d)"}}>📱 إرسال على واتساب</button></div>}</div>{showIQ&&<IQPanel applicant={a} onGenerated={l=>{setILink(l);setShowIQ(false);}}/>}</div>
 
       {/* تغيير الحالة */}
-      <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>📌 تغيير الحالة</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{Object.entries(ST).map(([k,v])=><button key={k} onClick={()=>{onStatus(a.id,k);logOutcome(a.id,k,a.ai_classification);}} style={{padding:"8px 14px",border:`2px solid ${v.color}`,borderRadius:12,fontSize:11,fontWeight:700,cursor:"pointer",background:a.status===k?v.color:"#fff",color:a.status===k?"#fff":v.color}}>{v.ar}</button>)}</div>
+      <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>📌 تغيير الحالة</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{Object.entries(ST).map(([k,v])=><button key={k} onClick={()=>onStatus(a.id,k)} style={{padding:"8px 14px",border:`2px solid ${v.color}`,borderRadius:12,fontSize:11,fontWeight:700,cursor:"pointer",background:a.status===k?v.color:"#fff",color:a.status===k?"#fff":v.color}}>{v.ar}</button>)}</div>
         {(()=>{const stats=getLearningStats();return stats.total_decisions>0?<div style={{marginTop:10,background:"#f8fafc",borderRadius:10,padding:"8px 12px"}}><div style={{color:"#64748b",fontSize:10}}>📊 قرارات مسجّلة للتعلم: <strong>{stats.total_decisions}</strong> {stats.ready_for_calibration?"— جاهز للمعايرة! 🎉":`(يحتاج ${30-stats.total_decisions} إضافية للمعايرة)`}</div></div>:null;})()}
       </div>
+
+      {/* سجل النشاط */}
+      {a.status_history?.length>0&&<div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>🕘 سجل النشاط</div>{[...a.status_history].reverse().map((h,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:i<a.status_history.length-1?"1px solid #f1f5f9":"none"}}><span style={{color:ST[h.status]?.color||"#475569",fontSize:12,fontWeight:700}}>{ST[h.status]?.ar||h.status}</span><span style={{color:"#94a3b8",fontSize:11}}>{new Date(h.at).toLocaleString("ar-SA")}</span></div>)}</div>}
 
       {/* ملاحظات */}
       <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>📝 ملاحظاتي</div><textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder="أضف ملاحظاتك..." style={{...s.inp,resize:"vertical",width:"100%",boxSizing:"border-box"}}/><button onClick={save} disabled={saving} style={{...s.bFull,marginTop:8,background:"linear-gradient(135deg,#16a34a,#15803d)"}}>{saving?"جاري الحفظ...":"💾 حفظ الملاحظات"}</button></div>
