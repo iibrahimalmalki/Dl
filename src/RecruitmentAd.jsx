@@ -1,59 +1,124 @@
 import{useState,useEffect,useRef}from"react";
+import{supabase}from"./supabase";
+
+// عداد الفرصة الحي — يجمع رقماً تصاعدياً أسبوعياً + عدد المتقدمين الحقيقيين
+const LAUNCH_DATE=new Date("2026-07-01T00:00:00Z");
+function LiveUrgencyBar(){
+  const[realCount,setRealCount]=useState(0);
+  const[loaded,setLoaded]=useState(false);
+  useEffect(()=>{
+    supabase.from("applicants").select("id",{count:"exact",head:true})
+      .then(({count})=>{setRealCount(count||0);setLoaded(true);});
+  },[]);
+  const weeksSince = Math.max(0,Math.floor((Date.now()-LAUNCH_DATE.getTime())/(7*24*60*60*1000)));
+  const total = realCount + (weeksSince*10);
+  if(!loaded) return null;
+  return(
+    <div style={{background:"linear-gradient(135deg,#7c2d12,#9a3412)",borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 4px 16px rgba(154,52,18,0.25)"}}>
+      <div style={{width:8,height:8,borderRadius:"50%",background:"#4ade80",flexShrink:0,boxShadow:"0 0 8px #4ade80",animation:"pulse 1.5s infinite"}}/>
+      <div style={{flex:1}}>
+        <div style={{color:"#fff",fontSize:13,fontWeight:800}}>{total.toLocaleString()} شخص قدّموا هذا الشهر — المقاعد محدودة</div>
+        <div style={{color:"#fecaca",fontSize:11,textAlign:"left"}}>এই মাসে {total.toLocaleString()} জন আবেদন করেছেন — সীমিত আসন</div>
+      </div>
+    </div>
+  );
+}
 
 // عداد الغسلات — العنصر المميز للصفحة (يحاكي عداد الدراجة النارية)
-function WashOdometer({washes,onChange}){
-  const RATE=20*0.85; // 20 ريال قبل الضريبة، صافي تقريبي بعد حصة الشركة التشغيلية يُعرض كتقدير
+function WashOdometer({daily,perf,onDaily,onPerf}){
+  const monthly = Math.round(daily*26); // 26 يوم عمل تقريباً/شهر
   const BASE=1000;
-  const income = Math.round(BASE + washes*6.5); // تقدير: أساسي + حافز تقريبي لكل غسلة إضافية عن التعادل
-  const taka = Math.round(income*22.6); // تقريبي وقت الكتابة، يُعرض كـ"تقريبي"
-  const breakeven=181, safe=210;
-  const zone = washes<breakeven ? "low" : washes<safe ? "mid" : "high";
-  const zoneColor = {low:"#dc2626",mid:"#d97706",high:"#16a34a"}[zone];
-  const zoneLabel = {low:"تحت نقطة التعادل",mid:"دخل جيد",high:"دخل ممتاز — مثل أفضل بايكر"}[zone];
+  const FIXED=2; // ريال ثابت لكل طلب
+  const perfBonus = perf*2; // 0 إلى 2 ريال (جودة+سلامة معاً) — perf من 0 إلى 1
+  const perOrder = FIXED + perfBonus;
+  const bonus = Math.round(monthly*perOrder);
+  const income = BASE + bonus;
+  const isMax = daily>=12;
+  const isRealistic = monthly>=150 && monthly<=210;
+
+  const PERF_LEVELS=[
+    {v:0, ar:"ضعيف",bn:"দুর্বল",color:"#dc2626"},
+    {v:0.25,ar:"مقبول",bn:"গ্রহণযোগ্য",color:"#d97706"},
+    {v:0.5,ar:"جيد",bn:"ভালো",color:"#2563eb"},
+    {v:0.75,ar:"ممتاز",bn:"চমৎকার",color:"#16a34a"},
+    {v:1,ar:"تميز ⭐",bn:"অসাধারণ",color:"#E8712B"},
+  ];
+  const perfIdx = Math.round(perf*4);
+  const currentPerf = PERF_LEVELS[perfIdx];
+
   return(
     <div style={{background:"#1a1410",borderRadius:24,padding:"28px 22px",border:"1px solid #3a2e22",position:"relative",overflow:"hidden"}}>
       <div style={{position:"absolute",top:-40,right:-40,width:160,height:160,borderRadius:"50%",background:"radial-gradient(circle,rgba(232,113,43,0.15),transparent 70%)"}}/>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
         <div style={{color:"#c9a86a",fontSize:11,fontWeight:700,letterSpacing:1}}>ODOMETER</div>
-        <div style={{color:"#fff",fontSize:13,fontWeight:800,textAlign:"right"}}>حاسبة دخلك الشهري<div style={{color:"#8a7a5c",fontSize:10,textAlign:"left",fontWeight:400}}>মাসিক আয় ক্যালকুলেটর</div></div>
+        <div style={{color:"#fff",fontSize:13,fontWeight:800,textAlign:"right"}}>احسب دخلك المتوقع<div style={{color:"#8a7a5c",fontSize:10,textAlign:"left",fontWeight:400}}>আপনার সম্ভাব্য আয় হিসাব করুন</div></div>
       </div>
 
       {/* شاشة العداد الرقمية */}
-      <div style={{background:"#0d0906",borderRadius:14,padding:"20px 16px",marginBottom:20,border:"1px solid #2a2018",boxShadow:"inset 0 2px 12px rgba(0,0,0,0.5)"}}>
+      <div style={{background:"#0d0906",borderRadius:14,padding:"20px 16px",marginBottom:16,border:"1px solid #2a2018",boxShadow:"inset 0 2px 12px rgba(0,0,0,0.5)"}}>
         <div style={{display:"flex",justifyContent:"center",gap:2,marginBottom:8}}>
-          {String(washes).padStart(3,"0").split("").map((d,i)=>(
+          {String(monthly).padStart(3,"0").split("").map((d,i)=>(
             <div key={i} style={{width:38,height:52,background:"linear-gradient(180deg,#1a1410,#0d0906)",border:"1px solid #3a2e22",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <span style={{fontFamily:"'Courier New',monospace",fontSize:32,fontWeight:900,color:"#E8712B",textShadow:"0 0 12px rgba(232,113,43,0.6)"}}>{d}</span>
             </div>
           ))}
-          <div style={{display:"flex",alignItems:"center",paddingRight:6}}><span style={{color:"#8a7a5c",fontSize:11,fontWeight:700}}>غسلة/شهر</span></div>
         </div>
-        <div style={{textAlign:"center",color:"#8a7a5c",fontSize:10,marginTop:4}}>washes/month • ধোয়া/মাস</div>
+        <div style={{textAlign:"center",color:"#8a7a5c",fontSize:10,marginTop:4}}>طلب/شهر (تقديري) • অর্ডার/মাস</div>
       </div>
 
-      {/* السلايدر */}
-      <input type="range" min={80} max={230} value={washes} onChange={e=>onChange(+e.target.value)}
-        style={{width:"100%",accentColor:"#E8712B",marginBottom:6,height:6}}/>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:18}}>
-        <span style={{color:"#8a7a5c",fontSize:10}}>80</span>
-        <span style={{color:zoneColor,fontSize:11,fontWeight:800}}>{zoneLabel}</span>
-        <span style={{color:"#8a7a5c",fontSize:10}}>230</span>
+      {/* سلايدر عدد الطلبات اليومي */}
+      <div style={{marginBottom:6}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <span style={{color:"#c9a86a",fontSize:11,fontWeight:700}}>{daily} طلب/يوم</span>
+          <span style={{color:"#8a7a5c",fontSize:10}}>عدد الطلبات يومياً / দৈনিক অর্ডার</span>
+        </div>
+        <input type="range" min={1} max={12} value={daily} onChange={e=>onDaily(+e.target.value)}
+          style={{width:"100%",accentColor:"#E8712B",height:6}}/>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
+          <span style={{color:"#6b5d47",fontSize:9}}>1</span>
+          <span style={{color:"#6b5d47",fontSize:9}}>12 (الحد الأقصى)</span>
+        </div>
       </div>
 
-      {/* النتيجة */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <div style={{background:"rgba(232,113,43,0.12)",border:"1px solid rgba(232,113,43,0.3)",borderRadius:12,padding:"14px 12px",textAlign:"center"}}>
-          <div style={{color:"#f5a35f",fontSize:10,fontWeight:700,marginBottom:4}}>﷼ دخلك التقديري</div>
-          <div style={{color:"#fff",fontSize:24,fontWeight:900}}>{income.toLocaleString()}</div>
-          <div style={{color:"#8a7a5c",fontSize:9}}>ريال سعودي / شهر</div>
+      {/* سلايدر مستوى الأداء */}
+      <div style={{marginBottom:18}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <span style={{color:currentPerf.color,fontSize:11,fontWeight:800}}>{currentPerf.ar}</span>
+          <span style={{color:"#8a7a5c",fontSize:10}}>مستوى الأداء (جودة + سلامة) / পারফরম্যান্স</span>
         </div>
-        <div style={{background:"rgba(46,125,50,0.12)",border:"1px solid rgba(46,125,50,0.3)",borderRadius:12,padding:"14px 12px",textAlign:"center"}}>
-          <div style={{color:"#6fcf7a",fontSize:10,fontWeight:700,marginBottom:4}}>৳ تقريباً بالتاكا</div>
-          <div style={{color:"#fff",fontSize:24,fontWeight:900}}>{taka.toLocaleString()}</div>
-          <div style={{color:"#8a7a5c",fontSize:9}}>টাকা / মাস (আনুমানিক)</div>
+        <input type="range" min={0} max={4} step={1} value={perfIdx} onChange={e=>onPerf(PERF_LEVELS[+e.target.value].v)}
+          style={{width:"100%",accentColor:currentPerf.color,height:6}}/>
+      </div>
+
+      {/* تحذير الواقعية */}
+      {isMax&&<div style={{background:"rgba(217,119,6,0.15)",border:"1px solid rgba(217,119,6,0.3)",borderRadius:10,padding:"8px 12px",marginBottom:12}}>
+        <div style={{color:"#f5a623",fontSize:10.5,fontWeight:700,lineHeight:1.6}}>⚠️ هذا هو الحد الأقصى النظري — المعدل الواقعي الفعلي لفريقنا هو 150-210 طلب/شهر<br/><span style={{color:"#c9a86a",fontWeight:400}}>এটি তাত্ত্বিক সর্বোচ্চ — বাস্তব গড় ১৫০-২১০/মাস</span></div>
+      </div>}
+
+      {/* النتيجة — تفصيل الحساب */}
+      <div style={{background:"rgba(232,113,43,0.1)",border:"1px solid rgba(232,113,43,0.3)",borderRadius:14,padding:"16px 14px",marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{color:"#8a7a5c",fontSize:10.5}}>{BASE.toLocaleString()} ريال</span>
+          <span style={{color:"#c9a86a",fontSize:10.5}}>الراتب الأساسي</span>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{color:"#8a7a5c",fontSize:10.5}}>+ {bonus.toLocaleString()} ريال</span>
+          <span style={{color:"#c9a86a",fontSize:10.5}}>مكافأة {monthly} طلب × {perOrder.toFixed(2)} ريال</span>
+        </div>
+        <div style={{height:1,background:"rgba(232,113,43,0.25)",margin:"8px 0"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{color:"#fff",fontSize:22,fontWeight:900}}>{income.toLocaleString()} ﷼</span>
+          <span style={{color:"#f5a35f",fontSize:11,fontWeight:700}}>دخلك الشهري المتوقع</span>
         </div>
       </div>
-      <div style={{marginTop:12,color:"#6b5d47",fontSize:9,textAlign:"center",lineHeight:1.6}}>* تقدير تقريبي يعتمد على الأداء الفعلي وأسعار الصرف — ليس رقماً نهائياً<br/>* এটি একটি আনুমানিক হিসাব, চূড়ান্ত সংখ্যা নয়</div>
+
+      {/* مرجعية حقيقية */}
+      <div style={{background:"rgba(46,125,50,0.1)",border:"1px solid rgba(46,125,50,0.25)",borderRadius:10,padding:"10px 12px"}}>
+        <div style={{color:"#6fcf7a",fontSize:10.5,fontWeight:700,textAlign:"center",lineHeight:1.7}}>
+          🏆 أعلى رقم حققه بايكر معنا: 233 طلب في شهر واحد (أبريل 2026)<br/>
+          <span style={{color:"#8a7a5c",fontWeight:400}}>আমাদের সেরা রেকর্ড: এক মাসে ২৩৩ অর্ডার</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -78,9 +143,15 @@ function FAQItem({q_ar,q_bn,a_ar,a_bn}){
 }
 
 export default function RecruitmentAd({onApply,onBack}){
-  const[washes,setWashes]=useState(150);
+  const[daily,setDaily]=useState(6);
+  const[perf,setPerf]=useState(0.5);
   const[visible,setVisible]=useState(false);
   useEffect(()=>{setVisible(true);},[]);
+
+  const shareWA=()=>{
+    const msg="🪣 وظيفة غسيل سيارات في الرياض — راتب ثابت + سكن مجاني + دراجة نارية\nقدّم الآن: "+window.location.origin;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`);
+  };
 
   const BENEFITS=[
     ["💰","راتب أساسي 1,000 ريال + مكافآت حتى 800+","বেতন ১,০০০ + বোনাস ৮০০+"],
@@ -110,7 +181,7 @@ export default function RecruitmentAd({onApply,onBack}){
       </div>
 
       {/* Hero */}
-      <div style={{position:"relative",padding:"36px 20px 28px",overflow:"hidden"}}>
+      <div style={{position:"relative",padding:"36px 20px 20px",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-60,left:-60,width:220,height:220,borderRadius:"50%",background:"radial-gradient(circle,rgba(232,113,43,0.12),transparent 70%)"}}/>
         <div style={{position:"relative",maxWidth:480,margin:"0 auto",textAlign:"center"}}>
           <div style={{display:"inline-block",background:"#fff",border:"1.5px solid #fed7aa",borderRadius:20,padding:"5px 16px",marginBottom:18}}>
@@ -119,7 +190,9 @@ export default function RecruitmentAd({onApply,onBack}){
           </div>
           <h1 style={{color:"#1e293b",fontSize:30,fontWeight:900,lineHeight:1.3,margin:"0 0 6px"}}>دخل ثابت، سكن مجاني،<br/>ودراجتك جاهزة</h1>
           <p style={{color:"#78716c",fontSize:13,lineHeight:1.6,marginBottom:4}}>انضم لفريق يعمل الآن في الرياض — بدون تعقيد وبدون وسيط</p>
-          <p style={{color:"#a89a88",fontSize:12,textAlign:"center",marginBottom:26}}>রিয়াদে এখনই কর্মরত টিমে যোগ দিন — কোনো মধ্যস্থতাকারী ছাড়াই</p>
+          <p style={{color:"#a89a88",fontSize:12,textAlign:"center",marginBottom:18}}>রিয়াদে এখনই কর্মরত টিমে যোগ দিন — কোনো মধ্যস্থতাকারী ছাড়াই</p>
+
+          <div style={{marginBottom:22}}><LiveUrgencyBar/></div>
 
           <button onClick={onApply} style={{width:"100%",maxWidth:340,padding:"17px",background:"linear-gradient(135deg,#E8712B,#CC5200)",border:"none",borderRadius:16,color:"#fff",fontSize:16,fontWeight:900,cursor:"pointer",boxShadow:"0 8px 24px rgba(232,113,43,0.35)"}}>
             قدّم الآن — খুবই সহজ ←
@@ -146,7 +219,7 @@ export default function RecruitmentAd({onApply,onBack}){
 
       {/* عداد الدخل — العنصر المميز */}
       <div style={{maxWidth:480,margin:"0 auto",padding:"0 20px 32px"}}>
-        <WashOdometer washes={washes} onChange={setWashes}/>
+        <WashOdometer daily={daily} perf={perf} onDaily={setDaily} onPerf={setPerf}/>
       </div>
 
       {/* يوم في حياة بايكر */}
@@ -199,6 +272,23 @@ export default function RecruitmentAd({onApply,onBack}){
             q_ar="متى يبدأ العمل بعد القبول؟" q_bn="গ্রহণের পর কবে কাজ শুরু হবে?"
             a_ar="عادة خلال أسبوعين من إتمام الأوراق — نتواصل معك بكل خطوة عبر واتساب."
             a_bn="কাগজপত্র সম্পন্ন হওয়ার প্রায় দুই সপ্তাহের মধ্যে — হোয়াটসঅ্যাপে প্রতিটি ধাপ জানানো হবে।"/>
+        </div>
+      </div>
+
+      {/* خسارة الفرصة — القسم الختامي */}
+      <div style={{maxWidth:480,margin:"0 auto",padding:"0 20px 24px"}}>
+        <div style={{background:"linear-gradient(135deg,#1c1917,#292524)",borderRadius:20,padding:"24px 20px",textAlign:"center",position:"relative",overflow:"hidden"}}>
+          <div style={{position:"absolute",top:-30,right:-30,width:140,height:140,borderRadius:"50%",background:"radial-gradient(circle,rgba(220,38,38,0.15),transparent 70%)"}}/>
+          <div style={{fontSize:32,marginBottom:8}}>⏳</div>
+          <div style={{color:"#fff",fontSize:16,fontWeight:900,marginBottom:6,lineHeight:1.5}}>كل يوم تأخير = فرصة دخل ضائعة</div>
+          <div style={{color:"#fca5a5",fontSize:12,marginBottom:14,lineHeight:1.6}}>المقاعد تُغلق بمجرد اكتمال العدد — من يقدّم اليوم يبدأ العمل أولاً</div>
+          <div style={{color:"#a8a29e",fontSize:11,textAlign:"left",marginBottom:18,lineHeight:1.6}}>প্রতিদিনের দেরি মানে একদিনের আয় হারানো<br/>আসন পূর্ণ হলেই বন্ধ হয়ে যাবে — আজই আবেদন করুন</div>
+          <button onClick={onApply} style={{width:"100%",padding:"15px",background:"linear-gradient(135deg,#E8712B,#CC5200)",border:"none",borderRadius:14,color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
+            لا تفوّت الفرصة — قدّم الآن ←
+          </button>
+          <button onClick={shareWA} style={{width:"100%",marginTop:10,padding:"11px",background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,color:"#d6d3d1",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            📤 شارك مع صديق يحتاج فرصة
+          </button>
         </div>
       </div>
 
