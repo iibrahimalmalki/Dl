@@ -21,8 +21,40 @@ export const DISTRICTS = {
   "أخرى":      { en:"Other",        M1:5, M2:5, M3:5, M4:7,M5:7,M6:7,M7:5  },
 };
 
+// ─── مطابقة أسماء المناطق بأي لغة (عربي/إنجليزي/بنغالي) ───
+// يبني خريطة أسماء بديلة تلقائياً من الحقل en + أسماء بنغالية شائعة
+const BENGALI_ALIASES = {
+  "কিশোরগঞ্জ":"كيشوريغانج","কুমিল্লা":"كوميلا","ব্রাহ্মণবাড়িয়া":"براهمانباريا",
+  "চাঁদপুর":"تشاندبور","নরসিংদী":"ناريسينغدي","নোয়াখালী":"نواخالي","টাঙ্গাইল":"تانغيل",
+  "মাদারীপুর":"ماداريبور","বরিশাল":"باريسال","ফেনী":"فيني","রাঙ্গামাটি":"رانغاماتي",
+  "রাঙামাটি":"رانغاماتي","বান্দরবান":"باندربان","কক্সবাজার":"كوكس بازار","কক্সবাজর":"كوكس بازار",
+  "ঢাকা":"دهاكا","যশোর":"جيسور","রাজশাহী":"راجشاهي","সিলেট":"سيلهيت","ময়মনসিংহ":"مومينشاهي"
+};
+const NAME_INDEX = (() => {
+  const idx = {};
+  for (const [ar, v] of Object.entries(DISTRICTS)) {
+    idx[ar.trim().toLowerCase()] = ar;                         // العربية نفسها
+    if (v.en) idx[v.en.trim().toLowerCase()] = ar;             // الإنجليزية
+  }
+  for (const [bn, ar] of Object.entries(BENGALI_ALIASES)) idx[bn.trim().toLowerCase()] = ar;
+  return idx;
+})();
+
+export function normalizeDistrict(input) {
+  if (!input) return null;
+  const key = String(input).trim().toLowerCase();
+  if (NAME_INDEX[key]) return NAME_INDEX[key];
+  // مطابقة جزئية متسامحة (يتجاهل الفراغات وعلامات مثل ')
+  const clean = key.replace(/['`’\-\s]/g, "");
+  for (const [k, ar] of Object.entries(NAME_INDEX)) {
+    if (k.replace(/['`’\-\s]/g, "") === clean) return ar;
+  }
+  return null;
+}
+
 export function calcGeoScore(district) {
-  const d = DISTRICTS[district];
+  const norm = normalizeDistrict(district);
+  const d = norm ? DISTRICTS[norm] : DISTRICTS[district];
   if (!d) return null;
   const score = (d.M1*2.3)+(d.M2*1.8)+(d.M3*1.8)+(d.M4*1.4)+(d.M5*0.9)+(d.M6*0.9)+(d.M7*0.9);
   const instant_reject = d.M4<5 || d.M5<5;

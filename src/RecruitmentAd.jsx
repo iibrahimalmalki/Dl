@@ -265,6 +265,10 @@ export default function RecruitmentAd({onApply,onBack}){
           <button onClick={onApply} style={{width:"100%",maxWidth:340,padding:"17px",background:"linear-gradient(135deg,#E8712B,#f5a35f)",border:"none",borderRadius:16,color:"#fff",fontSize:15,fontWeight:900,cursor:"pointer",boxShadow:"0 8px 24px rgba(232,113,43,0.3)"}}>
             এখনই আবেদন করুন — قدّم الآن ←
           </button>
+          <div style={{marginTop:12,fontSize:11,color:"#78716c",lineHeight:1.9}}>
+            <div style={{fontWeight:800,color:"#57534e"}}>✔️ মৌলিক শর্ত · الشروط الأساسية</div>
+            🏍️ মোটরসাইকেল চালাতে সক্ষম · يقود دراجة نارية &nbsp;|&nbsp; 📏 উচ্চতা ১৬৭+ সেমি · الطول 167+ &nbsp;|&nbsp; 🎂 বয়স ২৫–৩৮ · العمر 25–38 &nbsp;|&nbsp; 📍 রিয়াদ · الرياض
+          </div>
         </div>
       </div>
 
