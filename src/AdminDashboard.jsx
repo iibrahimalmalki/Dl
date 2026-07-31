@@ -4,7 +4,7 @@ import{calcGeoScore,ZONE_COLORS}from"./geoScoring";
 import{analyzeApplicantLocal,logOutcome,getLearningStats,ARIFUL_BENCHMARK}from"./localAI";
 const ST={pending:{ar:"قيد المراجعة",color:"#f59e0b",bg:"#fffbeb"},shortlisted:{ar:"مرشح",color:"#2563eb",bg:"#eff6ff"},interview:{ar:"مقابلة",color:"#7c3aed",bg:"#f5f3ff"},accepted:{ar:"مقبول",color:"#16a34a",bg:"#f0fdf4"},rejected:{ar:"مرفوض",color:"#dc2626",bg:"#fff5f5"}};
 const CL={strong:{ar:"مرشح قوي ⭐",color:"#16a34a"},accepted:{ar:"مقبول ✅",color:"#2563eb"},needs_interview:{ar:"يحتاج مقابلة 🔍",color:"#f59e0b"},rejected:{ar:"غير مناسب ❌",color:"#dc2626"}};
-export default function AdminDashboard({onLogout}){
+export default function AdminDashboard({onLogout,embedded}){
   const[list,setList]=useState([]);const[loading,setLoading]=useState(true);const[sel,setSel]=useState(null);const[filter,setFilter]=useState("all");const[geoFilter,setGeoFilter]=useState("all");const[sortBy,setSortBy]=useState("number");const[search,setSearch]=useState("");const[analyzing,setAnalyzing]=useState(null);const[tab,setTab]=useState("applicants");
   const[empList,setEmpList]=useState([]);const[empLoading,setEmpLoading]=useState(false);const[selEmp,setSelEmp]=useState(null);const[empSearch,setEmpSearch]=useState("");
   const[compareMode,setCompareMode]=useState(false);const[compareIds,setCompareIds]=useState([]);const[showCompare,setShowCompare]=useState(false);const[showStats,setShowStats]=useState(false);const[visits,setVisits]=useState([]);
@@ -87,7 +87,7 @@ export default function AdminDashboard({onLogout}){
   if(showCompare)return <ComparePanel ids={compareIds} list={list} onBack={()=>setShowCompare(false)}/>;
   if(showStats)return <StatsPanel list={list} onBack={()=>setShowStats(false)}/>;
   return(<div style={s.root}>
-    <div style={s.hdr}><div><div style={s.hT}>لوحة التحكم</div><div style={s.hS}>دلو ورغوة</div></div><div style={{display:"flex",gap:8}}><button onClick={()=>{load();if(tab==="employees")loadEmp();if(tab==="visits")loadVisits();}} style={s.bSm}>🔄</button><button onClick={onLogout} style={{...s.bSm,background:"rgba(0,0,0,0.2)"}}>خروج</button></div></div>
+    {!embedded&&<div style={s.hdr}><div><div style={s.hT}>لوحة التحكم</div><div style={s.hS}>دلو ورغوة</div></div><div style={{display:"flex",gap:8}}><button onClick={()=>{load();if(tab==="employees")loadEmp();if(tab==="visits")loadVisits();}} style={s.bSm}>🔄</button><button onClick={onLogout} style={{...s.bSm,background:"rgba(0,0,0,0.2)"}}>خروج</button></div></div>}
     <div style={{display:"flex",borderBottom:"2px solid #f1f5f9",background:"#fff",overflowX:"auto"}}>
       <button onClick={()=>setTab("applicants")} style={{flex:1,padding:"12px 8px",border:"none",background:"none",fontSize:12,fontWeight:700,color:tab==="applicants"?"#E8712B":"#64748b",borderBottom:tab==="applicants"?"2px solid #E8712B":"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap"}}>📋 المتقدمون ({list.length})</button>
       <button onClick={()=>setTab("employees")} style={{flex:1,padding:"12px 8px",border:"none",background:"none",fontSize:12,fontWeight:700,color:tab==="employees"?"#E8712B":"#64748b",borderBottom:tab==="employees"?"2px solid #E8712B":"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap"}}>👤 الموظفون ({empList.length})</button>

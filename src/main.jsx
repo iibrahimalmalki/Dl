@@ -5,9 +5,8 @@ import LandingPage from"./LandingPage";
 import EmployeePage from"./EmployeePage";
 import RecruitmentAd from"./RecruitmentAd";
 const ApplicantForm=lazy(()=>import("./ApplicantForm"));
-const AdminDashboard=lazy(()=>import("./AdminDashboard"));
 const InterviewPage=lazy(()=>import("./InterviewPage"));
-const UserManagement=lazy(()=>import("./UserManagement"));
+const Shell=lazy(()=>import("./Shell"));
 const Spin=()=><div style={{minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:40,height:40,border:"3px solid #fed7aa",borderTopColor:"#E8712B",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/></div>;
 
 // ═══ تسجيل الدخول عبر Supabase Auth (بريد + كلمة مرور) — استبدل كلمة المرور المكتوبة ═══
@@ -28,7 +27,6 @@ function App(){
   const[session,setSession]=useState(null);
   const[authReady,setAuthReady]=useState(false);
   const[me,setMe]=useState(null);       // صف app_users للمستخدم الحالي (is_owner…)
-  const[usersOpen,setUsersOpen]=useState(false);
   const urlParams=new URLSearchParams(window.location.search);
   const sessionId=urlParams.get("interview");
   const directApply=urlParams.get("apply");
@@ -59,14 +57,7 @@ function App(){
   const adminView=()=>{
     if(!authReady)return <Spin/>;
     if(!session)return <Login/>;
-    return(<>
-      <AdminDashboard onLogout={logout}/>
-      {me&&me.is_owner&&<>
-        <button onClick={()=>setUsersOpen(true)} title="المستخدمون والصلاحيات"
-          style={{position:"fixed",insetInlineStart:16,bottom:16,zIndex:900,padding:"11px 16px",borderRadius:30,border:"none",background:"linear-gradient(135deg,#1e293b,#334155)",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer",boxShadow:"0 6px 18px rgba(0,0,0,.3)"}}>👥 المستخدمون</button>
-        {usersOpen&&<Suspense fallback={<Spin/>}><UserManagement onClose={()=>setUsersOpen(false)}/></Suspense>}
-      </>}
-    </>);
+    return <Shell onLogout={logout} me={me}/>;
   };
 
   return(<Suspense fallback={<Spin/>}>
