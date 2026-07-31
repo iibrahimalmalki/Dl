@@ -1,8 +1,10 @@
 import{useState,useEffect}from"react";
 import{supabase}from"./supabase";
+import Icon from"./Icon";
 
 // لوحة القيادة — بيانات حيّة من قاعدة البيانات
-export default function DashboardHome(){
+export default function DashboardHome({onNav}){
+  const nav=k=>onNav&&onNav(k);
   const[st,setSt]=useState(null);
   useEffect(()=>{(async()=>{
     const[{data:apps},{data:visits},{data:emps}]=await Promise.all([
@@ -37,10 +39,10 @@ export default function DashboardHome(){
   return(<>
     {/* KPIs */}
     <div className="dw-kpis">
-      <Kpi label="المتقدّمون" icon="🧲" ib="#fff2e8" n={A.length} delta={`${strong} أقوياء`} up/>
-      <Kpi label="قيد المراجعة" icon="⏳" ib="#fef3e2" n={pending} delta="بانتظار القرار" tone="amb"/>
-      <Kpi label="مقبولون" icon="✅" ib="#e7f7ef" n={accepted} delta="نشطون" up/>
-      <Kpi label="مرفوضون" icon="✕" ib="#feecea" n={rejected} delta="مؤرشفون" tone="mut"/>
+      <Kpi label="المتقدّمون" ic="applicants" ib="#fff2e8" ic_c="#E8712B" n={A.length} delta={`${strong} أقوياء`} up onClick={()=>nav("recruitment")}/>
+      <Kpi label="قيد المراجعة" ic="clock" ib="#fef3e2" ic_c="#b54708" n={pending} delta="بانتظار القرار" tone="amb" onClick={()=>nav("recruitment")}/>
+      <Kpi label="مقبولون" ic="checkCircle" ib="#e7f7ef" ic_c="#087443" n={accepted} delta="نشطون" up onClick={()=>nav("recruitment")}/>
+      <Kpi label="مرفوضون" ic="xCircle" ib="#feecea" ic_c="#b42318" n={rejected} delta="مؤرشفون" tone="mut" onClick={()=>nav("recruitment")}/>
     </div>
 
     <div className="dw-row dw-2">
@@ -70,12 +72,12 @@ export default function DashboardHome(){
     {/* Recent applicants */}
     <div className="dw-row">
       <div className="dw-panel">
-        <div className="dw-ph"><b>أحدث المتقدّمين</b><span className="dw-a">الكل ({A.length})</span></div>
+        <div className="dw-ph"><b>أحدث المتقدّمين</b><span className="dw-a" onClick={()=>nav("recruitment")} role="button">عرض الكل ({A.length}) <Icon n="fwd" s={13} style={{verticalAlign:"-2px"}}/></span></div>
         <div style={{overflow:"auto"}}>
         <table className="dw-tbl">
           <thead><tr><th>المتقدّم</th><th className="dw-hm">الموقع</th><th>تقييم AI</th><th>الحالة</th></tr></thead>
           <tbody>{recent.map((a,i)=>{const[bg,cl]=scoreCol(a.ai_score_total);return(
-            <tr key={i}>
+            <tr key={i} onClick={()=>nav("recruitment")} style={{cursor:"pointer"}}>
               <td><div className="dw-cand"><div className="dw-cav" style={{background:av(a.full_name,i)}}>{(a.full_name||"?").trim().charAt(0)}</div><div><div style={{fontWeight:700}}>{a.full_name||"—"}</div><small>#{a.application_number||"—"}</small></div></div></td>
               <td className="dw-hm">{a.location==="inside_ksa"?`الرياض · ${a.saudi_city||"—"}`:`خارج · ${a.bangladesh_district||"—"}`}</td>
               <td><span className="dw-score" style={{background:bg,color:cl}}>{a.ai_score_total!=null?Number(a.ai_score_total).toFixed(2):"—"}</span></td>
@@ -109,9 +111,9 @@ export default function DashboardHome(){
   </>);
 }
 
-function Kpi({label,icon,ib,n,delta,up,tone}){
+function Kpi({label,ic,ic_c,ib,n,delta,up,tone,onClick}){
   const dc=up?"#12b76a":tone==="amb"?"#b54708":tone==="mut"?"#94a3b8":"#f04438";
-  return(<div className="dw-kpi"><div className="dw-kh"><span className="dw-kl">{label}</span><span className="dw-ki" style={{background:ib}}>{icon}</span></div><div className="dw-kn">{n}</div><div className="dw-kd" style={{color:dc}}>{up?"▲ ":""}{delta}</div></div>);
+  return(<div className={"dw-kpi"+(onClick?" dw-clk":"")} onClick={onClick}><div className="dw-kh"><span className="dw-kl">{label}</span><span className="dw-ki" style={{background:ib,color:ic_c}}><Icon n={ic} s={18}/></span></div><div className="dw-kn">{n}</div><div className="dw-kd" style={{color:dc}}>{up&&<Icon n="performance" s={12} style={{verticalAlign:"-1px"}}/>} {delta}</div></div>);
 }
 function Donut({a,p,r,total}){
   const T=Math.max(a+p+r,1);const seg=(v)=>v/T*100;const A=seg(a),P=seg(p),R=seg(r);
