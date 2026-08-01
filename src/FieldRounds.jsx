@@ -1,7 +1,9 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
-import{AXES,ITEMS,bikerItems,mgmtItems,compliance,effect,RESP_AR}from"./fieldChecklist";
+import{AXES,ITEMS,bikerItems,mgmtItems,compliance,complianceByAxis,effect,RESP_AR}from"./fieldChecklist";
+import{analyzeRound}from"./fieldAnalysis";
+import{openReport}from"./fieldReport";
 
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const periodLabel=p=>{const[y,m]=p.split("-");return`${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m} ${y}`;};
@@ -17,6 +19,7 @@ export default function FieldRounds({opId}){
   const[showNew,setShowNew]=useState(false);
   const[hd,setHd]=useState({sweater_id:"",date:todayStr(),location:"",inspector:""});
   const[res,setRes]=useState({});
+  const[itemNotes,setItemNotes]=useState({});   // ملاحظات الإعفاء لكل بند
   const[photos,setPhotos]=useState({});   // {itemN:[url,...]} حسب ترتيب الزوايا
   const[uploading,setUploading]=useState("");
   const[notes,setNotes]=useState("");
@@ -49,6 +52,7 @@ export default function FieldRounds({opId}){
   })();},[period,opId]);
 
   const comp=useMemo(()=>compliance(res),[res]);
+  const cAxis=useMemo(()=>complianceByAxis(res),[res]);
   const eff=effect(comp.pct);
   const empBySid=useMemo(()=>{const m={};emps.forEach(e=>{if(e.employee_id)m[String(e.employee_id).trim()]=e;});return m;},[emps]);
 
@@ -58,11 +62,16 @@ export default function FieldRounds({opId}){
     try{
       const emp=empBySid[String(hd.sweater_id).trim()];
       const cleanPhotos={};Object.entries(photos).forEach(([k,arr])=>{const f=(arr||[]).filter(Boolean);if(f.length)cleanPhotos[k]=f;});
-      const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,location:hd.location||null,inspector:hd.inspector||null,results:res,photos:cleanPhotos,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,notes:notes||null};
+      const cleanNotes={};Object.entries(itemNotes).forEach(([k,v])=>{if(v&&String(v).trim())cleanNotes[k]=v.trim();});
+      // تاريخ جولات البايكر للتحليل
+      const{data:hist}=await supabase.from("field_rounds").select("results,compliance_pct,round_date").eq("sweater_id",hd.sweater_id).order("round_date",{ascending:false}).limit(12);
+      const roundObj={results:res,item_notes:cleanNotes,compliance_pct:comp.pct,round_date:hd.date,biker_name:emp?.full_name||"",sweater_id:hd.sweater_id,action_items:comp.actions};
+      const analysis=analyzeRound(roundObj,hist||[]);
+      const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,location:hd.location||null,inspector:hd.inspector||null,results:res,item_notes:cleanNotes,photos:cleanPhotos,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,by_axis:cAxis,ai_analysis:analysis,notes:notes||null};
       const{data,error}=await supabase.from("field_rounds").insert(row).select().single();
       if(error)throw error;
       if(row.period===period)setRounds(p=>[data,...p]);
-      setShowNew(false);setHd({sweater_id:"",date:todayStr(),location:"",inspector:""});setRes({});setPhotos({});setNotes("");
+      setShowNew(false);setHd({sweater_id:"",date:todayStr(),location:"",inspector:""});setRes({});setItemNotes({});setPhotos({});setNotes("");
       setMsg({ok:true,t:"تم حفظ الجولة"});
     }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
     setSaving(false);
@@ -126,16 +135,22 @@ export default function FieldRounds({opId}){
                     {up?<span className="fr-ph-up">…</span>:url?<img src={url} alt={lbl} onClick={e=>{e.preventDefault();setViewer(url);}}/>:<><Icon n="camera" s={15}/><span>{lbl}</span></>}
                   </label>);})}
               </div>}
+              {res[it.n]==="excused"&&<div className="fr-exnote"><Icon n="alert" s={13}/><input value={itemNotes[it.n]||""} onChange={e=>setItemNotes(p=>({...p,[it.n]:e.target.value}))} placeholder="توثيق الإعفاء: ما المادة/المعدة التي لم تُستلم من الإدارة؟"/></div>}
             </div>);})}
         </div>
       ))}
       <label className="fr-fld" style={{marginTop:4}}><span>ملاحظات / إجراءات تصحيحية</span><input value={notes} onChange={e=>setNotes(e.target.value)} placeholder="اختياري"/></label>
 
+      {/* مؤشرات المحاور */}
+      <div className="fr-axmeters">
+        {Object.entries(AXES).map(([ax,meta])=>{const a=cAxis[ax];const col=a.pct==null?"#cbd5e1":a.pct>=80?"#12b76a":a.pct>=60?"#f79009":"#f04438";return(
+          <div className="fr-axm" key={ax}><div className="fr-axm-h"><span>{meta.ar}</span><b style={{color:col}}>{a.pct!=null?a.pct+"%":"—"}</b></div><div className="fr-axm-t"><div style={{width:(a.pct==null?0:Math.max(a.pct,3))+"%",background:col}}/></div></div>);})}
+      </div>
       {/* النتيجة الحيّة */}
       <div className="fr-score" style={{borderColor:eff.bg}}>
-        <div className="fr-score-l"><div className="fr-pct" style={{color:eff.color}}>{comp.pct!=null?comp.pct+"%":"—"}</div><div className="fr-pct-s">امتثال ({comp.points}/{comp.denom} بند)</div></div>
+        <div className="fr-score-l"><div className="fr-pct" style={{color:eff.color}}>{comp.pct!=null?comp.pct+"%":"—"}</div><div className="fr-pct-s">الإجمالي ({comp.points}/{comp.denom} بند)</div></div>
         <div className="fr-eff" style={{background:eff.bg,color:eff.color}}>{eff.ar}</div>
-        {comp.actions.length>0&&<div className="fr-act"><Icon n="alert" s={12}/> {comp.actions.length} بند إدارة يحتاج معالجة</div>}
+        {comp.actions.length>0&&<div className="fr-act"><Icon n="alert" s={12}/> {comp.actions.length} بند إدارة → طلب دعم سويتر</div>}
       </div>
       <button className="fr-btn ok" style={{width:"100%",marginTop:12}} onClick={save} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":"حفظ الجولة"}</button>
     </div>}
@@ -161,7 +176,11 @@ export default function FieldRounds({opId}){
         {(r.action_items||[]).length>0&&<div className="fr-c-act"><Icon n="wrench" s={12}/> بنود إدارة معلّقة: {(r.action_items||[]).map(n=>"#"+n).join("، ")}</div>}
         {r.notes&&<div className="fr-c-notes">{r.notes}</div>}
         {(()=>{const all=Object.values(r.photos||{}).flat().filter(Boolean);return all.length>0&&<div className="fr-c-gal"><div className="fr-c-gal-h"><Icon n="camera" s={12}/> {all.length} صورة توثيق</div><div className="fr-c-thumbs">{all.slice(0,8).map((u,i)=><img key={i} src={u} onClick={()=>setViewer(u)}/>)}{all.length>8&&<span className="fr-more">+{all.length-8}</span>}</div></div>;})()}
-        <div className="fr-c-actions"><button className="fr-del" onClick={()=>del(r)}><Icon n="trash" s={13}/> حذف</button></div>
+        <div className="fr-c-actions">
+          <button className="fr-report" onClick={()=>openReport(r,r.ai_analysis,"دلو ورغوة")}><Icon n="print" s={14}/> تقرير الجولة</button>
+          <div style={{flex:1}}/>
+          <button className="fr-del" onClick={()=>del(r)}><Icon n="trash" s={13}/> حذف</button>
+        </div>
       </div>);})}
 
     {viewer&&<div className="fr-viewer" onClick={()=>setViewer(null)}><img src={viewer}/><button className="fr-v-close"><Icon n="x" s={20}/></button></div>}
@@ -220,6 +239,17 @@ const CSS=`
 .fr-o.a.on{background:#fef3e2;border-color:#fbdba7;color:#b54708}
 .fr-o.r.on{background:#feecea;border-color:#f7bfba;color:#b42318}
 .fr-o.m.on{background:#eef0f3;border-color:#d7dde5;color:#475569}
+.fr-exnote{display:flex;align-items:center;gap:7px;margin-top:8px;padding-inline-start:31px}
+.fr-exnote input{flex:1;border:1px solid #d7dde5;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;outline:none;background:#fffdf7}
+.fr-exnote input:focus{border-color:#b54708;box-shadow:0 0 0 3px rgba(181,71,8,.1)}
+.fr-exnote>svg{color:#b54708;flex:none}
+.fr-axmeters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.fr-axm{background:#fafbfc;border:1px solid #f1f3f5;border-radius:10px;padding:9px 10px}
+.fr-axm-h{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:#64748b;font-weight:700;margin-bottom:6px}
+.fr-axm-h b{font-size:12px}
+.fr-axm-t{height:6px;background:#eef0f3;border-radius:5px;overflow:hidden}.fr-axm-t div{height:100%;border-radius:5px}
+.fr-report{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;border:1px solid #ffd9bd;background:#fff7f0;color:#b54708;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+.fr-report:hover{background:#fff2e8}
 .fr-score{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding:13px;border:2px solid #eee;border-radius:13px;background:#fafbfc}
 .fr-pct{font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1}
 .fr-pct-s{font-size:10.5px;color:#94a3b8;margin-top:2px}
@@ -243,5 +273,5 @@ const CSS=`
 .fr-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:16px;padding:40px 24px;text-align:center}
 .fr-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff2e8,#ffe2cc);color:var(--b)}
 .fr-empty h3{font-size:16px;margin:0 0 8px}.fr-empty p{color:#64748b;font-size:12.5px;max-width:440px;margin:0 auto;line-height:1.7}
-@media(max-width:720px){.fr-kpis{grid-template-columns:1fr 1fr}.fr-hd{grid-template-columns:1fr}}
+@media(max-width:720px){.fr-kpis{grid-template-columns:1fr 1fr}.fr-hd{grid-template-columns:1fr}.fr-axmeters{grid-template-columns:1fr 1fr}}
 `;
