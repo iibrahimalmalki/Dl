@@ -1,6 +1,10 @@
 import{useState,useEffect}from"react";
-import{supabase}from"./supabase";
+import{supabase,SITE_URL}from"./supabase";
 import Icon from"./Icon";
+
+const waNum=raw=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
+const genPass=()=>{const a="abcdefghjkmnpqrstuvwxyz",A="ABCDEFGHJKLMNPQRSTUVWXYZ",n="23456789";const p=s=>s[Math.floor(Math.random()*s.length)];let s=p(A)+p(a)+p(a)+p(n)+p(n)+p(a)+p(n)+p(a);return s;};
+const loginURL=()=>`${SITE_URL}#admin`;
 
 // الوحدات القابلة للمنح — TMA غير مدرجة عمداً (مقصورة على المالك ولا تُمنح لأحد)
 const MODULES=[
@@ -21,11 +25,15 @@ export default function UserManagement(){
   const[sel,setSel]=useState(null);const[perms,setPerms]=useState({});
   const[loading,setLoading]=useState(true);const[saving,setSaving]=useState(false);const[msg,setMsg]=useState("");const[msgOk,setMsgOk]=useState(false);
   const note=(t,ok=false)=>{setMsg(t);setMsgOk(ok);};
-  const[showAdd,setShowAdd]=useState(false);const[add,setAdd]=useState({email:"",display_name:"",password:"",biker_employee_id:""});
+  const[showAdd,setShowAdd]=useState(false);
+  const[q,setQ]=useState({name:"",phone:"",emp:"",email:""});   // نموذج الإضافة السريع
+  const[emps,setEmps]=useState([]);
+  const[cred,setCred]=useState(null);                            // {name,email,password,phone}
   const[pwFor,setPwFor]=useState(null);const[pwVal,setPwVal]=useState("");
 
   const loadUsers=async()=>{setLoading(true);const{data}=await supabase.from("app_users").select("id,email,display_name,is_owner,active,biker_employee_id").order("created_at");setUsers(data||[]);setLoading(false);};
-  useEffect(()=>{loadUsers();supabase.auth.getUser().then(({data})=>setMyId(data.user&&data.user.id));},[]);
+  useEffect(()=>{loadUsers();supabase.auth.getUser().then(({data})=>setMyId(data.user&&data.user.id));
+    supabase.from("employees").select("id,full_name,mobile,employee_id").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
   const openUser=async(u)=>{setSel(u);note("");const{data}=await supabase.from("user_permissions").select("module,can_view,can_edit").eq("user_id",u.id);const m={};(data||[]).forEach(r=>{m[r.module]={view:r.can_view,edit:r.can_edit};});setPerms(m);};
   const setP=(mod,key,val)=>setPerms(p=>{const c={...(p[mod]||{view:false,edit:false})};c[key]=val;if(key==="edit"&&val)c.view=true;if(key==="view"&&!val)c.edit=false;return{...p,[mod]:c};});
@@ -33,12 +41,25 @@ export default function UserManagement(){
   const revokeAll=()=>setPerms({});
   const savePerms=async()=>{if(!sel)return;setSaving(true);note("");await supabase.from("user_permissions").delete().eq("user_id",sel.id);const rows=MODULES.filter(x=>perms[x.k]&&(perms[x.k].view||perms[x.k].edit)).map(x=>({user_id:sel.id,module:x.k,can_view:!!perms[x.k].view,can_edit:!!perms[x.k].edit}));if(rows.length){const{error}=await supabase.from("user_permissions").insert(rows);if(error){note("خطأ: "+error.message);setSaving(false);return;}}setSaving(false);note("تم حفظ الصلاحيات",true);};
 
-  const createUser=async()=>{
-    if(!add.email.trim()||add.password.length<6){note("أدخل بريداً وكلمة مرور 6 أحرف على الأقل");return;}
-    setSaving(true);note("");const r=await call({action:"create",...add});setSaving(false);
+  const pickEmp=id=>{const e=emps.find(x=>x.id===id);setQ(p=>({...p,emp:id,name:e?e.full_name:p.name,phone:e?(e.mobile||p.phone):p.phone}));};
+  const quickCreate=async()=>{
+    const name=q.name.trim();if(!name){note("اكتب اسم الموظف");return;}
+    const digits=waNum(q.phone);
+    const email=(q.email.trim()||(digits?digits:"dw"+Date.now().toString(36))+"@dalu.team").toLowerCase();
+    const password=genPass();
+    setSaving(true);note("");setCred(null);
+    const r=await call({action:"create",email,display_name:name,password,biker_employee_id:q.emp||""});
+    setSaving(false);
     if(r.error){note("خطأ: "+r.error);return;}
-    setShowAdd(false);setAdd({email:"",display_name:"",password:"",biker_employee_id:""});note("تم إنشاء المستخدم",true);loadUsers();
+    setCred({name,email,password,phone:q.phone});
+    setQ({name:"",phone:"",emp:"",email:""});
+    note("تم إنشاء الحساب — أرسل البيانات للموظف",true);loadUsers();
   };
+  const waSendCred=(c)=>{
+    const msg=`مرحباً ${c.name} 👋\nتم إنشاء حسابك في نظام دلو ورغوة.\n\n🔗 رابط الدخول:\n${loginURL()}\n\n👤 اسم المستخدم:\n${c.email}\n\n🔑 كلمة المرور المؤقتة:\n${c.password}\n\nيُرجى الدخول وتغيير كلمة المرور.\n\n———\nআপনার দালু ওয়ারাগওয়া অ্যাকাউন্ট তৈরি হয়েছে।\nলগইন: ${loginURL()}\nইউজারনেম: ${c.email}\nঅস্থায়ী পাসওয়ার্ড: ${c.password}`;
+    window.open(`https://wa.me/${waNum(c.phone)}?text=${encodeURIComponent(msg)}`);
+  };
+  const copyCred=async(c)=>{try{await navigator.clipboard.writeText(`${c.name}\n${loginURL()}\n${c.email}\n${c.password}`);note("تم نسخ البيانات",true);}catch{note(`${c.email} / ${c.password}`,true);}};
   const doDelete=async(u)=>{if(!confirm(`حذف ${u.display_name||u.email} نهائياً؟`))return;note("");const r=await call({action:"delete",user_id:u.id});if(r.error){note("خطأ: "+r.error);return;}if(sel&&sel.id===u.id)setSel(null);note("تم الحذف",true);loadUsers();};
   const toggleActive=async(u)=>{const r=await call({action:"update",user_id:u.id,active:!u.active});if(r.error){note("خطأ: "+r.error);return;}loadUsers();if(sel&&sel.id===u.id)setSel({...u,active:!u.active});};
   const savePw=async(u)=>{if(pwVal.length<6){note("كلمة المرور 6 أحرف على الأقل");return;}note("");const r=await call({action:"set_password",user_id:u.id,password:pwVal});if(r.error){note("خطأ: "+r.error);return;}setPwFor(null);setPwVal("");note("تم تغيير كلمة المرور",true);};
@@ -72,19 +93,37 @@ export default function UserManagement(){
       </div>
       <div className="um-note"><Icon n="lock" s={13}/> بيانات المواهب (TMA) غير مدرجة في الصلاحيات — مقصورة عليك وحدك حتى مع «منح كل شيء».</div>
     </>):(<>
-      {/* قائمة المستخدمين */}
-      {!showAdd?<button className="um-add" onClick={()=>{setShowAdd(true);note("");}}><Icon n="plus" s={17}/> إضافة مستخدم جديد</button>:
-      <div className="um-card um-form">
-        <div className="um-form-t">مستخدم جديد — دخول فقط، امنحه الصلاحيات بعد الإنشاء</div>
-        <div className="um-grid2">
-          <input className="um-in ltr" placeholder="البريد الإلكتروني" value={add.email} onChange={e=>setAdd({...add,email:e.target.value})}/>
-          <input className="um-in" placeholder="الاسم الظاهر (مثل: سلمان المالكي)" value={add.display_name} onChange={e=>setAdd({...add,display_name:e.target.value})}/>
-          <input className="um-in ltr" type="text" placeholder="كلمة مرور مؤقتة (6+ أحرف)" value={add.password} onChange={e=>setAdd({...add,password:e.target.value})}/>
-          <input className="um-in" placeholder="رقم البايكر في سويتر (اختياري)" value={add.biker_employee_id} onChange={e=>setAdd({...add,biker_employee_id:e.target.value})}/>
+      {/* بطاقة بيانات الدخول بعد الإنشاء */}
+      {cred&&<div className="um-cred">
+        <div className="um-cred-h"><Icon n="checkCircle" s={16}/> تم إنشاء حساب «{cred.name}»</div>
+        <div className="um-cred-row"><span>اسم المستخدم</span><b dir="ltr">{cred.email}</b></div>
+        <div className="um-cred-row"><span>كلمة المرور المؤقتة</span><b dir="ltr">{cred.password}</b></div>
+        <div className="um-cred-row"><span>رابط الدخول</span><b dir="ltr">{loginURL()}</b></div>
+        <div className="um-cred-act">
+          {cred.phone&&<button className="um-btn ok" onClick={()=>waSendCred(cred)}><Icon n="phone" s={14}/> إرسال واتساب</button>}
+          <button className="um-btn ghost" onClick={()=>copyCred(cred)}><Icon n="doc" s={14}/> نسخ البيانات</button>
+          <div style={{flex:1}}/>
+          <button className="um-btn" onClick={()=>setCred(null)}>تم</button>
         </div>
+        <div className="um-cred-note"><Icon n="lock" s={12}/> البيانات تظهر مرة واحدة — أرسلها الآن. الصلاحيات تُمنح لاحقاً عبر «الهيكل التنظيمي ← التعيينات».</div>
+      </div>}
+
+      {/* إضافة سريعة */}
+      {!showAdd?<button className="um-add" onClick={()=>{setShowAdd(true);note("");setCred(null);}}><Icon n="plus" s={17}/> إضافة موظف وإنشاء حساب دخول</button>:
+      <div className="um-card um-form">
+        <div className="um-form-t">إضافة موظف — أكتب اسمه ورقمه، والنظام ينشئ اسم مستخدم وكلمة مرور مؤقتة</div>
+        {emps.length>0&&<select className="um-in" style={{marginBottom:9}} value={q.emp} onChange={e=>pickEmp(e.target.value)}>
+          <option value="">— ربط بموظف مسجّل (اختياري) —</option>
+          {emps.map(e=><option key={e.id} value={e.id}>{e.full_name}{e.employee_id?` · #${e.employee_id}`:""}</option>)}
+        </select>}
+        <div className="um-grid2">
+          <input className="um-in" placeholder="اسم الموظف" value={q.name} onChange={e=>setQ({...q,name:e.target.value})}/>
+          <input className="um-in ltr" placeholder="رقم الواتساب (لإرسال البيانات)" value={q.phone} onChange={e=>setQ({...q,phone:e.target.value})}/>
+        </div>
+        <input className="um-in ltr" style={{marginTop:9}} placeholder="بريد مخصّص (اختياري — يُولّد تلقائياً)" value={q.email} onChange={e=>setQ({...q,email:e.target.value})}/>
         <div style={{display:"flex",gap:8,marginTop:10}}>
-          <button className="um-btn ok" style={{flex:2}} onClick={createUser} disabled={saving}>{saving?"…":"إنشاء الحساب"}</button>
-          <button className="um-btn ghost" style={{flex:1}} onClick={()=>setShowAdd(false)}>إلغاء</button>
+          <button className="um-btn ok" style={{flex:2}} onClick={quickCreate} disabled={saving}>{saving?"…":"إنشاء الحساب وإظهار البيانات"}</button>
+          <button className="um-btn ghost" style={{flex:1}} onClick={()=>{setShowAdd(false);setQ({name:"",phone:"",emp:"",email:""});}}>إلغاء</button>
         </div>
       </div>}
 
@@ -162,5 +201,12 @@ const CSS=`
 .um-sb.danger{border-color:#f7bfba;color:#b42318;background:#fff}
 .um-pw{display:flex;gap:8px;margin-top:10px}
 .um-pw .um-in{flex:1}
+.um-cred{background:#f6fdf9;border:1px solid #b7e4cd;border-radius:16px;padding:15px;margin-bottom:14px}
+.um-cred-h{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:#087443;margin-bottom:12px}
+.um-cred-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #d9f0e3}
+.um-cred-row span{font-size:11.5px;color:#64748b;font-weight:600;flex:none}
+.um-cred-row b{font-size:13px;font-weight:800;color:#0f172a;word-break:break-all;text-align:left}
+.um-cred-act{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.um-cred-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:#92600e;background:#fffbeb;border:1px solid #fde9c8;border-radius:9px;padding:8px 10px;margin-top:11px;line-height:1.6}
 @media(max-width:640px){.um-grid2{grid-template-columns:1fr}}
 `;
