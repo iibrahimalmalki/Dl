@@ -26,7 +26,7 @@ export default function UserManagement(){
   const[loading,setLoading]=useState(true);const[saving,setSaving]=useState(false);const[msg,setMsg]=useState("");const[msgOk,setMsgOk]=useState(false);
   const note=(t,ok=false)=>{setMsg(t);setMsgOk(ok);};
   const[showAdd,setShowAdd]=useState(false);
-  const[q,setQ]=useState({name:"",phone:"",emp:"",email:""});   // نموذج الإضافة السريع
+  const[q,setQ]=useState({name:"",phone:"",emp:"",email:"",kind:"manager"});   // نموذج الإضافة السريع
   const[emps,setEmps]=useState([]);
   const[cred,setCred]=useState(null);                            // {name,email,password,phone}
   const[credLang,setCredLang]=useState("both");                  // ar | bn | both
@@ -42,19 +42,30 @@ export default function UserManagement(){
   const revokeAll=()=>setPerms({});
   const savePerms=async()=>{if(!sel)return;setSaving(true);note("");await supabase.from("user_permissions").delete().eq("user_id",sel.id);const rows=MODULES.filter(x=>perms[x.k]&&(perms[x.k].view||perms[x.k].edit)).map(x=>({user_id:sel.id,module:x.k,can_view:!!perms[x.k].view,can_edit:!!perms[x.k].edit}));if(rows.length){const{error}=await supabase.from("user_permissions").insert(rows);if(error){note("خطأ: "+error.message);setSaving(false);return;}}setSaving(false);note("تم حفظ الصلاحيات",true);};
 
-  const pickEmp=id=>{const e=emps.find(x=>x.id===id);setQ(p=>({...p,emp:id,name:e?e.full_name:p.name,phone:e?(e.mobile||p.phone):p.phone}));};
+  const reloadEmps=()=>supabase.from("employees").select("id,full_name,mobile,employee_id").order("full_name").then(({data})=>setEmps(data||[]));
+  const pickEmp=id=>{const e=emps.find(x=>x.id===id);setQ(p=>({...p,emp:id,kind:id?"biker":p.kind,name:e?e.full_name:p.name,phone:e?(e.mobile||p.phone):p.phone}));};
   const quickCreate=async()=>{
     const name=q.name.trim();if(!name){note("اكتب اسم الموظف");return;}
     const digits=waNum(q.phone);
-    const email=(q.email.trim()||(digits?digits:"dw"+Date.now().toString(36))+"@dalu.team").toLowerCase();
+    const email=(q.email.trim()||((digits?digits:"dw"+Date.now().toString(36))+"@dalu.team")).toLowerCase();
     const password=genPass();
     setSaving(true);note("");setCred(null);
-    const r=await call({action:"create",email,display_name:name,password,biker_employee_id:q.emp||""});
+    try{
+      let bikerId="";
+      if(q.kind==="biker"){
+        if(q.emp)bikerId=q.emp;
+        else{const{data:ne,error:eErr}=await supabase.from("employees").insert({full_name:name,mobile:q.phone||null,staff_role:"biker"}).select("id").single();if(eErr)throw eErr;bikerId=ne.id;}
+      }
+      const r=await call({action:"create",email,display_name:name,password,biker_employee_id:bikerId});
+      if(r.error)throw new Error(r.error);
+      const{data:nu}=await supabase.from("app_users").select("id").eq("email",email).maybeSingle();
+      if(q.kind==="manager"){await supabase.from("employees").insert({full_name:name,mobile:q.phone||null,user_id:nu?.id||null,staff_role:"manager"});}
+      else if(nu?.id&&bikerId){await supabase.from("employees").update({user_id:nu.id}).eq("id",bikerId);}
+      setCred({name,email,password,phone:q.phone});
+      setQ({name:"",phone:"",emp:"",email:"",kind:"manager"});
+      note("تم إنشاء الحساب وإضافته لقائمة الموظفين",true);loadUsers();reloadEmps();
+    }catch(e){note("خطأ: "+(e.message||e));}
     setSaving(false);
-    if(r.error){note("خطأ: "+r.error);return;}
-    setCred({name,email,password,phone:q.phone});
-    setQ({name:"",phone:"",emp:"",email:""});
-    note("تم إنشاء الحساب — أرسل البيانات للموظف",true);loadUsers();
   };
   const credMsg=(c,lang)=>{
     const ar=`مرحباً ${c.name} 👋\nتم إنشاء حسابك في نظام دلو ورغوة.\n\n🔗 رابط الدخول:\n${loginURL()}\n\n👤 اسم المستخدم:\n${c.email}\n\n🔑 كلمة المرور المؤقتة:\n${c.password}\n\nيُرجى الدخول وتغيير كلمة المرور.`;
@@ -120,7 +131,11 @@ export default function UserManagement(){
       {!showAdd?<button className="um-add" onClick={()=>{setShowAdd(true);note("");setCred(null);}}><Icon n="plus" s={17}/> إضافة موظف وإنشاء حساب دخول</button>:
       <div className="um-card um-form">
         <div className="um-form-t">إضافة موظف — أكتب اسمه ورقمه، والنظام ينشئ اسم مستخدم وكلمة مرور مؤقتة</div>
-        {emps.length>0&&<select className="um-in" style={{marginBottom:9}} value={q.emp} onChange={e=>pickEmp(e.target.value)}>
+        <div className="um-kind">
+          <button className={q.kind!=="biker"?"on":""} onClick={()=>setQ({...q,kind:"manager",emp:""})}><Icon n="users" s={13}/> إداري — لوحة الإدارة</button>
+          <button className={q.kind==="biker"?"on":""} onClick={()=>setQ({...q,kind:"biker"})}><Icon n="bike" s={13}/> بايكر — بوابة البايكر</button>
+        </div>
+        {q.kind==="biker"&&emps.length>0&&<select className="um-in" style={{marginBottom:9}} value={q.emp} onChange={e=>pickEmp(e.target.value)}>
           <option value="">— ربط بموظف مسجّل (اختياري) —</option>
           {emps.map(e=><option key={e.id} value={e.id}>{e.full_name}{e.employee_id?` · #${e.employee_id}`:""}</option>)}
         </select>}
@@ -131,7 +146,7 @@ export default function UserManagement(){
         <input className="um-in ltr" style={{marginTop:9}} placeholder="بريد مخصّص (اختياري — يُولّد تلقائياً)" value={q.email} onChange={e=>setQ({...q,email:e.target.value})}/>
         <div style={{display:"flex",gap:8,marginTop:10}}>
           <button className="um-btn ok" style={{flex:2}} onClick={quickCreate} disabled={saving}>{saving?"…":"إنشاء الحساب وإظهار البيانات"}</button>
-          <button className="um-btn ghost" style={{flex:1}} onClick={()=>{setShowAdd(false);setQ({name:"",phone:"",emp:"",email:""});}}>إلغاء</button>
+          <button className="um-btn ghost" style={{flex:1}} onClick={()=>{setShowAdd(false);setQ({name:"",phone:"",emp:"",email:"",kind:"manager"});}}>إلغاء</button>
         </div>
       </div>}
 
@@ -189,6 +204,9 @@ const CSS=`
 .um-add:hover{background:#eefaf3}
 .um-form{padding:16px;margin-bottom:14px}
 .um-form-t{font-weight:800;font-size:13px;margin-bottom:12px;color:#0f172a}
+.um-kind{display:flex;gap:8px;margin-bottom:10px}
+.um-kind button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px;border:1.5px solid #e6e9ee;background:#fff;border-radius:10px;font-family:inherit;font-size:12px;font-weight:700;color:#64748b;cursor:pointer}
+.um-kind button.on{border-color:#E8712B;background:#fff7f0;color:#b54708}
 .um-grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .um-in{width:100%;padding:10px 12px;border:1px solid #e6e9ee;border-radius:10px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;background:#fff;color:#0f172a}
 .um-in:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(232,113,43,.1)}

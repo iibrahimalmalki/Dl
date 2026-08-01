@@ -14,6 +14,8 @@ const Interviews=lazy(()=>import("./Interviews"));
 const TMA=lazy(()=>import("./TMA"));
 const Sourcing=lazy(()=>import("./Sourcing"));
 const OrgStructure=lazy(()=>import("./OrgStructure"));
+const MyTeam=lazy(()=>import("./MyTeam"));
+const SUPERVISOR_POS=["sec_ops","ops1","field_sup"];
 
 const NAV=[
   {g:"الرئيسية"},
@@ -29,6 +31,7 @@ const NAV=[
   {k:"payroll",ar:"الرواتب",ic:"payroll"},
   {k:"complaints",ar:"الشكاوى",ic:"complaints"},
   {k:"field_rounds",ar:"الجولات الميدانية",ic:"rounds"},
+  {k:"myteam",ar:"فريقي",ic:"bike",sup:1},
   {g:"الإدارة"},
   {k:"org",ar:"الهيكل التنظيمي",ic:"building"},
   {k:"employees",ar:"الموظفون",ic:"employees"},
@@ -37,7 +40,7 @@ const NAV=[
   {k:"users",ar:"المستخدمون",ic:"users"},
   {k:"tma",ar:"المواهب TMA",ic:"tma",lock:1},
 ];
-const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"]};
+const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"]};
 
 export default function Shell({onLogout,me}){
   const[view,setView]=useState("dashboard");
@@ -48,7 +51,8 @@ export default function Shell({onLogout,me}){
   useEffect(()=>{supabase.from("operators").select("id,name,active").order("created_at").then(({data})=>setOps(data||[]));},[]);
   const nm=(me&&me.display_name)||"إبراهيم المالكي";
   const owner=!!(me&&me.is_owner);
-  const nav=NAV.filter(n=>owner||(n.k!=="users"&&n.k!=="tma"));
+  const isSup=SUPERVISOR_POS.includes(me&&me.position);
+  const nav=NAV.filter(n=>{if(n.k==="users"||n.k==="tma")return owner;if(n.k==="myteam")return isSup;return true;});
   const go=k=>{setView(k);setOpen(false);};
   const [t,sub]=TITLES[view]||[NAV.find(n=>n.k===view)?.ar||"",""];
 
@@ -95,6 +99,7 @@ export default function Shell({onLogout,me}){
         {view==="complaints"&&<Suspense fallback={<Sk/>}><Complaints opId={op}/></Suspense>}
         {view==="performance"&&<Suspense fallback={<Sk/>}><Performance opId={op}/></Suspense>}
         {view==="field_rounds"&&<Suspense fallback={<Sk/>}><FieldRounds opId={op}/></Suspense>}
+        {view==="myteam"&&<Suspense fallback={<Sk/>}><MyTeam/></Suspense>}
         {view==="onboarding"&&<Suspense fallback={<Sk/>}><Onboarding opId={op}/></Suspense>}
         {view==="interviews"&&<Suspense fallback={<Sk/>}><Interviews owner={owner} onOpenTMA={owner?(t=>{setTmaTarget(t);go("tma");}):undefined}/></Suspense>}
         {view==="sourcing"&&<Suspense fallback={<Sk/>}><Sourcing/></Suspense>}

@@ -53,7 +53,7 @@ function App(){
   // تحميل هوية المستخدم (مالك/صلاحيات) عند وجود جلسة
   useEffect(()=>{
     if(!session){setMe(null);return;}
-    supabase.from("app_users").select("is_owner,display_name,active,biker_employee_id").eq("id",session.user.id).maybeSingle()
+    supabase.from("app_users").select("is_owner,display_name,active,biker_employee_id,position").eq("id",session.user.id).maybeSingle()
       .then(({data})=>setMe(data||{is_owner:false,active:true}));
   },[session]);
   const logout=async()=>{await supabase.auth.signOut();setPage("landing");window.location.hash="";};
@@ -62,8 +62,8 @@ function App(){
     if(!authReady)return <Spin/>;
     if(!session)return <Login/>;
     if(!me)return <Spin/>;
-    // البايكر (له رقم سويتر وليس مالكاً) → بوابته الخاصة؛ غير ذلك → لوحة الإدارة
-    if(!me.is_owner&&me.biker_employee_id)return <BikerPortal me={me} onLogout={logout}/>;
+    // البايكر (مرتبط بسجل موظف وبلا منصب إداري) → بوابته الخاصة؛ الإداريون والمشرفون → لوحة الإدارة
+    if(!me.is_owner&&me.biker_employee_id&&(!me.position||me.position==="team_leader"))return <BikerPortal me={me} onLogout={logout}/>;
     return <Shell onLogout={logout} me={me}/>;
   };
 
