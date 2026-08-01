@@ -4,6 +4,7 @@ import Icon from"./Icon";
 import{AXES,ITEMS,bikerItems,mgmtItems,compliance,complianceByAxis,effect,RESP_AR}from"./fieldChecklist";
 import{analyzeRound}from"./fieldAnalysis";
 import{openReport}from"./fieldReport";
+import FieldChecklistForm,{FCF_CSS}from"./FieldChecklistForm";
 
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const periodLabel=p=>{const[y,m]=p.split("-");return`${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m} ${y}`;};
@@ -16,7 +17,7 @@ export default function FieldRounds({opId}){
   const[loading,setLoading]=useState(true);
   const[emps,setEmps]=useState([]);
   const[rounds,setRounds]=useState([]);
-  const[showNew,setShowNew]=useState(false);
+  const[showNew,setShowNew]=useState(false);const[showReq,setShowReq]=useState(false);const[reqSid,setReqSid]=useState("");
   const[hd,setHd]=useState({sweater_id:"",date:todayStr(),location:"",inspector:""});
   const[res,setRes]=useState({});
   const[itemNotes,setItemNotes]=useState({});   // ملاحظات الإعفاء لكل بند
@@ -77,6 +78,15 @@ export default function FieldRounds({opId}){
     setSaving(false);
   };
   const del=async(r)=>{if(!confirm("حذف هذه الجولة؟"))return;const{error}=await supabase.from("field_rounds").delete().eq("id",r.id);if(!error)setRounds(p=>p.filter(x=>x.id!==r.id));};
+  const requestSelf=async()=>{
+    if(!reqSid){setMsg({ok:false,t:"اختر البايكر"});return;}
+    const emp=empBySid[String(reqSid).trim()];
+    const row={operator_id:(opId&&opId!=="all")?opId:null,period,employee_id:emp?.id||null,sweater_id:reqSid,biker_name:emp?.full_name||"",round_date:todayStr(),source:"self",status:"requested",results:{},inspector:"توثيق ذاتي"};
+    const{data,error}=await supabase.from("field_rounds").insert(row).select().single();
+    if(error){setMsg({ok:false,t:"خطأ: "+error.message});return;}
+    setRounds(p=>[data,...p]);setShowReq(false);setReqSid("");setMsg({ok:true,t:"تم طلب التوثيق الذاتي — سيظهر للبايكر في بوابته"});
+  };
+  const markReviewed=async(r)=>{const{error}=await supabase.from("field_rounds").update({status:"reviewed"}).eq("id",r.id);if(!error)setRounds(p=>p.map(x=>x.id===r.id?{...x,status:"reviewed"}:x));};
 
   const kpis=useMemo(()=>{
     const done=rounds.length;const rated=rounds.filter(r=>r.compliance_pct!=null);
@@ -89,13 +99,22 @@ export default function FieldRounds({opId}){
   if(loading)return <div className="dw-skel" style={{height:280}}/>;
 
   return(<div className="fr">
-    <style>{CSS}</style>
+    <style>{CSS+FCF_CSS}</style>
     <div className="fr-bar">
       <div className="fr-month"><Icon n="calendar" s={16}/><input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/></div>
       <div style={{flex:1}}/>
+      <button className="fr-btn ghost" onClick={()=>{setShowReq(!showReq);setMsg(null);}}><Icon n="camera" s={15}/> طلب توثيق ذاتي</button>
       <button className="fr-btn" onClick={()=>{setShowNew(!showNew);setMsg(null);}}><Icon n={showNew?"x":"plus"} s={15}/> {showNew?"إغلاق":"جولة جديدة"}</button>
     </div>
     {msg&&<div className={"fr-msg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
+    {showReq&&<div className="fr-req">
+      <div className="fr-req-h"><Icon n="camera" s={15}/> طلب توثيق ذاتي من البايكر</div>
+      <div className="fr-req-b">
+        <select value={reqSid} onChange={e=>setReqSid(e.target.value)}><option value="">اختر البايكر…</option>{emps.map(e=><option key={e.id} value={e.employee_id}>{e.full_name} · #{e.employee_id}</option>)}</select>
+        <button className="fr-btn ok" onClick={requestSelf}><Icon n="check" s={15}/> إرسال الطلب</button>
+      </div>
+      <div className="fr-req-n">سيصل الطلب للبايكر في بوابته لتوثيق جولته بالصور والتقييم الذاتي، ثم تراجعها هنا وتعتمدها.</div>
+    </div>}
 
     {showNew&&<div className="fr-new">
       {/* رأس الجولة */}
@@ -109,36 +128,7 @@ export default function FieldRounds({opId}){
         <label className="fr-fld"><span>منفّذ الجولة</span><input value={hd.inspector} onChange={e=>setHd({...hd,inspector:e.target.value})} placeholder="المشرف/المالك"/></label>
       </div>
 
-      {/* مفتاح الرموز */}
-      <div className="fr-legend">
-        <span className="fr-lg"><b className="fr-o g on">✓</b> مطابق</span>
-        <span className="fr-lg"><b className="fr-o a on">≈</b> جزئي</span>
-        <span className="fr-lg"><b className="fr-o r on">✕</b> غير مطابق</span>
-        <span className="fr-lg"><b className="fr-o m on">∅</b> معفى (إمداد)</span>
-        <span className="fr-lg fr-lg-cam"><Icon n="camera" s={13}/> صورة توثيق مطلوبة</span>
-      </div>
-
-      {/* المحاور والبنود */}
-      {Object.entries(AXES).map(([ax,meta])=>(
-        <div className="fr-axis" key={ax}>
-          <div className="fr-axis-h"><Icon n={meta.ic} s={15}/> {meta.ar}</div>
-          {ITEMS.filter(i=>i.axis===ax).map(it=>{const mgmt=it.resp==="mgmt";const opts=mgmt?MRES:RES;const ph=it.photos||[];const got=(photos[it.n]||[]).filter(Boolean).length;return(
-            <div className={"fr-item"+(mgmt?" mg":"")} key={it.n}>
-              <div className="fr-i-row">
-                <div className="fr-i-txt"><span className="fr-i-n">{it.n}</span><div><div className="fr-i-ar">{it.ar}</div><div className="fr-i-resp">{RESP_AR[it.resp]}{mgmt&&" ⚠ لا تُحتسب على البايكر"}{ph.length>0&&<span className={"fr-i-cam"+(got>=ph.length?" ok":"")}> · <Icon n="camera" s={10}/> {got}/{ph.length}</span>}</div></div></div>
-                <div className="fr-i-opts">{opts.map(([v,sym,lbl,tone])=><button key={v} className={"fr-o "+tone+(res[it.n]===v?" on":"")} title={lbl} onClick={()=>setRes(p=>({...p,[it.n]:p[it.n]===v?undefined:v}))}>{sym}</button>)}</div>
-              </div>
-              {ph.length>0&&<div className="fr-photos">
-                {ph.map((lbl,idx)=>{const url=(photos[it.n]||[])[idx];const up=uploading===`${it.n}-${idx}`;return(
-                  <label className={"fr-ph"+(url?" has":"")} key={idx}>
-                    <input type="file" accept="image/*" capture="environment" hidden onChange={e=>upload(it.n,idx,e.target.files[0])}/>
-                    {up?<span className="fr-ph-up">…</span>:url?<img src={url} alt={lbl} onClick={e=>{e.preventDefault();setViewer(url);}}/>:<><Icon n="camera" s={15}/><span>{lbl}</span></>}
-                  </label>);})}
-              </div>}
-              {res[it.n]==="excused"&&<div className="fr-exnote"><Icon n="alert" s={13}/><input value={itemNotes[it.n]||""} onChange={e=>setItemNotes(p=>({...p,[it.n]:e.target.value}))} placeholder="توثيق الإعفاء: ما المادة/المعدة التي لم تُستلم من الإدارة؟"/></div>}
-            </div>);})}
-        </div>
-      ))}
+      <FieldChecklistForm items={ITEMS} res={res} onRes={(n,v)=>setRes(p=>({...p,[n]:v}))} notes={itemNotes} onNote={(n,t)=>setItemNotes(p=>({...p,[n]:t}))} photos={photos} onUpload={upload} uploading={uploading} onView={setViewer}/>
       <label className="fr-fld" style={{marginTop:4}}><span>ملاحظات / إجراءات تصحيحية</span><input value={notes} onChange={e=>setNotes(e.target.value)} placeholder="اختياري"/></label>
 
       {/* مؤشرات المحاور */}
@@ -166,18 +156,20 @@ export default function FieldRounds({opId}){
 
     {/* السجل */}
     {rounds.length===0?<div className="fr-empty"><div className="fr-empty-ic"><Icon n="rounds" s={30}/></div><h3>لا جولات في {periodLabel(period)}</h3><p>نفّذ جولة ميدانية لكل بايكر وفق لائحة الالتزام (14 بنداً) — النتيجة تغذّي درجة الأداء تلقائياً.</p></div>:
-    rounds.map(r=>{const ef=effect(r.compliance_pct);return(
+    rounds.map(r=>{const ef=effect(r.compliance_pct);const self=r.source==="self";const stMap={requested:["مطلوب — بانتظار البايكر","#b54708","#fef3e2"],submitted:["ذاتي — بانتظار المراجعة","#175cd3","#eff6ff"],reviewed:["ذاتي — تمت المراجعة","#087443","#e7f7ef"]};const stx=self?stMap[r.status]:null;return(
       <div className="fr-card" key={r.id} style={{borderInlineStartColor:ef.color}}>
         <div className="fr-c-top">
-          <div><div className="fr-c-name">{r.biker_name||"—"}<small>#{r.sweater_id}</small></div><div className="fr-c-sub">{r.round_date}{r.location?" · "+r.location:""}{r.inspector?" · "+r.inspector:""}</div></div>
+          <div><div className="fr-c-name">{r.biker_name||"—"}<small>#{r.sweater_id}</small>{self&&<span className="fr-self">توثيق ذاتي</span>}</div><div className="fr-c-sub">{r.round_date}{r.location?" · "+r.location:""}{r.inspector?" · "+r.inspector:""}</div></div>
           <div className="fr-c-pct" style={{color:ef.color}}>{r.compliance_pct!=null?r.compliance_pct+"%":"—"}</div>
         </div>
-        <div className="fr-c-eff" style={{background:ef.bg,color:ef.color}}>{ef.ar}</div>
+        {stx&&<div className="fr-c-st" style={{background:stx[2],color:stx[1]}}><span className="fr-sdot" style={{background:stx[1]}}/>{stx[0]}</div>}
+        {r.status!=="requested"&&<div className="fr-c-eff" style={{background:ef.bg,color:ef.color}}>{ef.ar}</div>}
         {(r.action_items||[]).length>0&&<div className="fr-c-act"><Icon n="wrench" s={12}/> بنود إدارة معلّقة: {(r.action_items||[]).map(n=>"#"+n).join("، ")}</div>}
         {r.notes&&<div className="fr-c-notes">{r.notes}</div>}
         {(()=>{const all=Object.values(r.photos||{}).flat().filter(Boolean);return all.length>0&&<div className="fr-c-gal"><div className="fr-c-gal-h"><Icon n="camera" s={12}/> {all.length} صورة توثيق</div><div className="fr-c-thumbs">{all.slice(0,8).map((u,i)=><img key={i} src={u} onClick={()=>setViewer(u)}/>)}{all.length>8&&<span className="fr-more">+{all.length-8}</span>}</div></div>;})()}
         <div className="fr-c-actions">
-          <button className="fr-report" onClick={()=>openReport(r,r.ai_analysis,"دلو ورغوة")}><Icon n="print" s={14}/> تقرير الجولة</button>
+          {r.status!=="requested"&&<button className="fr-report" onClick={()=>openReport(r,r.ai_analysis,"دلو ورغوة")}><Icon n="print" s={14}/> تقرير الجولة</button>}
+          {self&&r.status==="submitted"&&<button className="fr-review" onClick={()=>markReviewed(r)}><Icon n="check" s={14}/> مراجعة واعتماد</button>}
           <div style={{flex:1}}/>
           <button className="fr-del" onClick={()=>del(r)}><Icon n="trash" s={13}/> حذف</button>
         </div>
@@ -195,7 +187,17 @@ const CSS=`
 .fr-month input{border:none;outline:none;font-family:inherit;font-size:13px;font-weight:700;color:#0f172a;background:none}
 .fr-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:11px;border:none;background:#0f172a;color:#fff;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
 .fr-btn.ok{background:linear-gradient(135deg,#12b76a,#087443)}
+.fr-btn.ghost{background:#fff;border:1px solid #e6e9ee;color:#334155}
 .fr-btn:disabled{opacity:.55}
+.fr-req{background:#fff;border:1px solid #eceef1;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.fr-req-h{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;margin-bottom:10px}
+.fr-req-b{display:flex;gap:8px;flex-wrap:wrap}
+.fr-req-b select{flex:1;min-width:160px;border:1px solid #e6e9ee;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none;background:#fff}
+.fr-req-n{font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.6}
+.fr-self{display:inline-block;margin-inline-start:6px;background:#eff6ff;color:#175cd3;font-size:9.5px;font-weight:800;padding:1px 8px;border-radius:20px}
+.fr-c-st{display:inline-flex;align-items:center;gap:5px;margin-top:9px;padding:4px 11px;border-radius:20px;font-size:11px;font-weight:800}
+.fr-sdot{width:6px;height:6px;border-radius:50%}
+.fr-review{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;border:none;background:linear-gradient(135deg,#12b76a,#087443);color:#fff;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
 .fr-msg{padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:700;margin-bottom:12px}
 .fr-msg.ok{background:#e7f7ef;color:#087443}.fr-msg.err{background:#feecea;color:#b42318}
 .fr-new{background:#fff;border:1px solid #eceef1;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}

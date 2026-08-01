@@ -2,8 +2,9 @@ import{useState,useEffect}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{SEVERITY,byCode,objectionState}from"./violations";
-import{AXES,complianceByAxis,effect as frEffect}from"./fieldChecklist";
+import{AXES,bikerItems,compliance as frCompliance,complianceByAxis,effect as frEffect}from"./fieldChecklist";
 import{openReport}from"./fieldReport";
+import FieldChecklistForm,{FCF_CSS}from"./FieldChecklistForm";
 
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const periodLabel=p=>{const[y,m]=p.split("-");return`${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m} ${y}`;};
@@ -22,7 +23,8 @@ export default function BikerPortal({me,onLogout}){
   const sid=String(me?.biker_employee_id||"").trim();
   const[period,setPeriod]=useState(nowPeriod());
   const[loading,setLoading]=useState(true);
-  const[ops,setOps]=useState(null);const[line,setLine]=useState(null);const[viol,setViol]=useState([]);const[fround,setFround]=useState(null);
+  const[ops,setOps]=useState(null);const[line,setLine]=useState(null);const[viol,setViol]=useState([]);const[fround,setFround]=useState(null);const[selfR,setSelfR]=useState(null);
+  const[reload,setReload]=useState(0);
 
   useEffect(()=>{(async()=>{
     setLoading(true);
@@ -30,10 +32,40 @@ export default function BikerPortal({me,onLogout}){
       supabase.from("ops_biker_month").select("*").eq("period",period).eq("sweater_id",sid).maybeSingle(),
       supabase.from("payroll_lines").select("*").eq("period",period).eq("biker_id",sid).eq("role","biker").maybeSingle(),
       supabase.from("violations").select("*").eq("period",period).eq("sweater_id",sid).order("logged_at",{ascending:false}),
-      supabase.from("field_rounds").select("*").eq("period",period).eq("sweater_id",sid).order("round_date",{ascending:false}).limit(1),
+      supabase.from("field_rounds").select("*").eq("period",period).eq("sweater_id",sid).order("round_date",{ascending:false}),
     ]);
-    setOps(o||null);setLine(l||null);setViol(v||[]);setFround((fr&&fr[0])||null);setLoading(false);
-  })();},[period,sid]);
+    setOps(o||null);setLine(l||null);setViol(v||[]);
+    const rounds=fr||[];
+    setFround(rounds.find(x=>x.compliance_pct!=null&&x.status!=="requested")||null);
+    setSelfR(rounds.find(x=>x.source==="self"&&(x.status==="requested"||x.status==="submitted"))||null);
+    setLoading(false);
+  })();},[period,sid,reload]);
+
+  // التوثيق الذاتي
+  const[selfOpen,setSelfOpen]=useState(false);
+  const[sres,setSres]=useState({});const[sphotos,setSphotos]=useState({});const[snotes,setSnotes]=useState({});
+  const[suploading,setSuploading]=useState("");const[ssaving,setSsaving]=useState(false);const[smsg,setSmsg]=useState(null);
+  const openSelf=()=>{if(selfR){setSres(selfR.results||{});setSphotos(selfR.photos||{});setSnotes(selfR.item_notes||{});}else{setSres({});setSphotos({});setSnotes({});}setSmsg(null);setSelfOpen(true);};
+  const supload=async(n,idx,file)=>{if(!file)return;const key=`${n}-${idx}`;setSuploading(key);
+    try{const ext=(String(file.name).split(".").pop()||"jpg").toLowerCase();const rand=Math.floor(Math.random()*1e9);
+      const path=`self/${period}/${sid}/${n}-${idx}-${Date.now()}-${rand}.${ext}`;
+      const{error}=await supabase.storage.from("field-evidence").upload(path,file,{contentType:file.type||"image/jpeg",upsert:true});if(error)throw error;
+      const{data}=supabase.storage.from("field-evidence").getPublicUrl(path);
+      setSphotos(p=>{const a=[...(p[n]||[])];a[idx]=data.publicUrl;return{...p,[n]:a};});
+    }catch(e){setSmsg({ok:false,t:"تعذّر رفع الصورة"});}
+    setSuploading("");};
+  const scomp=useMemo(()=>frCompliance(sres),[sres]);
+  const submitSelf=async()=>{setSsaving(true);setSmsg(null);
+    try{
+      const ax=complianceByAxis(sres);const ef=frEffect(scomp.pct);
+      const cleanPhotos={};Object.entries(sphotos).forEach(([k,arr])=>{const f=(arr||[]).filter(Boolean);if(f.length)cleanPhotos[k]=f;});
+      const cleanNotes={};Object.entries(snotes).forEach(([k,vv])=>{if(vv&&String(vv).trim())cleanNotes[k]=vv.trim();});
+      const payload={results:sres,photos:cleanPhotos,item_notes:cleanNotes,compliance_pct:scomp.pct,effect:ef.key,by_axis:ax,action_items:scomp.actions,status:"submitted",submitted_at:new Date().toISOString()};
+      if(selfR){const{error}=await supabase.from("field_rounds").update(payload).eq("id",selfR.id);if(error)throw error;}
+      else{const{error}=await supabase.from("field_rounds").insert({period,sweater_id:sid,biker_name:name,round_date:new Date().toISOString().slice(0,10),source:"self",inspector:"توثيق ذاتي",...payload});if(error)throw error;}
+      setSelfOpen(false);setReload(x=>x+1);
+    }catch(e){setSmsg({ok:false,t:"خطأ: "+(e.message||e)});}
+    setSsaving(false);};
 
   const rating=ops?.rating!=null?Number(ops.rating):null;
   const washes=ops?.net_washes||0;const cpct=Number(ops?.complaint_pct||0);
@@ -44,7 +76,7 @@ export default function BikerPortal({me,onLogout}){
   const name=me?.display_name||"البايكر";
 
   return(<div className="bp">
-    <style>{CSS}</style>
+    <style>{CSS+FCF_CSS}</style>
     <header className="bp-top">
       <div className="bp-brand"><div className="bp-logo"><Icon n="bucket" s={20}/></div><div><b>دلو ورغوة</b><span>বায়কার পোর্টাল · بوابة البايكر</span></div></div>
       <button className="bp-out" onClick={onLogout}><Icon n="logout" s={18}/></button>
@@ -68,6 +100,21 @@ export default function BikerPortal({me,onLogout}){
           <div className="bp-track"><div style={{width:pct+"%",background:pct>=100?"#12b76a":pct>=75?"#E8712B":"#f79009"}}/></div>
           <div className="bp-track-l">{washes} من {TARGET} غسلة · {pct}% · {washes} ওয়াশ</div>
         </div>
+
+        {/* التوثيق الذاتي */}
+        {selfR?.status==="requested"?<div className="bp-self req">
+          <div className="bp-self-ic"><Icon n="camera" s={22}/></div>
+          <div style={{flex:1,minWidth:0}}><b>مطلوب منك توثيق ذاتي</b><span>স্ব-ডকুমেন্টেশন প্রয়োজন · وثّق جولتك بالصور والتقييم</span></div>
+          <button className="bp-self-btn" onClick={openSelf}>ابدأ التوثيق</button>
+        </div>:selfR?.status==="submitted"?<div className="bp-self ok">
+          <div className="bp-self-ic ok"><Icon n="check" s={22}/></div>
+          <div style={{flex:1,minWidth:0}}><b>تم إرسال توثيقك</b><span>بانتظار مراجعة المشرف · সুপারভাইজারের পর্যালোচনার অপেক্ষায়</span></div>
+          <button className="bp-self-btn ghost" onClick={openSelf}>تعديل</button>
+        </div>:<div className="bp-self">
+          <div className="bp-self-ic"><Icon n="rounds" s={20}/></div>
+          <div style={{flex:1,minWidth:0}}><b>توثيق ذاتي</b><span>وثّق التزامك بنفسك · স্ব-ডকুমেন্টেশন</span></div>
+          <button className="bp-self-btn ghost" onClick={openSelf}>ابدأ</button>
+        </div>}
 
         {/* المكافأة */}
         <div className="bp-card">
@@ -131,6 +178,16 @@ export default function BikerPortal({me,onLogout}){
       </>}
       <div className="bp-foot">دلو ورغوة × سويتر · تحديث تلقائي من تقارير الشهر</div>
     </div>
+
+    {selfOpen&&<div className="bp-sf">
+      <header className="bp-sf-top"><b>التوثيق الذاتي · {periodLabel(period)}</b><button onClick={()=>setSelfOpen(false)}><Icon n="x" s={20}/></button></header>
+      <div className="bp-sf-body">
+        <div className="bp-sf-hint"><Icon n="alert" s={13}/> صوّر كل بند من الزوايا المطلوبة وقيّم نفسك بصدق · সৎভাবে মূল্যায়ন করুন। سيراجع المشرف توثيقك.</div>
+        {smsg&&<div className={"bp-sf-msg "+(smsg.ok?"ok":"err")}>{smsg.t}</div>}
+        <FieldChecklistForm items={bikerItems} res={sres} onRes={(n,v)=>setSres(p=>({...p,[n]:v}))} notes={snotes} onNote={(n,t)=>setSnotes(p=>({...p,[n]:t}))} photos={sphotos} onUpload={supload} uploading={suploading} onView={u=>window.open(u,"_blank")}/>
+      </div>
+      <div className="bp-sf-bar"><div className="bp-sf-pct">الالتزام · <b style={{color:frEffect(scomp.pct).color}}>{scomp.pct!=null?scomp.pct+"%":"—"}</b></div><button className="bp-sf-submit" onClick={submitSelf} disabled={ssaving}><Icon n="check" s={15}/> {ssaving?"جارٍ الإرسال…":"إرسال للمراجعة"}</button></div>
+    </div>}
   </div>);
 }
 function B({t,v,good,bad}){return(<div className="bp-b"><span>{t}</span><b style={{color:bad?"#b42318":good?"#087443":"#0f172a"}}>{v<0?"−":""}{AR(Math.abs(v))}</b></div>);}
@@ -194,5 +251,26 @@ const CSS=`
 .bp-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:18px;padding:40px 24px;text-align:center}
 .bp-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#175cd3}
 .bp-empty h3{font-size:16px;margin:0 0 8px}.bp-empty p{color:#64748b;font-size:12.5px;line-height:1.7;margin:0}
+.bp-self{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #eceef1;border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.bp-self.req{border-color:#fbdba7;background:linear-gradient(180deg,#fffdf7,#fff)}
+.bp-self.ok{border-color:#b7e4cd;background:linear-gradient(180deg,#f6fdf9,#fff)}
+.bp-self-ic{width:44px;height:44px;border-radius:13px;background:#fff2e8;color:#E8712B;display:flex;align-items:center;justify-content:center;flex:none}
+.bp-self.req .bp-self-ic{background:#fef3e2;color:#b54708}
+.bp-self-ic.ok{background:#e7f7ef;color:#087443}
+.bp-self b{font-size:14px;font-weight:800;display:block;color:#0f172a}.bp-self span{font-size:11px;color:#94a3b8}
+.bp-self-btn{padding:9px 16px;border:none;border-radius:11px;background:linear-gradient(135deg,#E8712B,#CC5200);color:#fff;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;flex:none}
+.bp-self-btn.ghost{background:#fff;border:1px solid #e6e9ee;color:#334155}
+.bp-sf{position:fixed;inset:0;background:#f4f5f7;z-index:1500;display:flex;flex-direction:column}
+.bp-sf-top{background:#0e1622;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.bp-sf-top b{font-size:14.5px}
+.bp-sf-top button{width:38px;height:38px;border-radius:11px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.bp-sf-body{flex:1;overflow:auto;padding:14px;max-width:560px;margin:0 auto;width:100%;box-sizing:border-box}
+.bp-sf-hint{display:flex;align-items:flex-start;gap:7px;background:#fffbeb;border:1px solid #fde9c8;color:#92600e;font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-bottom:10px;line-height:1.6}
+.bp-sf-msg{padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:700;margin-bottom:10px}
+.bp-sf-msg.ok{background:#e7f7ef;color:#087443}.bp-sf-msg.err{background:#feecea;color:#b42318}
+.bp-sf-bar{background:#fff;border-top:1px solid #eceef1;padding:12px 16px;display:flex;align-items:center;gap:12px;max-width:560px;margin:0 auto;width:100%;box-sizing:border-box}
+.bp-sf-pct{font-size:13px;color:#64748b;font-weight:700}.bp-sf-pct b{font-size:17px}
+.bp-sf-submit{margin-inline-start:auto;display:inline-flex;align-items:center;gap:6px;padding:11px 20px;border:none;border-radius:12px;background:linear-gradient(135deg,#12b76a,#087443);color:#fff;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.bp-sf-submit:disabled{opacity:.6}
 .bp-foot{text-align:center;color:#b6bfcc;font-size:10.5px;padding:18px 0 8px}
 `;
