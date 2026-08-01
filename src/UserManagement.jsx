@@ -16,7 +16,7 @@ const call=async(payload)=>{
   return{ok:true,data};
 };
 
-export default function UserManagement({onClose}){
+export default function UserManagement(){
   const[users,setUsers]=useState([]);const[myId,setMyId]=useState(null);
   const[sel,setSel]=useState(null);const[perms,setPerms]=useState({});
   const[loading,setLoading]=useState(true);const[saving,setSaving]=useState(false);const[msg,setMsg]=useState("");const[msgOk,setMsgOk]=useState(false);
@@ -43,59 +43,124 @@ export default function UserManagement({onClose}){
   const toggleActive=async(u)=>{const r=await call({action:"update",user_id:u.id,active:!u.active});if(r.error){note("خطأ: "+r.error);return;}loadUsers();if(sel&&sel.id===u.id)setSel({...u,active:!u.active});};
   const savePw=async(u)=>{if(pwVal.length<6){note("كلمة المرور 6 أحرف على الأقل");return;}note("");const r=await call({action:"set_password",user_id:u.id,password:pwVal});if(r.error){note("خطأ: "+r.error);return;}setPwFor(null);setPwVal("");note("تم تغيير كلمة المرور",true);};
 
-  const ov={position:"fixed",inset:0,background:"rgba(2,6,12,.75)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:14,fontFamily:"'Segoe UI',Tahoma,sans-serif"};
-  const card={background:"#0f151c",border:"1px solid #232d39",borderRadius:18,width:"100%",maxWidth:780,maxHeight:"92vh",overflow:"auto",color:"#e8eef5"};
-  const hd={display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",borderBottom:"1px solid #232d39",position:"sticky",top:0,background:"#0f151c",zIndex:2};
-  const inp={width:"100%",padding:"10px 12px",border:"1px solid #232d39",borderRadius:10,fontSize:13,background:"#141a22",color:"#e8eef5",boxSizing:"border-box",marginBottom:8};
-  const btn=(bg,c)=>({border:"none",borderRadius:8,padding:"6px 11px",cursor:"pointer",fontWeight:700,fontSize:11.5,background:bg,color:c});
+  return(<div className="um">
+    <style>{CSS}</style>
+    {msg&&<div className={"um-msg "+(msgOk?"ok":"err")}>{msg}</div>}
 
-  return(<div style={ov} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-    <div style={card}>
-      <div style={hd}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,#E8712B,#f5a35f)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",flex:"none"}}><Icon n="users" s={18}/></span><div><div style={{fontSize:16,fontWeight:800}}>المستخدمون والصلاحيات</div><div style={{fontSize:11,color:"#8a97a6"}}>المالك يضيف/يحذف/يمنح ويغيّر كلمات المرور</div></div></div>
-        <button onClick={onClose} style={{background:"#1c2530",border:"none",color:"#e8eef5",borderRadius:10,padding:"8px 10px",cursor:"pointer",fontWeight:700,display:"inline-flex",alignItems:"center"}}><Icon n="x" s={16}/></button>
+    {loading?<div className="dw-skel" style={{height:200}}/>:
+    sel?(<>
+      {/* رأس صفحة الصلاحيات */}
+      <div className="um-head">
+        <button className="um-back" onClick={()=>{setSel(null);note("");}}><Icon n="back" s={15}/> رجوع</button>
+        <div style={{flex:1,minWidth:0}}><div className="um-h-t">{sel.display_name||sel.email}</div><div className="um-h-s" dir="ltr">{sel.email}</div></div>
       </div>
-      <div style={{padding:16}}>
-        {msg&&<div style={{fontSize:12,marginBottom:10,color:msgOk?"#3fb950":"#f85149"}}>{msg}</div>}
-        {loading?<div style={{color:"#8a97a6"}}>جاري التحميل…</div>:
-        sel?(<>
-          <button onClick={()=>{setSel(null);note("");}} style={{background:"none",border:"none",color:"#58a6ff",cursor:"pointer",fontSize:12,marginBottom:8,display:"inline-flex",alignItems:"center",gap:5}}><Icon n="back" s={14}/> رجوع للقائمة</button>
-          <div style={{fontWeight:800}}>{sel.display_name||sel.email}</div>
-          <div style={{fontSize:11,color:"#8a97a6",direction:"ltr",textAlign:"right",marginBottom:12}}>{sel.email}</div>
-          <div style={{display:"flex",gap:8,marginBottom:12}}>
-            <button onClick={grantAll} style={{flex:1,padding:"9px",border:"none",borderRadius:10,fontWeight:800,fontSize:12,cursor:"pointer",background:"rgba(63,185,80,.16)",color:"#3fb950",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon n="check" s={15}/> منح كل شيء</button>
-            <button onClick={revokeAll} style={{flex:1,padding:"9px",border:"none",borderRadius:10,fontWeight:800,fontSize:12,cursor:"pointer",background:"rgba(248,81,73,.16)",color:"#f85149"}}>سحب الكل</button>
-          </div>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{color:"#8a97a6",fontSize:11}}><th style={{textAlign:"right",padding:"6px 4px"}}>الوحدة</th><th style={{width:70}}>عرض</th><th style={{width:70}}>تعديل</th></tr></thead>
-            <tbody>{MODULES.map(m=>{const p=perms[m.k]||{view:false,edit:false};return(<tr key={m.k} style={{borderTop:"1px solid #232d39"}}><td style={{padding:"9px 4px",fontWeight:600}}>{m.ar}</td><td style={{textAlign:"center"}}><input type="checkbox" checked={!!p.view} onChange={e=>setP(m.k,"view",e.target.checked)} style={{width:18,height:18,accentColor:"#58a6ff"}}/></td><td style={{textAlign:"center"}}><input type="checkbox" checked={!!p.edit} onChange={e=>setP(m.k,"edit",e.target.checked)} style={{width:18,height:18,accentColor:"#3fb950"}}/></td></tr>);})}</tbody>
-          </table>
-          <button onClick={savePerms} disabled={saving} style={{marginTop:14,width:"100%",padding:12,border:"none",borderRadius:12,fontWeight:800,fontSize:13,cursor:"pointer",background:"linear-gradient(135deg,#E8712B,#d4631f)",color:"#fff",opacity:saving?.6:1}}>{saving?"جاري الحفظ…":"حفظ الصلاحيات"}</button>
-        </>):(<>
-          {!showAdd?<button onClick={()=>{setShowAdd(true);note("");}} style={{width:"100%",padding:"11px",border:"1px dashed #3fb950",background:"rgba(63,185,80,.08)",color:"#3fb950",borderRadius:12,fontWeight:800,fontSize:13,cursor:"pointer",marginBottom:12,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon n="plus" s={16}/> إضافة مستخدم جديد</button>:
-          <div style={{background:"#141a22",border:"1px solid #232d39",borderRadius:12,padding:14,marginBottom:12}}>
-            <div style={{fontWeight:800,marginBottom:10}}>مستخدم جديد (دخول فقط — امنحه الصلاحيات بعد الإنشاء)</div>
-            <input style={{...inp,direction:"ltr",textAlign:"left"}} placeholder="البريد الإلكتروني" value={add.email} onChange={e=>setAdd({...add,email:e.target.value})}/>
-            <input style={inp} placeholder="الاسم الظاهر (مثل: سلمان المالكي)" value={add.display_name} onChange={e=>setAdd({...add,display_name:e.target.value})}/>
-            <input style={{...inp,direction:"ltr",textAlign:"left"}} type="text" placeholder="كلمة مرور مؤقتة (6+ أحرف)" value={add.password} onChange={e=>setAdd({...add,password:e.target.value})}/>
-            <input style={inp} placeholder="رقم البايكر في سويتر (اختياري — للبايكرز)" value={add.biker_employee_id} onChange={e=>setAdd({...add,biker_employee_id:e.target.value})}/>
-            <div style={{display:"flex",gap:8}}><button onClick={createUser} disabled={saving} style={{flex:2,padding:10,border:"none",borderRadius:10,fontWeight:800,background:"linear-gradient(135deg,#3fb950,#238636)",color:"#fff",cursor:"pointer"}}>{saving?"...":"إنشاء الحساب"}</button><button onClick={()=>setShowAdd(false)} style={{flex:1,padding:10,border:"none",borderRadius:10,fontWeight:700,background:"#1c2530",color:"#e8eef5",cursor:"pointer"}}>إلغاء</button></div>
-          </div>}
-          {users.map(u=>(<div key={u.id} style={{background:"#141a22",border:"1px solid #232d39",borderRadius:12,padding:"10px 14px",marginBottom:8}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-              <div><div style={{fontWeight:700}}>{u.display_name||u.email} {u.is_owner&&<span style={{fontSize:10,background:"#3fb950",color:"#03130a",padding:"1px 7px",borderRadius:6,fontWeight:800}}>مالك</span>}{u.biker_employee_id&&<span style={{fontSize:10,background:"#1c2530",color:"#8a97a6",padding:"1px 7px",borderRadius:6,marginInlineStart:4}}>بايكر {u.biker_employee_id}</span>}</div><div style={{fontSize:11,color:"#8a97a6",direction:"ltr",textAlign:"right"}}>{u.email}</div></div>
-              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                <button onClick={()=>{setPwFor(pwFor===u.id?null:u.id);setPwVal("");}} style={{...btn("#1c2530","#e8eef5"),display:"inline-flex",alignItems:"center",gap:5}}><Icon n="key" s={13}/> كلمة المرور</button>
-                {!u.is_owner&&<button onClick={()=>toggleActive(u)} style={btn(u.active?"rgba(63,185,80,.16)":"rgba(248,81,73,.16)",u.active?"#3fb950":"#f85149")}>{u.active?"مُفعّل":"موقوف"}</button>}
-                {!u.is_owner&&<button onClick={()=>openUser(u)} style={{...btn("linear-gradient(135deg,#E8712B,#d4631f)","#fff"),display:"inline-flex",alignItems:"center",gap:5}}>الصلاحيات <Icon n="back" s={13}/></button>}
-                {!u.is_owner&&<button onClick={()=>doDelete(u)} style={btn("rgba(248,81,73,.16)","#f85149")}>حذف</button>}
-              </div>
+      <div className="um-perm-bar">
+        <button className="um-btn ok" onClick={grantAll}><Icon n="check" s={15}/> منح كل شيء</button>
+        <button className="um-btn danger" onClick={revokeAll}><Icon n="x" s={15}/> سحب الكل</button>
+        <div style={{flex:1}}/>
+        <button className="um-btn" onClick={savePerms} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":"حفظ الصلاحيات"}</button>
+      </div>
+      <div className="um-card">
+        <table className="um-tbl">
+          <thead><tr><th>الوحدة</th><th>عرض</th><th>تعديل</th></tr></thead>
+          <tbody>{MODULES.map(m=>{const p=perms[m.k]||{view:false,edit:false};return(<tr key={m.k}>
+            <td className="um-mod">{m.ar}</td>
+            <td><input type="checkbox" className="um-ck v" checked={!!p.view} onChange={e=>setP(m.k,"view",e.target.checked)}/></td>
+            <td><input type="checkbox" className="um-ck e" checked={!!p.edit} onChange={e=>setP(m.k,"edit",e.target.checked)}/></td>
+          </tr>);})}</tbody>
+        </table>
+      </div>
+      <div className="um-note"><Icon n="lock" s={13}/> بيانات المواهب (TMA) غير مدرجة في الصلاحيات — مقصورة عليك وحدك حتى مع «منح كل شيء».</div>
+    </>):(<>
+      {/* قائمة المستخدمين */}
+      {!showAdd?<button className="um-add" onClick={()=>{setShowAdd(true);note("");}}><Icon n="plus" s={17}/> إضافة مستخدم جديد</button>:
+      <div className="um-card um-form">
+        <div className="um-form-t">مستخدم جديد — دخول فقط، امنحه الصلاحيات بعد الإنشاء</div>
+        <div className="um-grid2">
+          <input className="um-in ltr" placeholder="البريد الإلكتروني" value={add.email} onChange={e=>setAdd({...add,email:e.target.value})}/>
+          <input className="um-in" placeholder="الاسم الظاهر (مثل: سلمان المالكي)" value={add.display_name} onChange={e=>setAdd({...add,display_name:e.target.value})}/>
+          <input className="um-in ltr" type="text" placeholder="كلمة مرور مؤقتة (6+ أحرف)" value={add.password} onChange={e=>setAdd({...add,password:e.target.value})}/>
+          <input className="um-in" placeholder="رقم البايكر في سويتر (اختياري)" value={add.biker_employee_id} onChange={e=>setAdd({...add,biker_employee_id:e.target.value})}/>
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <button className="um-btn ok" style={{flex:2}} onClick={createUser} disabled={saving}>{saving?"…":"إنشاء الحساب"}</button>
+          <button className="um-btn ghost" style={{flex:1}} onClick={()=>setShowAdd(false)}>إلغاء</button>
+        </div>
+      </div>}
+
+      <div className="um-list">{users.map(u=>(<div className="um-u" key={u.id}>
+        <div className="um-u-top">
+          <div className="um-av">{(u.display_name||u.email||"?").trim().charAt(0).toUpperCase()}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="um-u-name">{u.display_name||u.email}
+              {u.is_owner&&<span className="um-tag owner">مالك</span>}
+              {u.biker_employee_id&&<span className="um-tag">بايكر {u.biker_employee_id}</span>}
+              {!u.is_owner&&<span className={"um-tag "+(u.active?"on":"off")}>{u.active?"مُفعّل":"موقوف"}</span>}
             </div>
-            {pwFor===u.id&&<div style={{display:"flex",gap:8,marginTop:10}}><input style={{...inp,marginBottom:0,direction:"ltr",textAlign:"left"}} type="text" placeholder="كلمة مرور جديدة (6+)" value={pwVal} onChange={e=>setPwVal(e.target.value)}/><button onClick={()=>savePw(u)} style={{...btn("linear-gradient(135deg,#3fb950,#238636)","#fff"),padding:"8px 14px"}}>حفظ</button></div>}
-          </div>))}
-          <div style={{marginTop:8,background:"#141a22",border:"1px dashed #232d39",borderRadius:12,padding:"10px 14px",fontSize:11.5,color:"#8a97a6"}}><b style={{color:"#e3b341",display:"inline-flex",alignItems:"center",gap:6}}><Icon n="lock" s={13}/> بيانات TMA غير مدرجة في الصلاحيات — مقصورة عليك وحدك حتى مع «كل شيء».</b></div>
-        </>)}
-      </div>
-    </div>
+            <div className="um-u-mail" dir="ltr">{u.email}</div>
+          </div>
+        </div>
+        <div className="um-u-actions">
+          <button className="um-sb" onClick={()=>{setPwFor(pwFor===u.id?null:u.id);setPwVal("");}}><Icon n="key" s={13}/> كلمة المرور</button>
+          {!u.is_owner&&<button className="um-sb" onClick={()=>toggleActive(u)}><Icon n={u.active?"x":"check"} s={13}/> {u.active?"إيقاف":"تفعيل"}</button>}
+          {!u.is_owner&&<button className="um-sb brand" onClick={()=>openUser(u)}><Icon n="users" s={13}/> الصلاحيات</button>}
+          {!u.is_owner&&<button className="um-sb danger" onClick={()=>doDelete(u)}><Icon n="trash" s={13}/> حذف</button>}
+        </div>
+        {pwFor===u.id&&<div className="um-pw">
+          <input className="um-in ltr" type="text" placeholder="كلمة مرور جديدة (6+)" value={pwVal} onChange={e=>setPwVal(e.target.value)}/>
+          <button className="um-btn ok" onClick={()=>savePw(u)}><Icon n="save" s={14}/> حفظ</button>
+        </div>}
+      </div>))}</div>
+    </>)}
   </div>);
 }
+
+const CSS=`
+.um{--b:#E8712B}
+.um-msg{padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:700;margin-bottom:12px}
+.um-msg.ok{background:#e7f7ef;color:#087443}.um-msg.err{background:#feecea;color:#b42318}
+.um-head{display:flex;align-items:center;gap:12px;padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid #eceef1}
+.um-back{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid #e6e9ee;border-radius:10px;padding:7px 12px;font-family:inherit;font-size:12.5px;font-weight:700;color:#334155;cursor:pointer;flex:none}
+.um-h-t{font-size:16px;font-weight:800;color:#0f172a}.um-h-s{font-size:12px;color:#64748b}
+.um-perm-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.um-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;border-radius:11px;border:none;background:#0f172a;color:#fff;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.um-btn.ok{background:linear-gradient(135deg,#12b76a,#087443)}
+.um-btn.danger{background:#fff;border:1px solid #f7bfba;color:#b42318}
+.um-btn.ghost{background:#fff;border:1px solid #e6e9ee;color:#334155}
+.um-btn:disabled{opacity:.55}
+.um-card{background:#fff;border:1px solid #eceef1;border-radius:16px;box-shadow:0 1px 2px rgba(16,24,40,.05);overflow:hidden}
+.um-tbl{width:100%;border-collapse:collapse}
+.um-tbl th{font-size:11px;color:#94a3b8;font-weight:700;padding:11px 14px;background:#fafbfc;border-bottom:1px solid #eceef1;text-align:center}
+.um-tbl th:first-child{text-align:right}
+.um-tbl td{padding:11px 14px;border-bottom:1px solid #f1f3f5;text-align:center}
+.um-tbl tr:last-child td{border-bottom:none}
+.um-mod{text-align:right!important;font-weight:700;font-size:13px;color:#0f172a}
+.um-ck{width:19px;height:19px;cursor:pointer}
+.um-ck.v{accent-color:#175cd3}.um-ck.e{accent-color:#087443}
+.um-note{display:flex;align-items:center;gap:7px;background:#fffbeb;border:1px solid #fde9c8;color:#92600e;font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-top:12px}
+.um-add{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:13px;border:1.5px dashed #b7e4cd;background:#f6fdf9;color:#087443;border-radius:14px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:14px}
+.um-add:hover{background:#eefaf3}
+.um-form{padding:16px;margin-bottom:14px}
+.um-form-t{font-weight:800;font-size:13px;margin-bottom:12px;color:#0f172a}
+.um-grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.um-in{width:100%;padding:10px 12px;border:1px solid #e6e9ee;border-radius:10px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;background:#fff;color:#0f172a}
+.um-in:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(232,113,43,.1)}
+.um-in.ltr{direction:ltr;text-align:left}
+.um-list{display:flex;flex-direction:column;gap:10px}
+.um-u{background:#fff;border:1px solid #eceef1;border-radius:16px;padding:13px 15px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.um-u-top{display:flex;align-items:center;gap:11px}
+.um-av{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#E8712B,#f5a35f);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex:none}
+.um-u-name{font-size:14px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.um-u-mail{font-size:11.5px;color:#94a3b8;margin-top:1px}
+.um-tag{font-size:10px;font-weight:800;padding:1px 8px;border-radius:20px;background:#f1f5f9;color:#64748b}
+.um-tag.owner{background:#e7f7ef;color:#087443}
+.um-tag.on{background:#e7f7ef;color:#087443}.um-tag.off{background:#feecea;color:#b42318}
+.um-u-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px;padding-top:11px;border-top:1px solid #f1f3f5}
+.um-sb{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:9px;border:1px solid #e6e9ee;background:#fff;font-family:inherit;font-size:11.5px;font-weight:700;color:#475569;cursor:pointer}
+.um-sb:hover{background:#f8fafc}
+.um-sb.brand{border-color:#ffd9bd;color:#b54708;background:#fff7f0}
+.um-sb.danger{border-color:#f7bfba;color:#b42318;background:#fff}
+.um-pw{display:flex;gap:8px;margin-top:10px}
+.um-pw .um-in{flex:1}
+@media(max-width:640px){.um-grid2{grid-template-columns:1fr}}
+`;

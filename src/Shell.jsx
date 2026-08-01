@@ -21,13 +21,13 @@ const NAV=[
   {k:"complaints",ar:"الشكاوى",ic:"complaints",soon:1},
   {k:"field_rounds",ar:"الجولات الميدانية",ic:"rounds",soon:1},
   {g:"الإدارة"},
-  {k:"employees",ar:"الموظفون",ic:"employees",soon:1},
+  {k:"employees",ar:"الموظفون",ic:"employees"},
   {k:"vendors",ar:"الموردون",ic:"vendors",soon:1},
-  {k:"reports",ar:"التقارير",ic:"reports",soon:1},
+  {k:"reports",ar:"التقارير",ic:"reports"},
   {k:"users",ar:"المستخدمون",ic:"users"},
   {k:"tma",ar:"المواهب TMA",ic:"tma",lock:1},
 ];
-const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["التوظيف","إدارة المتقدّمين والقبول"],users:["المستخدمون","الحسابات والصلاحيات"]};
+const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],payroll:["الرواتب","كشوف ومكافآت الفريق"],users:["المستخدمون","الحسابات والصلاحيات"]};
 
 export default function Shell({onLogout,me}){
   const[view,setView]=useState("dashboard");
@@ -75,11 +75,13 @@ export default function Shell({onLogout,me}){
       </header>
       <div className="sh-content">
         {view==="dashboard"&&<DashboardHome onNav={go}/>}
-        {view==="recruitment"&&<Suspense fallback={<Sk/>}><div className="sh-embed"><AdminDashboard embedded onLogout={onLogout}/></div></Suspense>}
-        {view==="users"&&owner&&<Suspense fallback={<Sk/>}><UserManagement onClose={()=>go("dashboard")}/></Suspense>}
+        {view==="recruitment"&&<Suspense fallback={<Sk/>}><AdminDashboard embedded section="applicants" onLogout={onLogout}/></Suspense>}
+        {view==="employees"&&<Suspense fallback={<Sk/>}><AdminDashboard embedded section="employees" onLogout={onLogout}/></Suspense>}
+        {view==="reports"&&<Suspense fallback={<Sk/>}><AdminDashboard embedded section="visits" onLogout={onLogout}/></Suspense>}
+        {view==="users"&&owner&&<Suspense fallback={<Sk/>}><UserManagement/></Suspense>}
         {view==="payroll"&&<Suspense fallback={<Sk/>}><Payroll opId={op}/></Suspense>}
         {view==="operations"&&<Suspense fallback={<Sk/>}><Operations opId={op}/></Suspense>}
-        {["interviews","onboarding","performance","complaints","field_rounds","employees","vendors","reports"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
+        {["interviews","onboarding","performance","complaints","field_rounds","vendors"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
       </div>
     </div>
   </div>);

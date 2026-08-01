@@ -8,11 +8,12 @@ const CL={strong:{ar:"مرشح قوي",ic:"star",color:"#087443"},accepted:{ar:"
 // تحويل رقم الجوال إلى الصيغة الدولية التي يقبلها wa.me (بدون + أو صفر بادئ)
 const waNum=(raw)=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
 const waLink=(raw,text)=>`https://wa.me/${waNum(raw)}?text=${encodeURIComponent(text)}`;
-export default function AdminDashboard({onLogout,embedded}){
-  const[list,setList]=useState([]);const[loading,setLoading]=useState(true);const[sel,setSel]=useState(null);const[filter,setFilter]=useState("all");const[geoFilter,setGeoFilter]=useState("all");const[sortBy,setSortBy]=useState("number");const[search,setSearch]=useState("");const[analyzing,setAnalyzing]=useState(null);const[tab,setTab]=useState("applicants");
+export default function AdminDashboard({onLogout,embedded,section}){
+  const[list,setList]=useState([]);const[loading,setLoading]=useState(true);const[sel,setSel]=useState(null);const[filter,setFilter]=useState("all");const[geoFilter,setGeoFilter]=useState("all");const[sortBy,setSortBy]=useState("number");const[search,setSearch]=useState("");const[analyzing,setAnalyzing]=useState(null);const[tab,setTab]=useState(section||"applicants");
   const[empList,setEmpList]=useState([]);const[empLoading,setEmpLoading]=useState(false);const[selEmp,setSelEmp]=useState(null);const[empSearch,setEmpSearch]=useState("");
   const[compareMode,setCompareMode]=useState(false);const[compareIds,setCompareIds]=useState([]);const[showCompare,setShowCompare]=useState(false);const[showStats,setShowStats]=useState(false);const[visits,setVisits]=useState([]);
   useEffect(()=>{load();},[]);
+  useEffect(()=>{if(section)setTab(section);},[section]);
   const load=async()=>{setLoading(true);const{data}=await supabase.from("applicants").select("*").order("application_number",{ascending:true});setList(data||[]);setLoading(false);};
   const loadEmp=async()=>{setEmpLoading(true);const{data}=await supabase.from("employees").select("*").order("created_at",{ascending:false});setEmpList(data||[]);setEmpLoading(false);};
   const loadVisits=async()=>{const{data}=await supabase.from("page_visits").select("*").order("created_at",{ascending:false}).limit(3000);setVisits(data||[]);};
@@ -91,22 +92,21 @@ export default function AdminDashboard({onLogout,embedded}){
   if(showCompare)return <ComparePanel ids={compareIds} list={list} onBack={()=>setShowCompare(false)}/>;
   if(showStats)return <StatsPanel list={list} onBack={()=>setShowStats(false)}/>;
   return(<div style={s.root}>
-    {!embedded&&<div style={s.hdr}><div><div style={s.hT}>لوحة التحكم</div><div style={s.hS}>دلو ورغوة</div></div><div style={{display:"flex",gap:8}}><button onClick={()=>{load();if(tab==="employees")loadEmp();if(tab==="visits")loadVisits();}} style={{...s.bSm,display:"inline-flex",alignItems:"center"}}><Icon n="refresh" s={16}/></button><button onClick={onLogout} style={{...s.bSm,background:"rgba(0,0,0,0.2)"}}>خروج</button></div></div>}
-    <div style={{display:"flex",borderBottom:"1px solid #eceef1",background:"#fff",overflowX:"auto"}}>
+    {!section&&<div style={{display:"flex",borderBottom:"1px solid #eceef1",background:"#fff",overflowX:"auto",marginBottom:14}}>
       {[["applicants","applicants",`المتقدمون (${list.length})`],["employees","employees",`الموظفون (${empList.length})`],["visits","eye","الزيارات"]].map(([k,ic,lbl])=>(
         <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"13px 8px",border:"none",background:"none",fontSize:12.5,fontWeight:700,color:tab===k?"#E8712B":"#64748b",borderBottom:tab===k?"2px solid #E8712B":"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon n={ic} s={16}/>{lbl}</button>
       ))}
-    </div>
+    </div>}
     {tab==="applicants"&&<>
       <div style={s.statsR}>{[{l:"إجمالي",v:stats.total,c:"#E8712B"},{l:"قيد المراجعة",v:stats.pending,c:"#f59e0b"},{l:"أقوياء",v:stats.strong,c:"#16a34a"},{l:"مقبولون",v:stats.accepted,c:"#2563eb"}].map(st=><div key={st.l} style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:st.c}}>{st.v}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>{st.l}</div></div>)}</div>
-      <div style={{padding:"0 16px 8px",display:"flex",gap:8}}>
+      <div style={{padding:"0 0 8px",display:"flex",gap:8}}>
         <button onClick={()=>setShowStats(true)} style={{...s.actBtn,background:"#e7f7ef",border:"1px solid #b7e4cd",color:"#087443"}}><Icon n="chart" s={14}/> إحصائيات شهرية</button>
         <button onClick={exportCSV} style={{...s.actBtn,background:"#eff6ff",border:"1px solid #bcd7fb",color:"#175cd3"}}><Icon n="download" s={14}/> تصدير Excel</button>
         <button onClick={()=>{setCompareMode(!compareMode);setCompareIds([]);}} style={{...s.actBtn,background:compareMode?"#6941c6":"#f5f3ff",border:"1px solid #d3c5f5",color:compareMode?"#fff":"#6941c6"}}><Icon n="compare" s={14}/> {compareMode?"إلغاء المقارنة":"مقارنة"}</button>
       </div>
-      {compareMode&&<div style={{padding:"0 16px 8px"}}><div style={{background:"#f5f3ff",borderRadius:10,padding:"8px 12px",fontSize:11,color:"#6d28d9",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>اختر حتى 3 متقدمين ({compareIds.length}/3)</span>{compareIds.length>=2&&<button onClick={()=>setShowCompare(true)} style={{padding:"5px 12px",background:"#6941c6",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>قارن الآن <Icon n="back" s={12}/></button>}</div></div>}
+      {compareMode&&<div style={{padding:"0 0 8px"}}><div style={{background:"#f5f3ff",borderRadius:10,padding:"8px 12px",fontSize:11,color:"#6d28d9",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>اختر حتى 3 متقدمين ({compareIds.length}/3)</span>{compareIds.length>=2&&<button onClick={()=>setShowCompare(true)} style={{padding:"5px 12px",background:"#6941c6",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>قارن الآن <Icon n="back" s={12}/></button>}</div></div>}
       <div style={s.tb}><div style={s.srch}><span style={s.srchIc}><Icon n="search" s={16}/></span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="بحث بالاسم أو الرقم أو الجوال" style={{...s.sInp,paddingInlineStart:38}}/></div></div>
-      <div style={{padding:"0 16px 8px",display:"flex",gap:8}}>
+      <div style={{padding:"0 0 8px",display:"flex",gap:8}}>
         <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...s.fSel,flex:1}}><option value="all">كل الحالات</option><option value="pending">قيد المراجعة</option><option value="strong">AI: قوي</option><option value="interview">مقابلة</option><option value="accepted">مقبول</option><option value="rejected">مرفوض</option></select>
         <select value={geoFilter} onChange={e=>setGeoFilter(e.target.value)} style={{...s.fSel,flex:1}}><option value="all">كل المناطق</option><option value="green">منطقة خضراء</option><option value="yellow">منطقة صفراء</option><option value="red">منطقة محظورة</option></select>
         <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...s.fSel,flex:1}}><option value="number">ترتيب الطلب</option><option value="score">الأعلى درجة</option><option value="geo">الأفضل منطقة</option></select>
@@ -114,8 +114,8 @@ export default function AdminDashboard({onLogout,embedded}){
       <div style={s.lst}>{loading&&<div style={s.emp}>جاري التحميل...</div>}{!loading&&filtered.length===0&&<div style={s.emp}>لا يوجد متقدمون</div>}{filtered.map(a=><Card key={a.id} a={a} onClick={()=>compareMode?toggleCompare(a.id):setSel(a)} onAnalyze={analyze} analyzing={analyzing===a.id} compareMode={compareMode} selected={compareIds.includes(a.id)}/>)}</div>
     </>}
     {tab==="employees"&&<>
-      <div style={{padding:"12px 16px 4px",display:"flex",gap:8}}><div style={s.srch}><span style={s.srchIc}><Icon n="search" s={16}/></span><input value={empSearch} onChange={e=>setEmpSearch(e.target.value)} placeholder="بحث بالاسم أو الرقم أو الجوال" style={{...s.sInp,paddingInlineStart:38}}/></div><button onClick={loadEmp} style={{padding:"10px 12px",background:"#f1f5f9",border:"none",borderRadius:10,cursor:"pointer",flexShrink:0,color:"#64748b",display:"flex",alignItems:"center"}}><Icon n="refresh" s={16}/></button></div>
-      <div style={{padding:"0 16px 4px"}}><span style={{color:"#64748b",fontSize:11}}>إجمالي: <strong>{empList.length}</strong></span></div>
+      <div style={{padding:"0 0 8px",display:"flex",gap:8}}><div style={s.srch}><span style={s.srchIc}><Icon n="search" s={16}/></span><input value={empSearch} onChange={e=>setEmpSearch(e.target.value)} placeholder="بحث بالاسم أو الرقم أو الجوال" style={{...s.sInp,paddingInlineStart:38}}/></div><button onClick={loadEmp} style={{padding:"10px 12px",background:"#f1f5f9",border:"none",borderRadius:10,cursor:"pointer",flexShrink:0,color:"#64748b",display:"flex",alignItems:"center"}}><Icon n="refresh" s={16}/></button></div>
+      <div style={{padding:"0 0 6px"}}><span style={{color:"#64748b",fontSize:11}}>إجمالي: <strong>{empList.length}</strong></span></div>
       <div style={s.lst}>{empLoading&&<div style={s.emp}>جاري التحميل...</div>}{!empLoading&&empList.length===0&&<div style={s.emp}>لا يوجد موظفون</div>}{empList.filter(e=>!empSearch||e.full_name?.toLowerCase().includes(empSearch.toLowerCase())||e.employee_id?.includes(empSearch)||e.mobile?.includes(empSearch)).map(e=><EmpCard key={e.id} e={e} onClick={()=>setSelEmp(e)}/>)}</div>
     </>}
     {tab==="visits"&&<VisitsPanel visits={visits}/>}
@@ -153,6 +153,13 @@ function Card({a,onClick,onAnalyze,analyzing,compareMode,selected}){
     </div>
   </div>);}
 
+function PageHead({title,sub,onBack,children}){
+  return(<div style={s.phead}>
+    <button onClick={onBack} style={s.phBack}><Icon n="back" s={15}/> رجوع</button>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:800,color:"#0f172a"}}>{title}</div>{sub&&<div style={{fontSize:12,color:"#64748b"}}>{sub}</div>}</div>
+    {children}
+  </div>);
+}
 function VisitsPanel({visits}){
   const today=new Date().toDateString();
   const todayCount=visits.filter(v=>new Date(v.created_at).toDateString()===today).length;
@@ -207,7 +214,7 @@ function VisitsPanel({visits}){
     </div>);
   };
 
-  return(<div style={{padding:16,display:"flex",flexDirection:"column",gap:12}}>
+  return(<div style={{padding:0,display:"flex",flexDirection:"column",gap:12}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#E8712B"}}>{visits.length}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>إجمالي الأحداث المسجّلة</div></div>
       <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#16a34a"}}>{todayCount}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>أحداث اليوم</div></div>
@@ -229,8 +236,8 @@ function StatsPanel({list,onBack}){
   const topGeo=Object.entries(byGeo).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const acceptRate=list.length?Math.round((list.filter(a=>a.status==="accepted").length/list.length)*100):0;
   return(<div style={s.root}>
-    <div style={{background:"linear-gradient(135deg,#16a34a,#15803d)",padding:"14px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:100}}><button onClick={onBack} style={s.bSm}><Icon n="back" s={15} style={{verticalAlign:"-2px"}}/> رجوع</button><div style={{color:"#fff",fontSize:16,fontWeight:900}}>إحصائيات شهرية</div></div>
-    <div style={{padding:16,display:"flex",flexDirection:"column",gap:12}}>
+    <PageHead title="إحصائيات شهرية" sub="أداء التوظيف عبر الزمن" onBack={onBack}/>
+    <div style={{padding:0,display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#E8712B"}}>{list.length}</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>إجمالي كل الوقت</div></div>
         <div style={s.stCard}><div style={{fontSize:22,fontWeight:900,color:"#16a34a"}}>{acceptRate}%</div><div style={{fontSize:10,color:"#64748b",marginTop:2}}>معدل القبول</div></div>
@@ -259,8 +266,8 @@ function ComparePanel({ids,list,onBack}){
     ["مستعد للرياض",a=>a.ready_for_riyadh==="yes"?"نعم":a.ready_for_riyadh==="no"?"لا":"—"],
   ];
   return(<div style={s.root}>
-    <div style={{background:"linear-gradient(135deg,#7c3aed,#6d28d9)",padding:"14px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:100}}><button onClick={onBack} style={s.bSm}><Icon n="back" s={15} style={{verticalAlign:"-2px"}}/> رجوع</button><div style={{color:"#fff",fontSize:16,fontWeight:900}}>مقارنة المتقدمين</div></div>
-    <div style={{padding:16,overflowX:"auto"}}>
+    <PageHead title="مقارنة المتقدمين" sub={`${items.length} متقدّمين جنباً إلى جنب`} onBack={onBack}/>
+    <div style={{padding:0,overflowX:"auto"}}>
       <table style={{width:"100%",borderCollapse:"collapse",background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <tbody>
           {rows.map(([label,fn],i)=><tr key={label} style={{background:i%2===0?"#f8fafc":"#fff"}}>
@@ -470,8 +477,11 @@ ${a.admin_notes?`<div class="sec"><h3>ملاحظات إبراهيم</h3><div cla
   const saveEdit=async()=>{setESaving(true);const{error}=await supabase.from("applicants").update(ed).eq("id",a.id);if(error)alert("خطأ: "+error.message);else{setEditMode(false);Object.assign(a,ed);}setESaving(false);};
   const mapUrl=a.bangladesh_city?`https://maps.google.com/maps?q=${encodeURIComponent((a.bangladesh_city||"")+" "+(a.bangladesh_district||"")+" Bangladesh")}`:"";
   return(<div style={s.root}>
-    <div style={{background:"linear-gradient(135deg,#E8712B,#CC5200)",padding:"14px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:100}}><button onClick={onBack} style={s.bSm}><Icon n="back" s={15} style={{verticalAlign:"-2px"}}/> رجوع</button><div style={{flex:1,textAlign:"right"}}><div style={{color:"#fff",fontSize:15,fontWeight:900}}>{a.full_name}</div><div style={{color:"rgba(255,255,255,0.75)",fontSize:11}}>طلب #{a.application_number}</div></div><button onClick={printCandidate} style={{...s.bSm,background:"rgba(255,255,255,0.25)"}}>طباعة</button><div style={{padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,color:st.color,background:"rgba(255,255,255,0.9)"}}>{st.ar}</div></div>
-    <div style={{padding:"12px 16px 80px",display:"flex",flexDirection:"column",gap:12,maxWidth:560,margin:"0 auto"}}>
+    <PageHead title={a.full_name} sub={"طلب #"+a.application_number} onBack={onBack}>
+      <button onClick={printCandidate} style={s.phBack}><Icon n="print" s={14}/> طباعة</button>
+      <span style={{...s.chip,color:st.color,background:st.bg}}><span style={{width:6,height:6,borderRadius:"50%",background:st.color,display:"inline-block"}}/>{st.ar}</span>
+    </PageHead>
+    <div style={{padding:"0 0 24px",display:"flex",flexDirection:"column",gap:12,maxWidth:600,margin:"0 auto"}}>
 
       {/* موقع المتقدم */}
       <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:12}}>الموقع والمنطقة</div>
@@ -616,7 +626,7 @@ function EmpDetail({e,onBack,onDelete,onUpdate}){const[del,setDel]=useState(fals
   const saveEdit=async()=>{setESaving(true);const{error}=await supabase.from("employees").update(ed).eq("id",e.id);if(error)alert("خطأ: "+error.message);else{setEditMode(false);onUpdate?.({...e,...ed});}setESaving(false);};
   const FIELDS=[["القسم الأول",null],["الاسم",e.full_name],["رقم الهوية",e.id_number],["الجوال",e.mobile],["الميلاد",e.date_of_birth],["الجنسية",e.nationality],["ID سويتر",e.employee_id],["القسم الثاني",null],["الدولة الأصلية",e.home_country],["المنطقة",e.region],["المدينة",e.city],["المدة في السعودية",e.time_in_saudi],["السكن الرياض",e.residence_riyadh],["القسم الثالث",null],["المصدر",e.source],["المحيل",e.referrer_name],["الصلة",e.referrer_relation],["أقارب في الفريق",e.has_relative_in_team],["اسم القريب",e.relative_name],["القسم الرابع",null],["العمل السابق",e.previous_job],["خبرة الغسيل",e.car_wash_experience],["عمل مع تطبيقات",e.worked_with_app]];
   const LABELS={full_name:"الاسم",id_number:"رقم الهوية",mobile:"الجوال",date_of_birth:"الميلاد",nationality:"الجنسية",employee_id:"ID سويتر",home_country:"الدولة الأصلية",region:"المنطقة",city:"المدينة",time_in_saudi:"المدة في السعودية",residence_riyadh:"السكن الرياض",source:"المصدر",referrer_name:"المحيل",referrer_relation:"الصلة",has_relative_in_team:"أقارب في الفريق",relative_name:"اسم القريب",previous_job:"العمل السابق",car_wash_experience:"خبرة الغسيل",worked_with_app:"عمل مع تطبيقات"};
-return(<div style={s.root}><div style={{background:"linear-gradient(135deg,#1e293b,#334155)",padding:"14px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:100}}><button onClick={onBack} style={s.bSm}><Icon n="back" s={15} style={{verticalAlign:"-2px"}}/> رجوع</button><div style={{flex:1,textAlign:"right"}}><div style={{color:"#fff",fontSize:15,fontWeight:900}}>{e.full_name}</div><div style={{color:"rgba(255,255,255,0.6)",fontSize:11}}>ID: {e.employee_id||"—"}</div></div></div><div style={{padding:"12px 16px 80px",display:"flex",flexDirection:"column",gap:12,maxWidth:560,margin:"0 auto"}}>
+return(<div style={s.root}><PageHead title={e.full_name} sub={"ID: "+(e.employee_id||"—")} onBack={onBack}/><div style={{padding:"0 0 24px",display:"flex",flexDirection:"column",gap:12,maxWidth:600,margin:"0 auto"}}>
   {missing.length>0&&<div style={{background:"#fffbeb",border:"1.5px solid #fcd34d",borderRadius:14,padding:14}}>
     <div style={{color:"#92400e",fontSize:13,fontWeight:800,marginBottom:8}}>ملف غير مكتمل — {missing.length} حقول ناقصة</div>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>{missing.map(([k,ar])=><span key={k} style={{background:"#fff",border:"1px solid #fde68a",borderRadius:8,padding:"3px 8px",fontSize:10,color:"#92400e"}}>{ar}</span>)}</div>
@@ -637,4 +647,4 @@ return(<div style={s.root}><div style={{background:"linear-gradient(135deg,#1e29
   <div style={s.sec}><div style={{color:"#1e293b",fontSize:13,fontWeight:800,marginBottom:10}}>منطقة الخطر</div>{!del?<button onClick={()=>setDel(true)} style={{...s.bFull,background:"#fff",border:"2px solid #dc2626",color:"#dc2626"}}>حذف</button>:<div style={{background:"#fff5f5",border:"1.5px solid #dc2626",borderRadius:12,padding:14}}><div style={{color:"#dc2626",fontWeight:700,textAlign:"right",marginBottom:10}}>هل أنت متأكد؟</div><div style={{display:"flex",gap:8}}><button onClick={()=>onDelete(e.id)} style={{...s.bFull,background:"#dc2626"}}>نعم</button><button onClick={()=>setDel(false)} style={{...s.bFull,background:"#f1f5f9",color:"#475569"}}>إلغاء</button></div></div>}</div></div></div>);}
 function EB({c,t,txt,list,accent}){return(<div style={{background:accent?"#fdf4ff":"#f8fafc",borderRadius:10,padding:"8px 12px",marginBottom:6,...(accent?{borderRight:`3px solid ${c}`}:{})}}><div style={{color:c,fontWeight:700,fontSize:11,marginBottom:3}}>{t}</div>{txt&&<div style={{color:"#475569",fontSize:12,lineHeight:1.6}}>{txt}</div>}{list?.map((x,i)=><div key={i} style={{color:"#475569",fontSize:12}}>• {x}</div>)}</div>);}
 function FCard({l,url,type}){return(<div style={{background:"#f8fafc",borderRadius:12,padding:10,textAlign:"center",minWidth:80}}><div style={{color:"#64748b",fontSize:10,marginBottom:6,fontWeight:600}}>{l}</div>{type==="image"?<img src={url} alt={l} style={{width:70,height:70,objectFit:"cover",borderRadius:8,cursor:"pointer"}} onClick={()=>window.open(url,"_blank")}/>:<a href={url} target="_blank" rel="noreferrer" style={{display:"block",padding:"6px",background:"#2563eb",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,textDecoration:"none"}}>▶ مشاهدة</a>}</div>);}
-const s={root:{minHeight:"100dvh",background:"#f8fafc",fontFamily:"'Segoe UI',Tahoma,sans-serif",direction:"rtl"},hdr:{background:"linear-gradient(135deg,#E8712B,#CC5200)",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:100},hT:{color:"#fff",fontSize:18,fontWeight:900},hS:{color:"rgba(255,255,255,0.75)",fontSize:11},bSm:{padding:"8px 14px",background:"rgba(255,255,255,0.2)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"},statsR:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,padding:"12px 16px"},stCard:{background:"#fff",borderRadius:12,padding:"12px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"},tb:{padding:"0 16px 12px",display:"flex",gap:8},sInp:{flex:1,padding:"10px 14px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:12,outline:"none",direction:"rtl"},fSel:{padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:11,outline:"none",background:"#fff"},lst:{padding:"0 16px 80px",display:"flex",flexDirection:"column",gap:10},emp:{textAlign:"center",color:"#94a3b8",padding:"40px 0",fontSize:13},card:{background:"#fff",borderRadius:16,padding:"14px 16px",boxShadow:"0 1px 6px rgba(0,0,0,0.07)",cursor:"pointer",border:"1.5px solid #f1f5f9"},sec:{background:"#fff",borderRadius:16,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"},inp:{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",direction:"rtl",fontFamily:"inherit"},bFull:{width:"100%",padding:12,border:"none",borderRadius:12,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"},actBtn:{flex:1,padding:"9px 6px",borderRadius:10,fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5},srch:{position:"relative",flex:1,display:"flex"},srchIc:{position:"absolute",insetInlineStart:12,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",display:"flex",pointerEvents:"none"},chip:{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,fontSize:10.5,fontWeight:700}};
+const s={root:{fontFamily:"'Segoe UI',Tahoma,sans-serif",direction:"rtl"},hdr:{display:"none"},hT:{},hS:{},bSm:{padding:"8px 14px",background:"rgba(255,255,255,0.2)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"},phBack:{display:"inline-flex",alignItems:"center",gap:5,background:"#fff",border:"1px solid #e6e9ee",borderRadius:10,padding:"7px 12px",fontSize:12.5,fontWeight:700,color:"#334155",cursor:"pointer",flex:"none"},phead:{display:"flex",alignItems:"center",gap:12,paddingBottom:14,marginBottom:14,borderBottom:"1px solid #eceef1"},statsR:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,padding:"0 0 12px"},stCard:{background:"#fff",border:"1px solid #eceef1",borderRadius:14,padding:"13px 10px",textAlign:"center",boxShadow:"0 1px 2px rgba(16,24,40,.05)"},tb:{padding:"0 0 10px",display:"flex",gap:8},sInp:{flex:1,padding:"10px 14px",border:"1px solid #e6e9ee",borderRadius:11,fontSize:12.5,outline:"none",direction:"rtl"},fSel:{padding:"10px 12px",border:"1px solid #e6e9ee",borderRadius:11,fontSize:11.5,outline:"none",background:"#fff"},lst:{padding:"0 0 24px",display:"flex",flexDirection:"column",gap:10},emp:{textAlign:"center",color:"#94a3b8",padding:"40px 0",fontSize:13},card:{background:"#fff",borderRadius:16,padding:"14px 16px",boxShadow:"0 1px 2px rgba(16,24,40,.05)",cursor:"pointer",border:"1px solid #eceef1"},sec:{background:"#fff",borderRadius:16,padding:"14px 16px",boxShadow:"0 1px 2px rgba(16,24,40,.05)",border:"1px solid #eceef1"},inp:{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",direction:"rtl",fontFamily:"inherit"},bFull:{width:"100%",padding:12,border:"none",borderRadius:12,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"},actBtn:{flex:1,padding:"9px 6px",borderRadius:10,fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5},srch:{position:"relative",flex:1,display:"flex"},srchIc:{position:"absolute",insetInlineStart:12,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",display:"flex",pointerEvents:"none"},chip:{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,fontSize:10.5,fontWeight:700}};
