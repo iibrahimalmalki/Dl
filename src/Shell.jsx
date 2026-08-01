@@ -8,6 +8,7 @@ const Payroll=lazy(()=>import("./Payroll"));
 const Operations=lazy(()=>import("./Operations"));
 const Complaints=lazy(()=>import("./Complaints"));
 const Performance=lazy(()=>import("./Performance"));
+const FieldRounds=lazy(()=>import("./FieldRounds"));
 
 const NAV=[
   {g:"الرئيسية"},
@@ -21,7 +22,7 @@ const NAV=[
   {k:"performance",ar:"الأداء",ic:"performance"},
   {k:"payroll",ar:"الرواتب",ic:"payroll"},
   {k:"complaints",ar:"الشكاوى",ic:"complaints"},
-  {k:"field_rounds",ar:"الجولات الميدانية",ic:"rounds",soon:1},
+  {k:"field_rounds",ar:"الجولات الميدانية",ic:"rounds"},
   {g:"الإدارة"},
   {k:"employees",ar:"الموظفون",ic:"employees"},
   {k:"vendors",ar:"الموردون",ic:"vendors",soon:1},
@@ -29,7 +30,7 @@ const NAV=[
   {k:"users",ar:"المستخدمون",ic:"users"},
   {k:"tma",ar:"المواهب TMA",ic:"tma",lock:1},
 ];
-const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],users:["المستخدمون","الحسابات والصلاحيات"]};
+const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],users:["المستخدمون","الحسابات والصلاحيات"]};
 
 export default function Shell({onLogout,me}){
   const[view,setView]=useState("dashboard");
@@ -85,7 +86,8 @@ export default function Shell({onLogout,me}){
         {view==="operations"&&<Suspense fallback={<Sk/>}><Operations opId={op}/></Suspense>}
         {view==="complaints"&&<Suspense fallback={<Sk/>}><Complaints opId={op}/></Suspense>}
         {view==="performance"&&<Suspense fallback={<Sk/>}><Performance opId={op}/></Suspense>}
-        {["interviews","onboarding","field_rounds","vendors"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
+        {view==="field_rounds"&&<Suspense fallback={<Sk/>}><FieldRounds opId={op}/></Suspense>}
+        {["interviews","onboarding","vendors"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
       </div>
     </div>
   </div>);
