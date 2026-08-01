@@ -29,6 +29,7 @@ export default function UserManagement(){
   const[q,setQ]=useState({name:"",phone:"",emp:"",email:""});   // نموذج الإضافة السريع
   const[emps,setEmps]=useState([]);
   const[cred,setCred]=useState(null);                            // {name,email,password,phone}
+  const[credLang,setCredLang]=useState("both");                  // ar | bn | both
   const[pwFor,setPwFor]=useState(null);const[pwVal,setPwVal]=useState("");
 
   const loadUsers=async()=>{setLoading(true);const{data}=await supabase.from("app_users").select("id,email,display_name,is_owner,active,biker_employee_id").order("created_at");setUsers(data||[]);setLoading(false);};
@@ -55,11 +56,13 @@ export default function UserManagement(){
     setQ({name:"",phone:"",emp:"",email:""});
     note("تم إنشاء الحساب — أرسل البيانات للموظف",true);loadUsers();
   };
-  const waSendCred=(c)=>{
-    const msg=`مرحباً ${c.name} 👋\nتم إنشاء حسابك في نظام دلو ورغوة.\n\n🔗 رابط الدخول:\n${loginURL()}\n\n👤 اسم المستخدم:\n${c.email}\n\n🔑 كلمة المرور المؤقتة:\n${c.password}\n\nيُرجى الدخول وتغيير كلمة المرور.\n\n———\nআপনার দালু ওয়ারাগওয়া অ্যাকাউন্ট তৈরি হয়েছে।\nলগইন: ${loginURL()}\nইউজারনেম: ${c.email}\nঅস্থায়ী পাসওয়ার্ড: ${c.password}`;
-    window.open(`https://wa.me/${waNum(c.phone)}?text=${encodeURIComponent(msg)}`);
+  const credMsg=(c,lang)=>{
+    const ar=`مرحباً ${c.name} 👋\nتم إنشاء حسابك في نظام دلو ورغوة.\n\n🔗 رابط الدخول:\n${loginURL()}\n\n👤 اسم المستخدم:\n${c.email}\n\n🔑 كلمة المرور المؤقتة:\n${c.password}\n\nيُرجى الدخول وتغيير كلمة المرور.`;
+    const bn=`স্বাগতম ${c.name} 👋\nআপনার দালু ওয়ারাগওয়া অ্যাকাউন্ট তৈরি হয়েছে।\n\n🔗 লগইন লিংক:\n${loginURL()}\n\n👤 ইউজারনেম:\n${c.email}\n\n🔑 অস্থায়ী পাসওয়ার্ড:\n${c.password}\n\nঅনুগ্রহ করে লগইন করে পাসওয়ার্ড পরিবর্তন করুন।`;
+    return lang==="ar"?ar:lang==="bn"?bn:ar+"\n\n———\n\n"+bn;
   };
-  const copyCred=async(c)=>{try{await navigator.clipboard.writeText(`${c.name}\n${loginURL()}\n${c.email}\n${c.password}`);note("تم نسخ البيانات",true);}catch{note(`${c.email} / ${c.password}`,true);}};
+  const waSendCred=(c)=>{window.open(`https://wa.me/${waNum(c.phone)}?text=${encodeURIComponent(credMsg(c,credLang))}`);};
+  const copyCred=async(c)=>{try{await navigator.clipboard.writeText(credMsg(c,credLang));note("تم نسخ الرسالة",true);}catch{note(`${c.email} / ${c.password}`,true);}};
   const doDelete=async(u)=>{if(!confirm(`حذف ${u.display_name||u.email} نهائياً؟`))return;note("");const r=await call({action:"delete",user_id:u.id});if(r.error){note("خطأ: "+r.error);return;}if(sel&&sel.id===u.id)setSel(null);note("تم الحذف",true);loadUsers();};
   const toggleActive=async(u)=>{const r=await call({action:"update",user_id:u.id,active:!u.active});if(r.error){note("خطأ: "+r.error);return;}loadUsers();if(sel&&sel.id===u.id)setSel({...u,active:!u.active});};
   const savePw=async(u)=>{if(pwVal.length<6){note("كلمة المرور 6 أحرف على الأقل");return;}note("");const r=await call({action:"set_password",user_id:u.id,password:pwVal});if(r.error){note("خطأ: "+r.error);return;}setPwFor(null);setPwVal("");note("تم تغيير كلمة المرور",true);};
@@ -99,6 +102,11 @@ export default function UserManagement(){
         <div className="um-cred-row"><span>اسم المستخدم</span><b dir="ltr">{cred.email}</b></div>
         <div className="um-cred-row"><span>كلمة المرور المؤقتة</span><b dir="ltr">{cred.password}</b></div>
         <div className="um-cred-row"><span>رابط الدخول</span><b dir="ltr">{loginURL()}</b></div>
+        <div className="um-cred-lang">
+          <span>لغة الرسالة:</span>
+          {[["ar","عربي"],["bn","বাংলা"],["both","الاثنان"]].map(([k,l])=>(
+            <button key={k} className={credLang===k?"on":""} onClick={()=>setCredLang(k)}>{l}</button>))}
+        </div>
         <div className="um-cred-act">
           {cred.phone&&<button className="um-btn ok" onClick={()=>waSendCred(cred)}><Icon n="phone" s={14}/> إرسال واتساب</button>}
           <button className="um-btn ghost" onClick={()=>copyCred(cred)}><Icon n="doc" s={14}/> نسخ البيانات</button>
@@ -206,6 +214,10 @@ const CSS=`
 .um-cred-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #d9f0e3}
 .um-cred-row span{font-size:11.5px;color:#64748b;font-weight:600;flex:none}
 .um-cred-row b{font-size:13px;font-weight:800;color:#0f172a;word-break:break-all;text-align:left}
+.um-cred-lang{display:flex;align-items:center;gap:6px;margin-top:11px;flex-wrap:wrap}
+.um-cred-lang span{font-size:11px;color:#64748b;font-weight:700;margin-inline-end:2px}
+.um-cred-lang button{border:1px solid #cfe9db;background:#fff;color:#64748b;border-radius:8px;padding:5px 12px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer}
+.um-cred-lang button.on{background:#087443;border-color:#087443;color:#fff}
 .um-cred-act{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
 .um-cred-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:#92600e;background:#fffbeb;border:1px solid #fde9c8;border-radius:9px;padding:8px 10px;margin-top:11px;line-height:1.6}
 @media(max-width:640px){.um-grid2{grid-template-columns:1fr}}
