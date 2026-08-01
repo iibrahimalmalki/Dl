@@ -2,6 +2,8 @@ import{useState,useEffect}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{SEVERITY,byCode,objectionState}from"./violations";
+import{AXES,complianceByAxis,effect as frEffect}from"./fieldChecklist";
+import{openReport}from"./fieldReport";
 
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const periodLabel=p=>{const[y,m]=p.split("-");return`${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m} ${y}`;};
@@ -20,16 +22,17 @@ export default function BikerPortal({me,onLogout}){
   const sid=String(me?.biker_employee_id||"").trim();
   const[period,setPeriod]=useState(nowPeriod());
   const[loading,setLoading]=useState(true);
-  const[ops,setOps]=useState(null);const[line,setLine]=useState(null);const[viol,setViol]=useState([]);
+  const[ops,setOps]=useState(null);const[line,setLine]=useState(null);const[viol,setViol]=useState([]);const[fround,setFround]=useState(null);
 
   useEffect(()=>{(async()=>{
     setLoading(true);
-    const[{data:o},{data:l},{data:v}]=await Promise.all([
+    const[{data:o},{data:l},{data:v},{data:fr}]=await Promise.all([
       supabase.from("ops_biker_month").select("*").eq("period",period).eq("sweater_id",sid).maybeSingle(),
       supabase.from("payroll_lines").select("*").eq("period",period).eq("biker_id",sid).eq("role","biker").maybeSingle(),
       supabase.from("violations").select("*").eq("period",period).eq("sweater_id",sid).order("logged_at",{ascending:false}),
+      supabase.from("field_rounds").select("*").eq("period",period).eq("sweater_id",sid).order("round_date",{ascending:false}).limit(1),
     ]);
-    setOps(o||null);setLine(l||null);setViol(v||[]);setLoading(false);
+    setOps(o||null);setLine(l||null);setViol(v||[]);setFround((fr&&fr[0])||null);setLoading(false);
   })();},[period,sid]);
 
   const rating=ops?.rating!=null?Number(ops.rating):null;
@@ -54,7 +57,7 @@ export default function BikerPortal({me,onLogout}){
       </div>
 
       {loading?<div className="dw-skel" style={{height:200,borderRadius:18}}/>:
-      (!ops&&!line&&viol.length===0)?<div className="bp-empty"><div className="bp-empty-ic"><Icon n="performance" s={30}/></div><h3>لا بيانات بعد لـ{periodLabel(period)}</h3><p>ستظهر نتيجتك بعد إصدار تقرير الشهر · এই মাসের রিপোর্ট প্রকাশের পর দেখা যাবে।</p></div>:
+      (!ops&&!line&&viol.length===0&&!fround)?<div className="bp-empty"><div className="bp-empty-ic"><Icon n="performance" s={30}/></div><h3>لا بيانات بعد لـ{periodLabel(period)}</h3><p>ستظهر نتيجتك بعد إصدار تقرير الشهر · এই মাসের রিপোর্ট প্রকাশের পর দেখা যাবে।</p></div>:
       <>
         {/* التقييم والحالة */}
         <div className="bp-hero">
@@ -98,6 +101,22 @@ export default function BikerPortal({me,onLogout}){
             <div className="bp-obj-note"><Icon n="alert" s={12}/> للاعتراض: راجع المشرف بدليل كتابي خلال 48 ساعة من التسجيل. · আপিলের জন্য সুপারভাইজারের সাথে যোগাযোগ করুন।</div>
           </>}
         </div>
+
+        {/* الالتزام الميداني */}
+        {fround&&(()=>{const cp=fround.compliance_pct;const ef=frEffect(cp);const ax=fround.by_axis||complianceByAxis(fround.results||{});return(
+        <div className="bp-card">
+          <div className="bp-c-h"><Icon n="rounds" s={16}/> الالتزام الميداني · মাঠ পরিদর্শন</div>
+          <div className="bp-fr-top">
+            <div className="bp-fr-pct" style={{color:ef.color}}>{cp!=null?cp+"%":"—"}</div>
+            <span className="bp-fr-eff" style={{background:ef.bg,color:ef.color}}>{ef.ar}</span>
+          </div>
+          <div className="bp-fr-axes">
+            {Object.entries(AXES).map(([k,m])=>{const a=ax[k]||{};const col=a.pct==null?"#cbd5e1":a.pct>=80?"#12b76a":a.pct>=60?"#f79009":"#f04438";return(
+              <div className="bp-fr-ax" key={k}><div className="bp-fr-ax-h"><span>{m.ar}</span><b style={{color:col}}>{a.pct!=null?a.pct+"%":"—"}</b></div><div className="bp-fr-t"><div style={{width:(a.pct==null?0:Math.max(a.pct,3))+"%",background:col}}/></div></div>);})}
+          </div>
+          <button className="bp-fr-btn" onClick={()=>openReport(fround,fround.ai_analysis,"دلو ورغوة")}><Icon n="print" s={14}/> عرض تقرير الجولة · রিপোর্ট</button>
+          <div className="bp-fr-date">جولة {fround.round_date}{fround.inspector?" · "+fround.inspector:""}</div>
+        </div>);})()}
 
         {/* أداء مختصر */}
         <div className="bp-card">
@@ -159,6 +178,16 @@ const CSS=`
 .bp-v-date{font-size:10.5px;color:#94a3b8;margin-inline-start:auto}
 .bp-obj{display:flex;align-items:center;gap:5px;margin-top:8px;font-size:11px;color:#175cd3;font-weight:700;background:#eff6ff;border-radius:8px;padding:6px 9px}
 .bp-obj-note{display:flex;align-items:flex-start;gap:6px;margin-top:10px;font-size:10.5px;color:#92600e;background:#fffbeb;border:1px solid #fde9c8;border-radius:9px;padding:8px 10px;line-height:1.6}
+.bp-fr-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.bp-fr-pct{font-size:30px;font-weight:800;letter-spacing:-.5px;line-height:1}
+.bp-fr-eff{font-size:11px;font-weight:800;padding:5px 11px;border-radius:20px}
+.bp-fr-axes{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.bp-fr-ax-h{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#64748b;font-weight:600;margin-bottom:4px}
+.bp-fr-ax-h b{font-size:12px}
+.bp-fr-t{height:6px;background:#eef0f3;border-radius:5px;overflow:hidden}.bp-fr-t div{height:100%;border-radius:5px}
+.bp-fr-btn{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px;border:1px solid #ffd9bd;background:#fff7f0;color:#b54708;border-radius:11px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer}
+.bp-fr-btn:hover{background:#fff2e8}
+.bp-fr-date{text-align:center;font-size:10.5px;color:#94a3b8;margin-top:8px}
 .bp-metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .bp-m{background:#fafbfc;border:1px solid #f1f3f5;border-radius:11px;padding:11px;text-align:center}
 .bp-m-v{font-size:17px;font-weight:800}.bp-m-t{font-size:10.5px;color:#64748b;font-weight:600;margin-top:2px}
