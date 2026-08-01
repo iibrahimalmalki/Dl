@@ -1,13 +1,19 @@
 import{useState,useEffect,useMemo}from"react";
-import{supabase}from"./supabase";
+import{supabase,SITE_URL}from"./supabase";
 import Icon from"./Icon";
 import{CATS,DRIVES,DRIVE_BY_KEY,TOTAL_DRIVES,TOTAL_TALENTS,interpret,talentOf,completeness,topTalents,categorySummary}from"./tma";
+import{TOTAL_ITEMS as Q_TOTAL,answeredCount}from"./tmaQuestionnaire";
+
+const waNum=raw=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
 
 export default function TMA({opId,target,onTargetDone}){
-  const[tab,setTab]=useState("catalog"); // catalog | assess
+  const[tab,setTab]=useState("catalog"); // catalog | assess | invites
   const[list,setList]=useState([]);
+  const[invites,setInvites]=useState([]);
   const[emps,setEmps]=useState([]);
   const[loading,setLoading]=useState(true);
+  const[invName,setInvName]=useState("");const[invRole,setInvRole]=useState("");
+  const[invMsg,setInvMsg]=useState(null);const[invBusy,setInvBusy]=useState(false);
 
   // نموذج التقييم
   const[recId,setRecId]=useState(null);
@@ -26,8 +32,39 @@ export default function TMA({opId,target,onTargetDone}){
     let q=supabase.from("tma_assessments").select("*").order("updated_at",{ascending:false});
     if(opId&&opId!=="all")q=q.eq("operator_id",opId);
     const{data}=await q;setList(data||[]);
+    let iq=supabase.from("tma_invites").select("*").order("created_at",{ascending:false});
+    if(opId&&opId!=="all")iq=iq.eq("operator_id",opId);
+    const{data:iv}=await iq;setInvites(iv||[]);
     setLoading(false);
   })();},[opId]);
+
+  const invLink=id=>`${SITE_URL}?tma=${id}`;
+  const createInvite=async(preset)=>{
+    const nm=(preset?.name??invName).trim();
+    if(!nm){setInvMsg({ok:false,t:"أدخل اسم المرشّح"});return null;}
+    setInvBusy(true);setInvMsg(null);
+    try{
+      const row={operator_id:(opId&&opId!=="all")?opId:null,subject_name:nm,subject_role:(preset?.role??invRole).trim()||null,interview_id:preset?.interview_id||null,applicant_id:preset?.applicant_id||null};
+      const{data,error}=await supabase.from("tma_invites").insert(row).select().single();if(error)throw error;
+      setInvites(p=>[data,...p]);setInvName("");setInvRole("");
+      setInvMsg({ok:true,t:"تم إنشاء رابط الاستبيان — انسخه أو أرسله للمرشّح"});
+      setInvBusy(false);return data;
+    }catch(e){setInvMsg({ok:false,t:"خطأ: "+(e.message||e)});setInvBusy(false);return null;}
+  };
+  const copyInv=async(r)=>{try{await navigator.clipboard.writeText(invLink(r.id));setInvMsg({ok:true,t:"تم نسخ الرابط"});}catch{setInvMsg({ok:true,t:invLink(r.id)});}};
+  const waInv=(r,phone)=>{const t=`السلام عليكم ${r.subject_name}،\nنرجو تعبئة استبيان المواهب عبر الرابط:\n${invLink(r.id)}\n\nদয়া করে এই লিংকে ব্যক্তিত্ব প্রশ্নাবলী পূরণ করুন।`;window.open(`https://wa.me/${waNum(phone||"")}?text=${encodeURIComponent(t)}`);};
+  const delInv=async(r)=>{if(!confirm("حذف رابط استبيان «"+r.subject_name+"»؟"))return;await supabase.from("tma_invites").delete().eq("id",r.id);setInvites(p=>p.filter(x=>x.id!==r.id));};
+  const importInv=async(r)=>{
+    setInvBusy(true);setInvMsg(null);
+    try{
+      const row={operator_id:r.operator_id,subject_name:r.subject_name,subject_role:r.subject_role,scores:r.scores||{},notes:"مستورد من استبيان المرشّح الذاتي",interview_id:r.interview_id,applicant_id:r.applicant_id,source:"questionnaire",updated_at:new Date().toISOString()};
+      const{data,error}=await supabase.from("tma_assessments").insert(row).select().single();if(error)throw error;
+      await supabase.from("tma_invites").update({imported_assessment_id:data.id}).eq("id",r.id);
+      setList(p=>[data,...p]);setInvites(p=>p.map(x=>x.id===r.id?{...x,imported_assessment_id:data.id}:x));
+      setInvMsg({ok:true,t:"تم استيراد النتائج إلى ملف مواهب — افتحه من تبويب التقييمات"});
+    }catch(e){setInvMsg({ok:false,t:"خطأ: "+(e.message||e)});}
+    setInvBusy(false);
+  };
 
   // قدوم من شاشة المقابلات: افتح ملف المرشح الموجود أو ابدأ ملفاً جديداً مربوطاً بالمقابلة
   useEffect(()=>{
@@ -82,9 +119,42 @@ export default function TMA({opId,target,onTargetDone}){
     <div className="tm-tabs">
       <button className={tab==="catalog"?"on":""} onClick={()=>setTab("catalog")}><Icon n="tma" s={15}/> الكتالوج المرجعي</button>
       <button className={tab==="assess"?"on":""} onClick={()=>setTab("assess")}><Icon n="edit" s={15}/> التقييمات <span className="tm-cnt">{list.length}</span></button>
+      <button className={tab==="invites"?"on":""} onClick={()=>setTab("invites")}><Icon n="phone" s={15}/> استبيان المرشّح <span className="tm-cnt">{invites.length}</span></button>
     </div>
 
-    {tab==="catalog"?<Catalog/>:
+    {tab==="invites"?
+    <div className="tm-inv">
+      <div className="tm-inv-new">
+        <div className="tm-inv-h"><Icon n="link" s={15}/> إرسال استبيان لمرشّح جديد</div>
+        <p className="tm-inv-desc">يجيب المرشّح على {Q_TOTAL} عبارة (عربي + بنغالي) عبر رابط سهل، ثم تستورد النتيجة إلى ملف مواهبه — تقييم ذاتي أقلّ تحيّزاً من الحكم اليدوي.</p>
+        <div className="tm-frow">
+          <label className="tm-field"><span>اسم المرشّح</span><input value={invName} onChange={e=>setInvName(e.target.value)} placeholder="الاسم الكامل"/></label>
+          <label className="tm-field"><span>الدور</span><input value={invRole} onChange={e=>setInvRole(e.target.value)} placeholder="مرشّح للتوظيف"/></label>
+        </div>
+        <button className="tm-save" onClick={()=>createInvite()} disabled={invBusy}><Icon n="plus" s={15}/> {invBusy?"…":"إنشاء رابط الاستبيان"}</button>
+        {invMsg&&<div className={"tm-msg "+(invMsg.ok?"ok":"err")} style={{marginTop:10,marginBottom:0}}>{invMsg.t}</div>}
+      </div>
+
+      <div className="tm-saved-h" style={{marginTop:18}}><Icon n="inbox" s={15}/> الروابط المُرسَلة <span>({invites.length})</span></div>
+      {invites.length===0?<div className="tm-empty"><div className="tm-empty-ic"><Icon n="phone" s={28}/></div><h3>لا روابط بعد</h3><p>أنشئ رابط استبيان أعلاه وأرسله للمرشّح عبر واتساب.</p></div>:
+      <div className="tm-inv-list">{invites.map(r=>{const cp=r.status==="completed";const tt=cp?topTalents(r.scores||{},4):[];const ac=answeredCount(r.answers||{});return(
+        <div className="tm-inv-card" key={r.id}>
+          <div className="tm-inv-top">
+            <div className="tm-inv-av">{(r.subject_name||"?").trim().charAt(0)}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div className="tm-inv-name">{r.subject_name}{r.subject_role&&<small>{r.subject_role}</small>}</div>
+              <div className="tm-inv-st">{cp?<span className="tm-inv-badge done"><Icon n="check" s={11}/> مكتمل</span>:<span className="tm-inv-badge">{ac}/{Q_TOTAL} · بانتظار الإجابة</span>}{r.interview_id&&<span className="tm-inv-tagx"><Icon n="interview" s={10}/> من مقابلة</span>}</div>
+            </div>
+          </div>
+          {cp&&tt.length>0&&<div className="tm-card-tags" style={{margin:"4px 0 10px"}}>{tt.map((x,idx)=><span key={idx} className={"tm-mini "+(x.talent.side==="a"?"a":"b")}>{x.talent.n}</span>)}</div>}
+          <div className="tm-inv-act">
+            {!cp&&<><button onClick={()=>copyInv(r)}><Icon n="link" s={13}/> نسخ</button><button onClick={()=>waInv(r)}><Icon n="phone" s={13}/> واتساب</button></>}
+            {cp&&(r.imported_assessment_id?<span className="tm-inv-imp"><Icon n="check" s={12}/> مُستورد إلى ملف مواهب</span>:<button className="imp" onClick={()=>importInv(r)} disabled={invBusy}><Icon n="download" s={13}/> استيراد النتائج</button>)}
+            <button className="del" onClick={()=>delInv(r)}><Icon n="trash" s={13}/></button>
+          </div>
+        </div>);})}</div>}
+    </div>
+    :tab==="catalog"?<Catalog/>:
     <div className="tm-assess">
       {/* لوحة الإدخال */}
       <div className="tm-form">
@@ -325,6 +395,23 @@ const CSS=`
 .tm-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:16px;padding:38px 24px;text-align:center}
 .tm-empty-ic{width:60px;height:60px;border-radius:16px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff2e8,#ffe2cc);color:var(--b)}
 .tm-empty h3{font-size:15px;margin:0 0 7px}.tm-empty p{color:#64748b;font-size:12px;max-width:400px;margin:0 auto;line-height:1.7}
+.tm-inv-new{background:#fff;border:1px solid #eceef1;border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.tm-inv-h{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin-bottom:8px}
+.tm-inv-desc{font-size:12px;color:#64748b;line-height:1.7;margin:0 0 14px}
+.tm-inv-list{display:flex;flex-direction:column;gap:10px}
+.tm-inv-card{background:#fff;border:1px solid #eceef1;border-radius:14px;padding:13px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.tm-inv-top{display:flex;align-items:center;gap:11px;margin-bottom:8px}
+.tm-inv-av{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#0e1622,#334155);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex:none}
+.tm-inv-name{font-size:13.5px;font-weight:800;color:#0f172a}.tm-inv-name small{color:#94a3b8;font-weight:600;margin-inline-start:6px;font-size:11px}
+.tm-inv-st{display:flex;align-items:center;gap:7px;margin-top:4px;flex-wrap:wrap}
+.tm-inv-badge{font-size:10.5px;font-weight:800;color:#94a3b8;background:#f4f5f7;padding:2px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:4px}
+.tm-inv-badge.done{background:#e7f7ef;color:#087443}
+.tm-inv-tagx{font-size:10px;font-weight:700;color:#b54708;background:#fff2e8;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:3px}
+.tm-inv-act{display:flex;gap:7px;border-top:1px solid #f6f7f9;padding-top:9px;flex-wrap:wrap}
+.tm-inv-act button{display:inline-flex;align-items:center;justify-content:center;gap:5px;background:#f4f5f7;border:none;border-radius:9px;padding:7px 12px;font-family:inherit;font-size:11.5px;font-weight:700;color:#475569;cursor:pointer}
+.tm-inv-act button.imp{flex:1;background:linear-gradient(135deg,#12b76a,#087443);color:#fff}
+.tm-inv-act button.del{margin-inline-start:auto;color:#b42318;background:#feecea;width:34px;padding:7px}
+.tm-inv-imp{flex:1;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:#087443;background:#e7f7ef;border-radius:9px;padding:7px 12px}
 @media(max-width:900px){
   .tm-assess{grid-template-columns:1fr}
   .tm-side{position:static}

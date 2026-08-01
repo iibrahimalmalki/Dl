@@ -6,6 +6,7 @@ import EmployeePage from"./EmployeePage";
 import RecruitmentAd from"./RecruitmentAd";
 const ApplicantForm=lazy(()=>import("./ApplicantForm"));
 const InterviewPage=lazy(()=>import("./InterviewPage"));
+const TMAQuestionnaire=lazy(()=>import("./TMAQuestionnaire"));
 const Shell=lazy(()=>import("./Shell"));
 const BikerPortal=lazy(()=>import("./BikerPortal"));
 const Spin=()=><div style={{minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:40,height:40,border:"3px solid #fed7aa",borderTopColor:"#E8712B",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/></div>;
@@ -30,9 +31,11 @@ function App(){
   const[me,setMe]=useState(null);       // صف app_users للمستخدم الحالي (is_owner…)
   const urlParams=new URLSearchParams(window.location.search);
   const sessionId=urlParams.get("interview");
+  const tmaToken=urlParams.get("tma");
   const directApply=urlParams.get("apply");
   const employeeEditId=urlParams.get("employee");
   useEffect(()=>{
+    if(tmaToken){setPage("tma");return;}
     if(sessionId){setPage("interview");return;}
     if(directApply){setPage("ad");return;}
     if(employeeEditId){setPage("employee");return;}
@@ -70,6 +73,7 @@ function App(){
     {page==="recruit"&&<ApplicantForm onBack={()=>setPage("ad")}/>}
     {page==="employee"&&<EmployeePage onBack={()=>setPage("landing")} employeeId={employeeEditId}/>}
     {page==="interview"&&sessionId&&<InterviewPage sessionId={sessionId}/>}
+    {page==="tma"&&tmaToken&&<TMAQuestionnaire token={tmaToken}/>}
     {page==="admin"&&adminView()}
   </Suspense>);
 }

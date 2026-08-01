@@ -2,6 +2,7 @@ import{useState,useEffect,useMemo}from"react";
 import{supabase,SITE_URL}from"./supabase";
 import Icon from"./Icon";
 import{completeness,topTalents}from"./tma";
+const tmaQLink=id=>`${SITE_URL}?tma=${id}`;
 
 const waNum=raw=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
 const STATUS={pending:{ar:"بانتظار الإجابة",color:"#b54708",bg:"#fef3e2"},completed:{ar:"مكتملة",color:"#087443",bg:"#e7f7ef"}};
@@ -15,6 +16,7 @@ export default function Interviews({owner,onOpenTMA}){
   const[ev,setEv]=useState({rating:"",decision:"",note:""});
   const[msg,setMsg]=useState(null);const[saving,setSaving]=useState(false);
   const[tmaMap,setTmaMap]=useState({}); // interview_id -> tma profile (owner only)
+  const[qMap,setQMap]=useState({});     // interview_id -> tma questionnaire invite (owner only)
 
   const load=async()=>{
     setLoading(true);
@@ -23,12 +25,26 @@ export default function Interviews({owner,onOpenTMA}){
     if(owner){
       const{data:tm}=await supabase.from("tma_assessments").select("id,interview_id,applicant_id,subject_name,scores").not("interview_id","is",null);
       const m={};(tm||[]).forEach(t=>{if(t.interview_id)m[t.interview_id]=t;});setTmaMap(m);
+      const{data:iv}=await supabase.from("tma_invites").select("id,interview_id,status,answers").not("interview_id","is",null);
+      const qm={};(iv||[]).forEach(t=>{if(t.interview_id)qm[t.interview_id]=t;});setQMap(qm);
     }
     setLoading(false);
   };
   useEffect(()=>{load();},[owner]);
 
   const openTMA=(r)=>{onOpenTMA&&onOpenTMA({name:r.applicants?.full_name||"",role:"مرشّح للتوظيف",interview_id:r.id,applicant_id:r.applicants?.id||null,source:"interview"});};
+  const sendQ=async(r)=>{
+    setMsg(null);
+    try{
+      let inv=qMap[r.id];
+      if(!inv){
+        const{data,error}=await supabase.from("tma_invites").insert({subject_name:r.applicants?.full_name||"",subject_role:"مرشّح للتوظيف",interview_id:r.id,applicant_id:r.applicants?.id||null}).select().single();
+        if(error)throw error;inv=data;setQMap(p=>({...p,[r.id]:data}));
+      }
+      const t=`السلام عليكم ${r.applicants?.full_name||""}،\nنرجو تعبئة استبيان المواهب عبر الرابط:\n${tmaQLink(inv.id)}\n\nদয়া করে এই লিংকে ব্যক্তিত্ব প্রশ্নাবলী পূরণ করুন।`;
+      window.open(`https://wa.me/${waNum(r.applicants?.whatsapp)}?text=${encodeURIComponent(t)}`);
+    }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
+  };
 
   const open=(r)=>{setSel(r);setEv({rating:r.rating??"",decision:r.decision||"",note:r.note||""});setMsg(null);};
   const saveEv=async()=>{
@@ -101,8 +117,10 @@ export default function Interviews({owner,onOpenTMA}){
               {tt.length>0&&<div className="iv-tma-tags">{tt.map((x,i)=><span key={i} className={"iv-tma-tag "+(x.talent.side==="a"?"a":"b")}>{x.talent.n}</span>)}</div>}
               <button className="iv-btn tma" onClick={()=>openTMA(sel)}><Icon n="edit" s={14}/> فتح ملف المواهب</button>
             </>:<>
-              <p className="iv-tma-hint">قيّم المرشّح على نموذج المواهب TMA (22 محركاً) لدعم قرار التوظيف. الملف يُربط بهذه المقابلة تلقائياً.</p>
-              <button className="iv-btn tma" onClick={()=>openTMA(sel)}><Icon n="tma" s={14}/> إنشاء ملف مواهب للمرشّح</button>
+              <p className="iv-tma-hint">إمّا أن يعبّئ المرشّح استبيان المواهب بنفسه (تقييم ذاتي، عربي + بنغالي)، أو تقيّمه أنت يدوياً على المحاور الـ22. الملف يُربط بهذه المقابلة تلقائياً.</p>
+              {(()=>{const q=qMap[sel.id];return q?<div className="iv-tma-qst">{q.status==="completed"?<span className="iv-tma-qdone"><Icon n="check" s={12}/> عبّأ المرشّح الاستبيان — استورد النتائج من وحدة المواهب</span>:<span className="iv-tma-qwait"><Icon n="clock" s={12}/> أُرسل الاستبيان — بانتظار إجابة المرشّح</span>}</div>:null;})()}
+              {sel.applicants?.whatsapp&&<button className="iv-btn qsend" onClick={()=>sendQ(sel)}><Icon n="phone" s={14}/> {qMap[sel.id]?"إعادة إرسال الاستبيان":"إرسال استبيان المواهب (واتساب)"}</button>}
+              <button className="iv-btn tma" onClick={()=>openTMA(sel)}><Icon n="tma" s={14}/> تقييم يدوي للمرشّح</button>
             </>}
           </div>);})()}
       </>}
@@ -171,6 +189,10 @@ const CSS=`
 .iv-tma-tag{font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px}
 .iv-tma-tag.a{background:#fef4ec;color:#b54708}.iv-tma-tag.b{background:#eef4ff;color:#1d5bbf}
 .iv-tma-hint{font-size:12px;color:#64748b;line-height:1.6;margin:0 0 12px}
+.iv-btn.qsend{width:100%;justify-content:center;background:linear-gradient(135deg,#12b76a,#087443);color:#fff;margin-bottom:8px}
+.iv-tma-qst{margin-bottom:10px}
+.iv-tma-qdone{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:#087443;background:#e7f7ef;border-radius:9px;padding:7px 11px}
+.iv-tma-qwait{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:#b54708;background:#fef3e2;border-radius:9px;padding:7px 11px}
 .iv-sec-h{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin:6px 0 10px}
 .iv-sec-h span{color:#94a3b8;font-weight:600;font-size:12px}
 .iv-empty2{color:#94a3b8;font-size:12.5px;text-align:center;padding:20px;background:#fff;border:1px solid #eceef1;border-radius:12px}
