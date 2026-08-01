@@ -11,6 +11,7 @@ const Performance=lazy(()=>import("./Performance"));
 const FieldRounds=lazy(()=>import("./FieldRounds"));
 const Onboarding=lazy(()=>import("./Onboarding"));
 const Interviews=lazy(()=>import("./Interviews"));
+const TMA=lazy(()=>import("./TMA"));
 
 const NAV=[
   {g:"الرئيسية"},
@@ -32,7 +33,7 @@ const NAV=[
   {k:"users",ar:"المستخدمون",ic:"users"},
   {k:"tma",ar:"المواهب TMA",ic:"tma",lock:1},
 ];
-const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],users:["المستخدمون","الحسابات والصلاحيات"]};
+const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"]};
 
 export default function Shell({onLogout,me}){
   const[view,setView]=useState("dashboard");
@@ -53,7 +54,7 @@ export default function Shell({onLogout,me}){
       <div className="sh-brand"><div className="sh-logo"><Icon n="bucket" s={22}/></div><div><b>دلو ورغوة</b><span>منصّة إدارة العمليات</span></div></div>
       <nav className="sh-nav">
         {nav.map((n,i)=>n.g?<div className="sh-navlbl" key={i}>{n.g}</div>:
-          <div key={n.k} className={"sh-item"+(view===n.k?" on":"")} onClick={()=>n.lock?null:go(n.k)}>
+          <div key={n.k} className={"sh-item"+(view===n.k?" on":"")} onClick={()=>go(n.k)}>
             <span className="sh-ic"><Icon n={n.ic} s={18}/></span>{n.ar}
             {n.lock&&<span className="sh-lock"><Icon n="lock" s={13}/></span>}{n.soon&&<span className="sh-soon">قريباً</span>}
           </div>)}
@@ -91,6 +92,7 @@ export default function Shell({onLogout,me}){
         {view==="field_rounds"&&<Suspense fallback={<Sk/>}><FieldRounds opId={op}/></Suspense>}
         {view==="onboarding"&&<Suspense fallback={<Sk/>}><Onboarding opId={op}/></Suspense>}
         {view==="interviews"&&<Suspense fallback={<Sk/>}><Interviews/></Suspense>}
+        {view==="tma"&&owner&&<Suspense fallback={<Sk/>}><TMA opId={op}/></Suspense>}
         {["vendors"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
       </div>
     </div>
