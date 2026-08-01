@@ -99,8 +99,8 @@ export default function Payroll({opId}){
       // استبدال السطور
       await supabase.from("payroll_lines").delete().eq("run_id",rid);
       const rows=[];
-      computed.bl.forEach((b,i)=>rows.push({run_id:rid,operator_id:opv,employee_id:b.employee_id,role:"biker",name:b.name,biker_id:b.biker_id,level:b.inp.level,inputs:b.inp,computed:b.res,base:b.res.base,net_bonus:b.res.net_bonus,total:b.res.total,sort:i}));
-      rows.push({run_id:rid,operator_id:opv,role:"supervisor",name:sup.name,level:null,inputs:{...sup,auto:supAuto},computed:computed.supRes,base:computed.supRes.base,net_bonus:computed.supRes.net_bonus,total:computed.supRes.total,sort:99});
+      computed.bl.forEach((b,i)=>rows.push({run_id:rid,operator_id:opv,period,employee_id:b.employee_id,role:"biker",name:b.name,biker_id:b.biker_id,level:b.inp.level,inputs:b.inp,computed:b.res,base:b.res.base,net_bonus:b.res.net_bonus,total:b.res.total,sort:i}));
+      rows.push({run_id:rid,operator_id:opv,period,role:"supervisor",name:sup.name,level:null,inputs:{...sup,auto:supAuto},computed:computed.supRes,base:computed.supRes.base,net_bonus:computed.supRes.net_bonus,total:computed.supRes.total,sort:99});
       const{error:e2}=await supabase.from("payroll_lines").insert(rows);if(e2)throw e2;
       if(approve)setStatus("approved");
       setMsg({ok:true,t:approve?"تم اعتماد المسير":"تم حفظ المسير"});

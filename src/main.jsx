@@ -7,6 +7,7 @@ import RecruitmentAd from"./RecruitmentAd";
 const ApplicantForm=lazy(()=>import("./ApplicantForm"));
 const InterviewPage=lazy(()=>import("./InterviewPage"));
 const Shell=lazy(()=>import("./Shell"));
+const BikerPortal=lazy(()=>import("./BikerPortal"));
 const Spin=()=><div style={{minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:40,height:40,border:"3px solid #fed7aa",borderTopColor:"#E8712B",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/></div>;
 
 // ═══ تسجيل الدخول عبر Supabase Auth (بريد + كلمة مرور) — استبدل كلمة المرور المكتوبة ═══
@@ -49,7 +50,7 @@ function App(){
   // تحميل هوية المستخدم (مالك/صلاحيات) عند وجود جلسة
   useEffect(()=>{
     if(!session){setMe(null);return;}
-    supabase.from("app_users").select("is_owner,display_name,active").eq("id",session.user.id).maybeSingle()
+    supabase.from("app_users").select("is_owner,display_name,active,biker_employee_id").eq("id",session.user.id).maybeSingle()
       .then(({data})=>setMe(data||{is_owner:false,active:true}));
   },[session]);
   const logout=async()=>{await supabase.auth.signOut();setPage("landing");window.location.hash="";};
@@ -57,6 +58,9 @@ function App(){
   const adminView=()=>{
     if(!authReady)return <Spin/>;
     if(!session)return <Login/>;
+    if(!me)return <Spin/>;
+    // البايكر (له رقم سويتر وليس مالكاً) → بوابته الخاصة؛ غير ذلك → لوحة الإدارة
+    if(!me.is_owner&&me.biker_employee_id)return <BikerPortal me={me} onLogout={logout}/>;
     return <Shell onLogout={logout} me={me}/>;
   };
 
