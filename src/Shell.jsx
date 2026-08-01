@@ -98,7 +98,7 @@ export default function Shell({onLogout,me}){
         {view==="onboarding"&&<Suspense fallback={<Sk/>}><Onboarding opId={op}/></Suspense>}
         {view==="interviews"&&<Suspense fallback={<Sk/>}><Interviews owner={owner} onOpenTMA={owner?(t=>{setTmaTarget(t);go("tma");}):undefined}/></Suspense>}
         {view==="sourcing"&&<Suspense fallback={<Sk/>}><Sourcing/></Suspense>}
-        {view==="org"&&<Suspense fallback={<Sk/>}><OrgStructure/></Suspense>}
+        {view==="org"&&<Suspense fallback={<Sk/>}><OrgStructure owner={owner} opId={op}/></Suspense>}
         {view==="tma"&&owner&&<Suspense fallback={<Sk/>}><TMA opId={op} target={tmaTarget} onTargetDone={()=>setTmaTarget(null)}/></Suspense>}
         {["vendors"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
       </div>

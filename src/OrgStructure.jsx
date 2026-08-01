@@ -1,5 +1,7 @@
-import{useState}from"react";
+import{useState,useEffect,useMemo}from"react";
+import{supabase}from"./supabase";
 import Icon from"./Icon";
+import{POSITIONS,POS_BY_KEY,SUPERVISOR_POSITIONS,TEAM_MAX_MEMBERS,SUP_MAX_TEAMS,permsRows,grantedModules}from"./orgRoles";
 
 // ═══ بيانات الهيكل التنظيمي — مؤسسة دلو ورغوة (SSP-ID47) ═══
 const SC={
@@ -105,11 +107,25 @@ const NOTES=[
 
 function Badge({k,txt}){const a=AB[k]||AB.i;return <span className="or-badge" style={{color:a.c,background:a.bg,borderColor:a.bd}}>{txt}</span>;}
 
-export default function OrgStructure(){
+export default function OrgStructure({owner,opId}){
   const[tab,setTab]=useState("chart");
   const[open,setOpen]=useState({});     // dept id -> bool (detail cards)
   const[ctab,setCtab]=useState({});     // dept id -> inner tab key
+  const[users,setUsers]=useState([]);const[emps,setEmps]=useState([]);const[teams,setTeams]=useState([]);
   const jump=id=>{setTab("detail");setOpen(p=>({...p,[id]:true}));setCtab(p=>({...p,[id]:p[id]||"main"}));setTimeout(()=>{const el=document.getElementById("or-"+id);el&&el.scrollIntoView({behavior:"smooth",block:"start"});},60);};
+
+  const reload=async()=>{
+    if(!owner)return;
+    const{data:us}=await supabase.from("app_users").select("id,display_name,email,is_owner,active,position,biker_employee_id").order("display_name");
+    setUsers(us||[]);
+    const{data:e}=await supabase.from("employees").select("id,full_name,employee_id,team_id").order("full_name");
+    setEmps(e||[]);
+    const{data:tm}=await supabase.from("teams").select("*").order("created_at");
+    setTeams(tm||[]);
+  };
+  useEffect(()=>{reload();/*eslint-disable-next-line*/},[owner]);
+
+  const holders=useMemo(()=>{const m={};users.forEach(u=>{if(u.position){(m[u.position]=m[u.position]||[]).push(u);}});return m;},[users]);
 
   return(<div className="or">
     <style>{CSS}</style>
@@ -117,36 +133,42 @@ export default function OrgStructure(){
       <button className={tab==="chart"?"on":""} onClick={()=>setTab("chart")}><Icon n="chart" s={15}/> الهيكل</button>
       <button className={tab==="detail"?"on":""} onClick={()=>setTab("detail")}><Icon n="doc" s={15}/> الإدارات والمهام</button>
       <button className={tab==="matrix"?"on":""} onClick={()=>setTab("matrix")}><Icon n="key" s={15}/> الصلاحيات والتصعيد</button>
+      {owner&&<button className={tab==="appoint"?"on":""} onClick={()=>setTab("appoint")}><Icon n="id" s={15}/> التعيينات</button>}
+      {owner&&<button className={tab==="teams"?"on":""} onClick={()=>setTab("teams")}><Icon n="bike" s={15}/> الفرق</button>}
     </div>
 
-    {tab==="chart"&&<Chart onJump={jump}/>}
+    {tab==="chart"&&<Chart onJump={jump} holders={holders}/>}
     {tab==="detail"&&<Detail open={open} setOpen={setOpen} ctab={ctab} setCtab={setCtab}/>}
     {tab==="matrix"&&<Matrix/>}
+    {tab==="appoint"&&owner&&<AppointView users={users} opId={opId} reload={reload}/>}
+    {tab==="teams"&&owner&&<TeamsView users={users} emps={emps} teams={teams} opId={opId} reload={reload}/>}
   </div>);
 }
 
-function Chart({onJump}){
+function Chart({onJump,holders}){
+  const hn=k=>{const a=holders&&holders[k];return a&&a.length?a[0].display_name+(a.length>1?` +${a.length-1}`:""):null;};
   return(<div className="or-chart">
     <div className="or-ceo"><div className="or-ceo-badge">OWNER · CEO</div><div className="or-ceo-t">المالك / الرئيس التنفيذي</div><div className="or-ceo-s">إبراهيم المالكي · القرار النهائي في كل شيء</div></div>
     <div className="or-conn"/>
     <div className="or-asst"><div className="or-asst-b">EXECUTIVE ASSISTANT</div><div className="or-asst-t">مساعد المدير التنفيذي</div><div className="or-asst-s">متابعة القطاعات الثلاثة</div><span className="or-asst-tag">قيد التأهيل — تحت إشراف الرئيس التنفيذي</span></div>
     <div className="or-conn"/>
     <div className="or-sectors">
-      {SECTORS.map(s=>{const c=SC[s.key];return(
+      {SECTORS.map(s=>{const c=SC[s.key];const sh=hn("sec_"+s.key);return(
         <div className="or-sec" key={s.key}>
           <div className="or-sec-h" style={{background:c.tint,borderColor:c.bd}}>
             <div className="or-sec-badge" style={{color:c.head}}>{c.badge}</div>
             <div className="or-sec-t" style={{color:c.head}}>{s.ar}</div>
             <div className="or-sec-head">{s.head}</div>
+            {sh?<div className="or-holder" style={{color:c.head}}><Icon n="check" s={11}/> {sh}</div>:<div className="or-holder vac">شاغر</div>}
           </div>
           <div className="or-sec-bar" style={{background:c.bar}}/>
           <div className="or-depts">
-            {s.depts.map(d=>(
+            {s.depts.map(d=>{const dh=hn(d.id);return(
               <div className="or-dept" key={d.id} style={{borderInlineStartColor:c.bar}} onClick={()=>onJump(d.id)}>
                 <span className="or-dept-ic" style={{background:c.tint,color:c.head}}><Icon n={d.ic} s={15}/></span>
-                <div style={{flex:1,minWidth:0}}><div className="or-dept-t">{d.ar}</div><div className="or-dept-s">{d.staff}</div></div>
+                <div style={{flex:1,minWidth:0}}><div className="or-dept-t">{d.ar}</div><div className="or-dept-s">{dh?<span className="or-dh"><Icon n="check" s={10}/> {dh}</span>:d.staff}</div></div>
                 <span className="or-dept-go"><Icon n="fwd" s={13}/></span>
-              </div>))}
+              </div>);})}
           </div>
         </div>);})}
     </div>
@@ -212,6 +234,141 @@ function Matrix(){
         <tbody>{EXT.map((r,i)=>(<tr key={i}><td className="or-dec">{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td className="or-constraint">{r[3]}</td></tr>))}</tbody>
       </table></div>
     </div>
+  </div>);
+}
+
+const SEC_AR={ops:"قطاع العمليات",strat:"قطاع الاستراتيجية والتطوير",sup:"قطاع الخدمات المساندة"};
+
+// ═══ التعيينات: ربط المستخدمين بالمناصب + منح الصلاحيات وفق الهيكل ═══
+function AppointView({users,opId,reload}){
+  const[sel,setSel]=useState({});   // posKey -> userId (اختيار مؤقت)
+  const[busy,setBusy]=useState(false);const[msg,setMsg]=useState(null);
+  const cand=users.filter(u=>!u.is_owner&&u.active);
+
+  const syncPerms=async(userId,posKey)=>{
+    await supabase.from("user_permissions").delete().eq("user_id",userId);
+    const rows=permsRows(posKey).map(r=>({...r,user_id:userId}));
+    if(rows.length)await supabase.from("user_permissions").insert(rows);
+  };
+  const assign=async(posKey)=>{
+    const uid=sel[posKey];if(!uid){setMsg({ok:false,t:"اختر مستخدماً"});return;}
+    setBusy(true);setMsg(null);
+    try{
+      const p=POS_BY_KEY[posKey];
+      const parentHolder=p.parent?users.find(u=>u.position===p.parent):null;
+      const{error}=await supabase.from("app_users").update({position:posKey,reports_to:parentHolder?parentHolder.id:null}).eq("id",uid);
+      if(error)throw error;
+      await syncPerms(uid,posKey);
+      setMsg({ok:true,t:"تم التعيين ومنح صلاحيات المنصب"});setSel(s=>({...s,[posKey]:""}));await reload();
+    }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
+    setBusy(false);
+  };
+  const unassign=async(u)=>{
+    if(!confirm("إلغاء تعيين «"+u.display_name+"» وسحب صلاحيات المنصب؟"))return;
+    setBusy(true);setMsg(null);
+    try{
+      await supabase.from("app_users").update({position:null,reports_to:null}).eq("id",u.id);
+      await supabase.from("user_permissions").delete().eq("user_id",u.id);
+      setMsg({ok:true,t:"أُلغي التعيين وسُحبت الصلاحيات"});await reload();
+    }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
+    setBusy(false);
+  };
+  const resync=async(u)=>{setBusy(true);setMsg(null);try{await syncPerms(u.id,u.position);setMsg({ok:true,t:"أُعيدت مزامنة الصلاحيات مع الهيكل"});await reload();}catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}setBusy(false);};
+
+  const bySec={};POSITIONS.forEach(p=>{(bySec[p.sector]=bySec[p.sector]||[]).push(p);});
+
+  return(<div className="or-ap">
+    <div className="or-apnote"><Icon n="lock" s={13}/> التعيين يمنح المستخدم صلاحيات منصبه آلياً وفق الهيكل. «المواهب» و«المستخدمون» تبقيان مقصورتين عليك ولا تُمنحان لأي منصب.</div>
+    {cand.length===0&&<div className="or-apwarn"><Icon n="alert" s={13}/> لا مستخدمين قابلين للتعيين بعد — أنشئ حسابات الموظفين من وحدة «المستخدمون» أولاً، ثم عيّنهم هنا.</div>}
+    {msg&&<div className={"or-apmsg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
+
+    {["ops","strat","sup"].map(sk=>{const c=SC[sk];return(
+      <div key={sk}>
+        <div className="or-slabel" style={{color:c.head}}>▸ {SEC_AR[sk]}<i style={{background:c.bd}}/></div>
+        {bySec[sk].map(p=>{const hs=users.filter(u=>u.position===p.k);const gm=grantedModules(p.k);return(
+          <div className="or-poscard" key={p.k}>
+            <div className="or-pos-h">
+              <div><b>{p.ar}</b><span className="or-pos-lvl" style={{background:c.tint,color:c.head}}>{p.level}</span></div>
+            </div>
+            <div className="or-holders">
+              {hs.length===0?<span className="or-vac">— لا مُعيَّن —</span>:hs.map(u=>(
+                <span className="or-hchip" key={u.id}><Icon n="id" s={11}/> {u.display_name}<button onClick={()=>unassign(u)} title="إلغاء التعيين"><Icon n="x" s={11}/></button><button className="or-resync" onClick={()=>resync(u)} title="إعادة مزامنة الصلاحيات"><Icon n="refresh" s={11}/></button></span>))}
+            </div>
+            <div className="or-assign">
+              <select value={sel[p.k]||""} onChange={e=>setSel(s=>({...s,[p.k]:e.target.value}))}>
+                <option value="">تعيين مستخدم…</option>
+                {cand.map(u=><option key={u.id} value={u.id}>{u.display_name}{u.position?` (${POS_BY_KEY[u.position]?.ar||u.position})`:""}</option>)}
+              </select>
+              <button onClick={()=>assign(p.k)} disabled={busy||!sel[p.k]}><Icon n="check" s={13}/> تعيين</button>
+            </div>
+            <div className="or-gm"><span className="or-gm-l">الصلاحيات:</span>{gm.map(g=><span key={g.module} className={"or-gmb"+(g.edit?" e":"")}>{g.label}{g.edit&&<i>✎</i>}</span>)}</div>
+          </div>);})}
+      </div>);})}
+  </div>);
+}
+
+// ═══ الفرق: توزيع البايكرز تحت المشرفين (7/فريق · 3 فرق/مشرف) ═══
+function TeamsView({users,emps,teams,reload}){
+  const[name,setName]=useState("");const[supId,setSupId]=useState("");const[leaderId,setLeaderId]=useState("");
+  const[addSel,setAddSel]=useState({});const[busy,setBusy]=useState(false);const[msg,setMsg]=useState(null);
+  const sups=users.filter(u=>u.active&&SUPERVISOR_POSITIONS.includes(u.position));
+  const unassigned=emps.filter(e=>!e.team_id);
+  const teamCountBySup=id=>teams.filter(t=>t.supervisor_user_id===id).length;
+
+  const create=async()=>{
+    if(!name.trim()){setMsg({ok:false,t:"أدخل اسم الفريق"});return;}
+    if(supId&&teamCountBySup(supId)>=SUP_MAX_TEAMS){setMsg({ok:false,t:`المشرف يقود ${SUP_MAX_TEAMS} فرق كحدّ أقصى`});return;}
+    setBusy(true);setMsg(null);
+    try{
+      const{error}=await supabase.from("teams").insert({name:name.trim(),supervisor_user_id:supId||null,leader_employee_id:leaderId||null});
+      if(error)throw error;
+      setName("");setSupId("");setLeaderId("");setMsg({ok:true,t:"تم إنشاء الفريق"});await reload();
+    }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
+    setBusy(false);
+  };
+  const addMember=async(team)=>{
+    const eid=addSel[team.id];if(!eid)return;
+    const count=emps.filter(e=>e.team_id===team.id).length;
+    if(count>=TEAM_MAX_MEMBERS){setMsg({ok:false,t:`الفريق مكتمل (${TEAM_MAX_MEMBERS} بايكرز)`});return;}
+    setBusy(true);setMsg(null);
+    try{await supabase.from("employees").update({team_id:team.id}).eq("id",eid);setAddSel(s=>({...s,[team.id]:""}));await reload();}
+    catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
+    setBusy(false);
+  };
+  const removeMember=async(e)=>{setBusy(true);try{await supabase.from("employees").update({team_id:null}).eq("id",e.id);await reload();}catch(x){setMsg({ok:false,t:"خطأ: "+(x.message||x)});}setBusy(false);};
+  const delTeam=async(t)=>{if(!confirm("حذف فريق «"+t.name+"»؟ سيُفصل أعضاؤه."))return;setBusy(true);try{await supabase.from("employees").update({team_id:null}).eq("team_id",t.id);await supabase.from("teams").delete().eq("id",t.id);await reload();}catch(x){setMsg({ok:false,t:"خطأ: "+(x.message||x)});}setBusy(false);};
+  const empName=id=>emps.find(e=>e.id===id)?.full_name||"—";
+
+  return(<div className="or-tm">
+    <div className="or-tmnote"><Icon n="bike" s={13}/> نظام الفرق: كل فريق ≤ {TEAM_MAX_MEMBERS} بايكرز بقيادة قائد فريق، والمشرف الميداني يقود ≤ {SUP_MAX_TEAMS} فرق. المشرفون يُسحبون من التعيينات (مدير العمليات · مدير التشغيل · المشرف الميداني).</div>
+    {sups.length===0&&<div className="or-apwarn"><Icon n="alert" s={13}/> لا مشرفون مُعيَّنون بعد — عيّن مشرفاً ميدانياً من تبويب «التعيينات» ليظهر هنا.</div>}
+    {msg&&<div className={"or-apmsg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
+
+    <div className="or-tmnew">
+      <div className="or-tmnew-h"><Icon n="plus" s={14}/> فريق جديد</div>
+      <div className="or-tmnew-g">
+        <input value={name} onChange={e=>setName(e.target.value)} placeholder="اسم الفريق (مثل: فريق شمال الرياض)"/>
+        <select value={supId} onChange={e=>setSupId(e.target.value)}><option value="">المشرف…</option>{sups.map(u=><option key={u.id} value={u.id} disabled={teamCountBySup(u.id)>=SUP_MAX_TEAMS}>{u.display_name}{teamCountBySup(u.id)>=SUP_MAX_TEAMS?" (مكتمل)":` (${teamCountBySup(u.id)}/${SUP_MAX_TEAMS})`}</option>)}</select>
+        <select value={leaderId} onChange={e=>setLeaderId(e.target.value)}><option value="">قائد الفريق…</option>{emps.map(e=><option key={e.id} value={e.id}>{e.full_name}</option>)}</select>
+        <button onClick={create} disabled={busy}><Icon n="check" s={13}/> إنشاء</button>
+      </div>
+    </div>
+
+    <div className="or-tmstat"><span><b>{teams.length}</b> فرق</span><span><b>{emps.length-unassigned.length}</b> مُوزَّع</span><span><b>{unassigned.length}</b> بلا فريق</span></div>
+
+    {teams.length===0?<div className="or-empty"><Icon n="bike" s={26}/><p>لا فرق بعد — أنشئ أول فريق أعلاه ووزّع البايكرز تحته.</p></div>:
+    <div className="or-tmlist">{teams.map(t=>{const mem=emps.filter(e=>e.team_id===t.id);const full=mem.length>=TEAM_MAX_MEMBERS;const sup=users.find(u=>u.id===t.supervisor_user_id);return(
+      <div className="or-tmcard" key={t.id}>
+        <div className="or-tmc-h">
+          <div><b>{t.name}</b><div className="or-tmc-meta"><span><Icon n="eye" s={11}/> مشرف: {sup?sup.display_name:"—"}</span><span><Icon n="star" s={11}/> قائد: {empName(t.leader_employee_id)}</span></div></div>
+          <div className="or-tmc-r"><span className={"or-tmc-cnt"+(full?" full":"")}>{mem.length}/{TEAM_MAX_MEMBERS}</span><button className="or-tmc-del" onClick={()=>delTeam(t)}><Icon n="trash" s={13}/></button></div>
+        </div>
+        <div className="or-tmc-mem">{mem.length===0?<span className="or-vac">لا أعضاء بعد</span>:mem.map(e=><span className="or-memchip" key={e.id}>{e.full_name}{t.leader_employee_id===e.id&&<i className="or-lead">قائد</i>}<button onClick={()=>removeMember(e)}><Icon n="x" s={10}/></button></span>)}</div>
+        <div className="or-tmc-add">
+          <select value={addSel[t.id]||""} onChange={e=>setAddSel(s=>({...s,[t.id]:e.target.value}))} disabled={full}><option value="">{full?"الفريق مكتمل":"إضافة بايكر…"}</option>{unassigned.map(e=><option key={e.id} value={e.id}>{e.full_name}</option>)}</select>
+          <button onClick={()=>addMember(t)} disabled={busy||full||!addSel[t.id]}><Icon n="plus" s={13}/> إضافة</button>
+        </div>
+      </div>);})}</div>}
   </div>);
 }
 
@@ -293,7 +450,64 @@ const CSS=`
 .or-esc-node strong{display:block;color:#0f172a;font-size:11.5px;font-weight:800}
 .or-esc-node span{font-size:9.5px;color:#94a3b8}
 .or-esc-arrow{color:#cbd5e1;display:flex}
+.or-holder{font-size:10px;font-weight:800;margin-top:5px;display:inline-flex;align-items:center;gap:4px}
+.or-holder.vac{color:#cbd5e1}
+.or-dh{display:inline-flex;align-items:center;gap:3px;color:#087443;font-weight:800}
+/* appointments */
+.or-apnote{display:flex;align-items:flex-start;gap:7px;background:#f6f2ff;border:1px solid #e3d9fb;color:#6d4bcb;font-size:11.5px;font-weight:700;border-radius:11px;padding:9px 12px;margin-bottom:12px;line-height:1.6}
+.or-apwarn{display:flex;align-items:flex-start;gap:7px;background:#fffbeb;border:1px solid #fde9c8;color:#92600e;font-size:11.5px;font-weight:700;border-radius:11px;padding:9px 12px;margin-bottom:12px;line-height:1.6}
+.or-apmsg{padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:700;margin-bottom:12px}
+.or-apmsg.ok{background:#e7f7ef;color:#087443}.or-apmsg.err{background:#feecea;color:#b42318}
+.or-poscard{background:#fff;border:1px solid #eceef1;border-radius:13px;padding:13px 15px;margin-bottom:10px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.or-pos-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.or-pos-h b{font-size:13px;font-weight:800}
+.or-pos-lvl{font-size:10px;font-weight:800;padding:2px 9px;border-radius:20px;margin-inline-start:8px}
+.or-holders{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.or-vac{font-size:11.5px;color:#94a3b8;font-weight:600}
+.or-hchip{display:inline-flex;align-items:center;gap:5px;background:#e7f7ef;color:#087443;border:1px solid #b7e4cd;border-radius:20px;padding:3px 6px 3px 10px;font-size:11.5px;font-weight:800}
+.or-hchip button{border:none;background:#fff;color:#b42318;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.or-hchip button.or-resync{color:#1d5bbf}
+.or-assign{display:flex;gap:8px;margin-bottom:10px}
+.or-assign select{flex:1;border:1px solid #e6e9ee;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:12.5px;font-weight:600;outline:none;background:#fff}
+.or-assign button{display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#E8712B,#f5a35f);border:none;border-radius:10px;padding:0 15px;color:#fff;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.or-assign button:disabled{opacity:.5}
+.or-gm{display:flex;flex-wrap:wrap;align-items:center;gap:5px;border-top:1px solid #f4f5f7;padding-top:9px}
+.or-gm-l{font-size:10.5px;color:#94a3b8;font-weight:700;margin-inline-end:2px}
+.or-gmb{font-size:10.5px;font-weight:700;color:#475569;background:#f4f5f7;border-radius:6px;padding:2px 8px;display:inline-flex;align-items:center;gap:3px}
+.or-gmb.e{background:#fff2e8;color:#b54708}.or-gmb i{font-style:normal;font-size:9px}
+/* teams */
+.or-tmnote{display:flex;align-items:flex-start;gap:7px;background:#eef4ff;border:1px solid #d5e3fb;color:#1d5bbf;font-size:11.5px;font-weight:700;border-radius:11px;padding:9px 12px;margin-bottom:12px;line-height:1.7}
+.or-tmnew{background:#fff;border:1px solid #eceef1;border-radius:13px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.or-tmnew-h{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;margin-bottom:11px}
+.or-tmnew-g{display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:8px}
+.or-tmnew-g input,.or-tmnew-g select{border:1px solid #e6e9ee;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:12.5px;font-weight:600;outline:none;background:#fff;min-width:0}
+.or-tmnew-g button{display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#12b76a,#087443);border:none;border-radius:10px;padding:0 16px;color:#fff;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.or-tmnew-g button:disabled{opacity:.5}
+.or-tmstat{display:flex;gap:18px;padding:0 4px;margin-bottom:12px;font-size:12px;color:#64748b}
+.or-tmstat b{color:#0f172a;font-size:14px}
+.or-tmlist{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
+.or-tmcard{background:#fff;border:1px solid #eceef1;border-radius:13px;padding:13px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.or-tmc-h{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
+.or-tmc-h b{font-size:13.5px;font-weight:800}
+.or-tmc-meta{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.or-tmc-meta span{font-size:10.5px;color:#64748b;display:inline-flex;align-items:center;gap:4px}
+.or-tmc-r{display:flex;align-items:center;gap:7px;flex:none}
+.or-tmc-cnt{font-size:12px;font-weight:800;color:#64748b;background:#f4f5f7;padding:3px 9px;border-radius:20px}
+.or-tmc-cnt.full{background:#e7f7ef;color:#087443}
+.or-tmc-del{border:none;background:#feecea;color:#b42318;width:28px;height:24px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.or-tmc-mem{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;min-height:22px}
+.or-memchip{display:inline-flex;align-items:center;gap:5px;background:#fafbfc;border:1px solid #eceef1;border-radius:20px;padding:3px 6px 3px 10px;font-size:11px;font-weight:700;color:#334155}
+.or-memchip .or-lead{font-style:normal;font-size:9px;background:#fff2e8;color:#b54708;padding:1px 6px;border-radius:20px;font-weight:800}
+.or-memchip button{border:none;background:#feecea;color:#b42318;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.or-tmc-add{display:flex;gap:7px;border-top:1px solid #f4f5f7;padding-top:9px}
+.or-tmc-add select{flex:1;border:1px solid #e6e9ee;border-radius:9px;padding:7px 10px;font-family:inherit;font-size:11.5px;font-weight:600;outline:none;background:#fff}
+.or-tmc-add button{display:inline-flex;align-items:center;gap:4px;background:#f4f5f7;border:none;border-radius:9px;padding:0 12px;font-family:inherit;font-size:11.5px;font-weight:700;color:#475569;cursor:pointer}
+.or-tmc-add button:disabled{opacity:.5}
+.or-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:14px;padding:34px 20px;text-align:center;color:#94a3b8}
+.or-empty p{font-size:12.5px;margin:10px 0 0}
 @media(max-width:820px){
   .or-sectors{grid-template-columns:1fr}
+  .or-tmnew-g{grid-template-columns:1fr 1fr}
+  .or-tmlist{grid-template-columns:1fr}
 }
 `;
