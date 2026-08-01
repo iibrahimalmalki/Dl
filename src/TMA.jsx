@@ -3,7 +3,7 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{CATS,DRIVES,DRIVE_BY_KEY,TOTAL_DRIVES,TOTAL_TALENTS,interpret,talentOf,completeness,topTalents,categorySummary}from"./tma";
 
-export default function TMA({opId}){
+export default function TMA({opId,target,onTargetDone}){
   const[tab,setTab]=useState("catalog"); // catalog | assess
   const[list,setList]=useState([]);
   const[emps,setEmps]=useState([]);
@@ -15,6 +15,7 @@ export default function TMA({opId}){
   const[role,setRole]=useState("");
   const[scores,setScores]=useState({});
   const[notes,setNotes]=useState("");
+  const[link,setLink]=useState(null); // {interview_id,applicant_id,source}
   const[saving,setSaving]=useState(false);const[msg,setMsg]=useState(null);
   const[openCat,setOpenCat]=useState(CATS[0].k);
 
@@ -28,8 +29,23 @@ export default function TMA({opId}){
     setLoading(false);
   })();},[opId]);
 
-  const reset=()=>{setRecId(null);setName("");setRole("");setScores({});setNotes("");setMsg(null);};
-  const openRec=r=>{setRecId(r.id);setName(r.subject_name||"");setRole(r.subject_role||"");setScores(r.scores||{});setNotes(r.notes||"");setMsg(null);setTab("assess");};
+  // قدوم من شاشة المقابلات: افتح ملف المرشح الموجود أو ابدأ ملفاً جديداً مربوطاً بالمقابلة
+  useEffect(()=>{
+    if(!target||loading)return;
+    const ex=list.find(r=>(target.interview_id&&r.interview_id===target.interview_id)||(target.applicant_id&&r.applicant_id===target.applicant_id));
+    if(ex){openRec(ex);}
+    else{
+      setRecId(null);setScores({});setNotes("");setMsg(null);
+      setName(target.name||"");setRole(target.role||"");
+      setLink({interview_id:target.interview_id||null,applicant_id:target.applicant_id||null,source:target.source||"interview"});
+      setTab("assess");
+    }
+    onTargetDone&&onTargetDone();
+  // eslint-disable-next-line
+  },[target,loading]);
+
+  const reset=()=>{setRecId(null);setName("");setRole("");setScores({});setNotes("");setLink(null);setMsg(null);};
+  const openRec=r=>{setRecId(r.id);setName(r.subject_name||"");setRole(r.subject_role||"");setScores(r.scores||{});setNotes(r.notes||"");setLink(r.interview_id||r.applicant_id?{interview_id:r.interview_id,applicant_id:r.applicant_id,source:r.source}:null);setMsg(null);setTab("assess");};
   const setScore=(k,v)=>setScores(p=>({...p,[k]:Number(v)}));
 
   const comp=useMemo(()=>completeness(scores),[scores]);
@@ -40,7 +56,7 @@ export default function TMA({opId}){
     if(!name.trim()){setMsg({ok:false,t:"أدخل اسم الشخص المُقيَّم"});return;}
     setSaving(true);setMsg(null);
     try{
-      const row={operator_id:(opId&&opId!=="all")?opId:null,subject_name:name.trim(),subject_role:role.trim()||null,scores,notes:notes.trim()||null,updated_at:new Date().toISOString()};
+      const row={operator_id:(opId&&opId!=="all")?opId:null,subject_name:name.trim(),subject_role:role.trim()||null,scores,notes:notes.trim()||null,interview_id:link?.interview_id||null,applicant_id:link?.applicant_id||null,source:link?.source||"manual",updated_at:new Date().toISOString()};
       let saved;
       if(recId){const{data,error}=await supabase.from("tma_assessments").update(row).eq("id",recId).select().single();if(error)throw error;saved=data;}
       else{const{data,error}=await supabase.from("tma_assessments").insert(row).select().single();if(error)throw error;saved=data;setRecId(data.id);}
@@ -76,6 +92,7 @@ export default function TMA({opId}){
           <b>{recId?"تعديل ملف مواهب":"ملف مواهب جديد"}</b>
           {recId&&<button className="tm-new" onClick={reset}><Icon n="plus" s={13}/> جديد</button>}
         </div>
+        {link?.interview_id&&<div className="tm-link"><Icon n="interview" s={13}/> ملف مرتبط بمقابلة مرشّح — جزء من مسار التوظيف.</div>}
         <div className="tm-frow">
           <label className="tm-field"><span>الاسم</span>
             <input list="tm-emps" value={name} onChange={e=>setName(e.target.value)} placeholder="اسم الشخص المُقيَّم"/>
@@ -230,6 +247,7 @@ const CSS=`
 .tm-form-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .tm-form-h b{font-size:14.5px;font-weight:800}
 .tm-new{display:inline-flex;align-items:center;gap:5px;background:#f4f5f7;border:none;border-radius:9px;padding:6px 11px;font-family:inherit;font-size:12px;font-weight:700;color:#64748b;cursor:pointer}
+.tm-link{display:flex;align-items:center;gap:7px;background:#fff2e8;border:1px solid #fbdcc4;color:#b54708;font-size:11.5px;font-weight:700;border-radius:10px;padding:8px 11px;margin-bottom:12px}
 .tm-frow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .tm-field{display:flex;flex-direction:column;gap:5px}
 .tm-field span{font-size:11px;color:#64748b;font-weight:600}

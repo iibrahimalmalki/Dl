@@ -1,25 +1,34 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase,SITE_URL}from"./supabase";
 import Icon from"./Icon";
+import{completeness,topTalents}from"./tma";
 
 const waNum=raw=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
 const STATUS={pending:{ar:"بانتظار الإجابة",color:"#b54708",bg:"#fef3e2"},completed:{ar:"مكتملة",color:"#087443",bg:"#e7f7ef"}};
 const DEC={pass:{ar:"مناسب",color:"#087443",bg:"#e7f7ef",ic:"check"},hold:{ar:"قيد الدراسة",color:"#b54708",bg:"#fef3e2",ic:"clock"},reject:{ar:"غير مناسب",color:"#b42318",bg:"#feecea",ic:"x"}};
 const fmtD=d=>d?new Date(d).toLocaleDateString("en-GB"):"—";
 
-export default function Interviews(){
+export default function Interviews({owner,onOpenTMA}){
   const[loading,setLoading]=useState(true);
   const[rows,setRows]=useState([]);
   const[sel,setSel]=useState(null);
   const[ev,setEv]=useState({rating:"",decision:"",note:""});
   const[msg,setMsg]=useState(null);const[saving,setSaving]=useState(false);
+  const[tmaMap,setTmaMap]=useState({}); // interview_id -> tma profile (owner only)
 
   const load=async()=>{
     setLoading(true);
-    const{data}=await supabase.from("interview_sessions").select("*,applicants(full_name,application_number,whatsapp,ai_score_total,status)").order("created_at",{ascending:false});
-    setRows(data||[]);setLoading(false);
+    const{data}=await supabase.from("interview_sessions").select("*,applicants(id,full_name,application_number,whatsapp,ai_score_total,status)").order("created_at",{ascending:false});
+    setRows(data||[]);
+    if(owner){
+      const{data:tm}=await supabase.from("tma_assessments").select("id,interview_id,applicant_id,subject_name,scores").not("interview_id","is",null);
+      const m={};(tm||[]).forEach(t=>{if(t.interview_id)m[t.interview_id]=t;});setTmaMap(m);
+    }
+    setLoading(false);
   };
-  useEffect(()=>{load();},[]);
+  useEffect(()=>{load();},[owner]);
+
+  const openTMA=(r)=>{onOpenTMA&&onOpenTMA({name:r.applicants?.full_name||"",role:"مرشّح للتوظيف",interview_id:r.id,applicant_id:r.applicants?.id||null,source:"interview"});};
 
   const open=(r)=>{setSel(r);setEv({rating:r.rating??"",decision:r.decision||"",note:r.note||""});setMsg(null);};
   const saveEv=async()=>{
@@ -81,6 +90,22 @@ export default function Interviews(){
         <label className="iv-fld"><span>ملاحظات المقيّم</span><textarea rows={2} value={ev.note} onChange={e=>setEv({...ev,note:e.target.value})} placeholder="انطباع، نقاط قوة/ضعف، توصية…"/></label>
         <button className="iv-save" onClick={saveEv} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":"حفظ التقييم"}</button>
       </div>
+
+      {/* التقييم النفسي — المواهب TMA (المالك فقط) */}
+      {owner&&<>
+        <div className="iv-sec-h"><Icon n="tma" s={16}/> التقييم النفسي — المواهب TMA</div>
+        {(()=>{const t=tmaMap[sel.id];const cp=t?completeness(t.scores||{}):null;const tt=t?topTalents(t.scores||{},4):[];return(
+          <div className="iv-tma">
+            {t?<>
+              <div className="iv-tma-top"><div><b>ملف مواهب موجود</b><small>{cp.done}/22 محرك · {cp.pct}%</small></div><span className="iv-tma-pct">{cp.pct}%</span></div>
+              {tt.length>0&&<div className="iv-tma-tags">{tt.map((x,i)=><span key={i} className={"iv-tma-tag "+(x.talent.side==="a"?"a":"b")}>{x.talent.n}</span>)}</div>}
+              <button className="iv-btn tma" onClick={()=>openTMA(sel)}><Icon n="edit" s={14}/> فتح ملف المواهب</button>
+            </>:<>
+              <p className="iv-tma-hint">قيّم المرشّح على نموذج المواهب TMA (22 محركاً) لدعم قرار التوظيف. الملف يُربط بهذه المقابلة تلقائياً.</p>
+              <button className="iv-btn tma" onClick={()=>openTMA(sel)}><Icon n="tma" s={14}/> إنشاء ملف مواهب للمرشّح</button>
+            </>}
+          </div>);})()}
+      </>}
     </div>);}
 
   // القائمة
@@ -137,6 +162,15 @@ const CSS=`
 .iv-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:11px;border:none;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
 .iv-btn.ghost{background:#fff;border:1px solid #e6e9ee;color:#334155}
 .iv-btn.ok{background:linear-gradient(135deg,#12b76a,#087443);color:#fff}
+.iv-btn.tma{width:100%;justify-content:center;background:linear-gradient(135deg,#E8712B,#f5a35f);color:#fff;margin-top:4px}
+.iv-tma{background:#fff;border:1px solid #eceef1;border-radius:16px;padding:15px;box-shadow:0 1px 2px rgba(16,24,40,.05);margin-bottom:14px}
+.iv-tma-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.iv-tma-top b{font-size:13px;font-weight:800;display:block}.iv-tma-top small{font-size:11px;color:#94a3b8}
+.iv-tma-pct{font-size:18px;font-weight:800;color:#E8712B}
+.iv-tma-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.iv-tma-tag{font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px}
+.iv-tma-tag.a{background:#fef4ec;color:#b54708}.iv-tma-tag.b{background:#eef4ff;color:#1d5bbf}
+.iv-tma-hint{font-size:12px;color:#64748b;line-height:1.6;margin:0 0 12px}
 .iv-sec-h{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin:6px 0 10px}
 .iv-sec-h span{color:#94a3b8;font-weight:600;font-size:12px}
 .iv-empty2{color:#94a3b8;font-size:12.5px;text-align:center;padding:20px;background:#fff;border:1px solid #eceef1;border-radius:12px}

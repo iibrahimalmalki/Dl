@@ -40,6 +40,7 @@ export default function Shell({onLogout,me}){
   const[open,setOpen]=useState(false);
   const[ops,setOps]=useState([]);const[op,setOp]=useState("all");
   const[menu,setMenu]=useState(false);
+  const[tmaTarget,setTmaTarget]=useState(null);
   useEffect(()=>{supabase.from("operators").select("id,name,active").order("created_at").then(({data})=>setOps(data||[]));},[]);
   const nm=(me&&me.display_name)||"إبراهيم المالكي";
   const owner=!!(me&&me.is_owner);
@@ -91,8 +92,8 @@ export default function Shell({onLogout,me}){
         {view==="performance"&&<Suspense fallback={<Sk/>}><Performance opId={op}/></Suspense>}
         {view==="field_rounds"&&<Suspense fallback={<Sk/>}><FieldRounds opId={op}/></Suspense>}
         {view==="onboarding"&&<Suspense fallback={<Sk/>}><Onboarding opId={op}/></Suspense>}
-        {view==="interviews"&&<Suspense fallback={<Sk/>}><Interviews/></Suspense>}
-        {view==="tma"&&owner&&<Suspense fallback={<Sk/>}><TMA opId={op}/></Suspense>}
+        {view==="interviews"&&<Suspense fallback={<Sk/>}><Interviews owner={owner} onOpenTMA={owner?(t=>{setTmaTarget(t);go("tma");}):undefined}/></Suspense>}
+        {view==="tma"&&owner&&<Suspense fallback={<Sk/>}><TMA opId={op} target={tmaTarget} onTargetDone={()=>setTmaTarget(null)}/></Suspense>}
         {["vendors"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
       </div>
     </div>
