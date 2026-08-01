@@ -10,13 +10,14 @@ const Complaints=lazy(()=>import("./Complaints"));
 const Performance=lazy(()=>import("./Performance"));
 const FieldRounds=lazy(()=>import("./FieldRounds"));
 const Onboarding=lazy(()=>import("./Onboarding"));
+const Interviews=lazy(()=>import("./Interviews"));
 
 const NAV=[
   {g:"الرئيسية"},
   {k:"dashboard",ar:"لوحة القيادة",ic:"dashboard"},
   {g:"التوظيف"},
   {k:"recruitment",ar:"المتقدّمون",ic:"applicants"},
-  {k:"interviews",ar:"المقابلات",ic:"interview",soon:1},
+  {k:"interviews",ar:"المقابلات",ic:"interview"},
   {k:"onboarding",ar:"التعاقد والإعداد",ic:"onboarding"},
   {g:"التشغيل"},
   {k:"operations",ar:"العمليات اليومية",ic:"operations"},
@@ -31,7 +32,7 @@ const NAV=[
   {k:"users",ar:"المستخدمون",ic:"users"},
   {k:"tma",ar:"المواهب TMA",ic:"tma",lock:1},
 ];
-const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],users:["المستخدمون","الحسابات والصلاحيات"]};
+const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],users:["المستخدمون","الحسابات والصلاحيات"]};
 
 export default function Shell({onLogout,me}){
   const[view,setView]=useState("dashboard");
@@ -89,7 +90,8 @@ export default function Shell({onLogout,me}){
         {view==="performance"&&<Suspense fallback={<Sk/>}><Performance opId={op}/></Suspense>}
         {view==="field_rounds"&&<Suspense fallback={<Sk/>}><FieldRounds opId={op}/></Suspense>}
         {view==="onboarding"&&<Suspense fallback={<Sk/>}><Onboarding opId={op}/></Suspense>}
-        {["interviews","vendors"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
+        {view==="interviews"&&<Suspense fallback={<Sk/>}><Interviews/></Suspense>}
+        {["vendors"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
       </div>
     </div>
   </div>);
