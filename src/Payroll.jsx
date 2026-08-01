@@ -18,6 +18,8 @@ export default function Payroll({opId}){
   const[status,setStatus]=useState("draft");
   const[msg,setMsg]=useState(null);const[saving,setSaving]=useState(false);
   const[openDeduct,setOpenDeduct]=useState({});
+  const[ops,setOps]=useState({});           // {sweater_id:{net_washes,rating,approved_complaints}}
+  const[fromOps,setFromOps]=useState(false); // هل عُبّئت المدخلات من العمليات
 
   // تحميل الفريق + كشف الشهر إن وُجد
   useEffect(()=>{(async()=>{
@@ -32,14 +34,28 @@ export default function Payroll({opId}){
     const run=runs&&runs[0];
     let lines=[];
     if(run){const{data:l}=await supabase.from("payroll_lines").select("*").eq("run_id",run.id).order("sort");lines=l||[];}
+    // بيانات العمليات لهذا الشهر (المشتقّة من تقارير سويتر)
+    let opsQ=supabase.from("ops_biker_month").select("sweater_id,net_washes,rating,approved_complaints").eq("period",period);
+    if(opId&&opId!=="all")opsQ=opsQ.eq("operator_id",opId);
+    const{data:opsRows}=await opsQ;
+    const opsMap={};(opsRows||[]).forEach(o=>{if(o.sweater_id)opsMap[String(o.sweater_id).trim()]=o;});
+    setOps(opsMap);
+    const hasRun=lines.length>0;let usedOps=false;
     // بناء صفوف البايكرز
     const savedByEmp={};lines.filter(l=>l.role==="biker").forEach(l=>{if(l.employee_id)savedByEmp[l.employee_id]=l;});
     const rows=(emps||[]).map(e=>{
       const s=savedByEmp[e.id];const inp=s?.inputs||{};
+      const o=opsMap[String(e.employee_id).trim()];
+      // إن لم يوجد كشف محفوظ لكن توجد بيانات عمليات → عبّئ منها
+      const useOps=!s&&o;if(useOps)usedOps=true;
       return{employee_id:e.id,name:e.full_name||s?.name||"—",biker_id:e.employee_id,
-        inp:{level:inp.level||"M1",net_washes:inp.net_washes??"",rating:inp.rating??"",complaint_approved:inp.complaint_approved??"",tips:inp.tips??"",dmg:inp.dmg??"",abs:inp.abs??"",mat:inp.mat??"",trn:inp.trn??""}};
+        inp:{level:inp.level||"M1",
+          net_washes:inp.net_washes??(useOps?o.net_washes:""),
+          rating:inp.rating??(useOps&&o.rating!=null?o.rating:""),
+          complaint_approved:inp.complaint_approved??(useOps?o.approved_complaints:""),
+          tips:inp.tips??"",dmg:inp.dmg??"",abs:inp.abs??"",mat:inp.mat??"",trn:inp.trn??""}};
     });
-    setBikers(rows);
+    setBikers(rows);setFromOps(usedOps&&!hasRun);
     const supLine=lines.find(l=>l.role==="supervisor");
     if(supLine){const i=supLine.inputs||{};setSup({name:supLine.name||"سلمان المالكي",team_orders:i.team_orders??"",team_rating:i.team_rating??"",team_complaint_approved:i.team_complaint_approved??"",deductions:i.deductions??""});setSupAuto(!!i.auto);}
     else setSup(s=>({...s,team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""}));
@@ -48,6 +64,8 @@ export default function Payroll({opId}){
   })();},[period,opId]);
 
   const setB=(i,k,v)=>setBikers(p=>p.map((b,j)=>j===i?{...b,inp:{...b.inp,[k]:v}}:b));
+  const syncFromOps=()=>{setBikers(p=>p.map(b=>{const o=ops[String(b.biker_id).trim()];if(!o)return b;return{...b,inp:{...b.inp,net_washes:o.net_washes??b.inp.net_washes,rating:o.rating!=null?o.rating:b.inp.rating,complaint_approved:o.approved_complaints??b.inp.complaint_approved}};}));setFromOps(true);setMsg({ok:true,t:"تم سحب الغسلات والتقييم والشكاوى من العمليات"});};
+  const opsCount=Object.keys(ops).length;
 
   // حساب حي
   const computed=useMemo(()=>{
@@ -113,11 +131,13 @@ export default function Payroll({opId}){
       </div>
       <span className={"pr-status "+(status==="approved"?"ap":"df")}><span className="pr-dot"/>{status==="approved"?"معتمد":"مسودة"}</span>
       <div style={{flex:1}}/>
+      {opsCount>0&&<button className="pr-btn ghost" onClick={syncFromOps} title="سحب الغسلات والتقييم والشكاوى من تقارير سويتر المرفوعة في العمليات"><Icon n="refresh" s={15}/> سحب من العمليات</button>}
       <button className="pr-btn ghost" onClick={exportCSV}><Icon n="download" s={15}/> تصدير</button>
       <button className="pr-btn" onClick={()=>save(false)} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":"حفظ"}</button>
       <button className="pr-btn ok" onClick={()=>save(true)} disabled={saving}><Icon n="check" s={15}/> اعتماد</button>
     </div>
     {msg&&<div className={"pr-msg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
+    {fromOps&&<div className="pr-msg ok" style={{background:"#eff6ff",color:"#175cd3"}}><Icon n="operations" s={13} style={{verticalAlign:"-2px"}}/> المدخلات معبّأة تلقائياً من تقارير سويتر (العمليات) — يمكنك التعديل يدوياً قبل الحفظ.</div>}
 
     {/* ملخص المسير */}
     <div className="pr-kpis">

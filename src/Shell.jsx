@@ -5,6 +5,7 @@ import DashboardHome from"./DashboardHome";
 const AdminDashboard=lazy(()=>import("./AdminDashboard"));
 const UserManagement=lazy(()=>import("./UserManagement"));
 const Payroll=lazy(()=>import("./Payroll"));
+const Operations=lazy(()=>import("./Operations"));
 
 const NAV=[
   {g:"الرئيسية"},
@@ -14,7 +15,7 @@ const NAV=[
   {k:"interviews",ar:"المقابلات",ic:"interview",soon:1},
   {k:"onboarding",ar:"التعاقد والإعداد",ic:"onboarding",soon:1},
   {g:"التشغيل"},
-  {k:"operations",ar:"العمليات اليومية",ic:"operations",soon:1},
+  {k:"operations",ar:"العمليات اليومية",ic:"operations"},
   {k:"performance",ar:"الأداء",ic:"performance",soon:1},
   {k:"payroll",ar:"الرواتب",ic:"payroll"},
   {k:"complaints",ar:"الشكاوى",ic:"complaints",soon:1},
@@ -77,7 +78,8 @@ export default function Shell({onLogout,me}){
         {view==="recruitment"&&<Suspense fallback={<Sk/>}><div className="sh-embed"><AdminDashboard embedded onLogout={onLogout}/></div></Suspense>}
         {view==="users"&&owner&&<Suspense fallback={<Sk/>}><UserManagement onClose={()=>go("dashboard")}/></Suspense>}
         {view==="payroll"&&<Suspense fallback={<Sk/>}><Payroll opId={op}/></Suspense>}
-        {["interviews","onboarding","operations","performance","complaints","field_rounds","employees","vendors","reports"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
+        {view==="operations"&&<Suspense fallback={<Sk/>}><Operations opId={op}/></Suspense>}
+        {["interviews","onboarding","performance","complaints","field_rounds","employees","vendors","reports"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
       </div>
     </div>
   </div>);
