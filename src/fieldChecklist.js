@@ -8,21 +8,22 @@ export const AXES={
   washing:{ar:"الغسيل",ic:"operations"},
 };
 // resp: biker | shared (البايكر+الإدارة، يُحتسب على البايكر) | mgmt (الإدارة ⚠️ — مستثنى)
+// photos: زوايا التصوير المطلوبة للتوثيق (فارغة = لا تتطلب صورة)
 export const ITEMS=[
-  {n:1,axis:"motorcycle",resp:"biker",ar:"الدراجة النارية نظيفة بدون غبار أو أوساخ ظاهرة"},
-  {n:2,axis:"motorcycle",resp:"biker",ar:"الصندوق نظيف ومناسب للعمل وخالٍ من الخدوش الجديدة"},
-  {n:3,axis:"motorcycle",resp:"biker",ar:"الصندوق مرتب ونظيف من الداخل"},
-  {n:4,axis:"motorcycle",resp:"mgmt",ar:"ملصق سويتر على الصندوق جديد ونظيف وفي مكانه"},
-  {n:5,axis:"motorcycle",resp:"shared",ar:"إنارة الدراجة الأمامية والخلفية تعمل بشكل ممتاز"},
-  {n:6,axis:"motorcycle",resp:"biker",ar:"الدراجة سليمة بدون خدوش جسيمة أو تشققات"},
-  {n:7,axis:"provider",resp:"mgmt",ar:"الزي الرسمي المعتمد من سويتر متوفر وكامل"},
-  {n:8,axis:"provider",resp:"biker",ar:"الزي الرسمي نظيف وخالٍ من التشققات والأوساخ"},
-  {n:9,axis:"provider",resp:"mgmt",ar:"الكاب + اللبس الرسمي + الحذاء الأسود متوفرة"},
-  {n:10,axis:"provider",resp:"mgmt",ar:"معدات الحماية كاملة: صدرية + حامي أرجل + ذراع + خوذة"},
-  {n:11,axis:"materials",resp:"biker",ar:"يعرف وظيفة كل منشفة حسب لونها (5 ألوان)"},
-  {n:12,axis:"materials",resp:"mgmt",ar:"مواد التنظيف عليها ملصق سويتر — لا فراغ ولا تلف"},
-  {n:13,axis:"washing",resp:"biker",ar:"يطبّق تسلسل الغسيل الصحيح: ماء ← صابون ← إسفنجة ← منشفة"},
-  {n:14,axis:"washing",resp:"biker",ar:"يضع مخلفات السيارة في الكيس — لا رمي قمامة حول المركبة"},
+  {n:1,axis:"motorcycle",resp:"biker",ar:"الدراجة النارية نظيفة بدون غبار أو أوساخ ظاهرة",photos:["أمام","خلف","يمين","يسار"]},
+  {n:2,axis:"motorcycle",resp:"biker",ar:"الصندوق نظيف ومناسب للعمل وخالٍ من الخدوش الجديدة",photos:["الصندوق - خارج","الصندوق - جانب"]},
+  {n:3,axis:"motorcycle",resp:"biker",ar:"الصندوق مرتب ونظيف من الداخل",photos:["الصندوق - داخل"]},
+  {n:4,axis:"motorcycle",resp:"mgmt",ar:"ملصق سويتر على الصندوق جديد ونظيف وفي مكانه",photos:["الملصق"]},
+  {n:5,axis:"motorcycle",resp:"shared",ar:"إنارة الدراجة الأمامية والخلفية تعمل بشكل ممتاز",photos:["إنارة أمامية","إنارة خلفية"]},
+  {n:6,axis:"motorcycle",resp:"biker",ar:"الدراجة سليمة بدون خدوش جسيمة أو تشققات",photos:["أمام","خلف","يمين","يسار"]},
+  {n:7,axis:"provider",resp:"mgmt",ar:"الزي الرسمي المعتمد من سويتر متوفر وكامل",photos:["الزي كامل"]},
+  {n:8,axis:"provider",resp:"biker",ar:"الزي الرسمي نظيف وخالٍ من التشققات والأوساخ",photos:["الزي - أمام","الزي - خلف"]},
+  {n:9,axis:"provider",resp:"mgmt",ar:"الكاب + اللبس الرسمي + الحذاء الأسود متوفرة",photos:["الكاب والحذاء"]},
+  {n:10,axis:"provider",resp:"mgmt",ar:"معدات الحماية كاملة: صدرية + حامي أرجل + ذراع + خوذة",photos:["معدات الحماية"]},
+  {n:11,axis:"materials",resp:"biker",ar:"يعرف وظيفة كل منشفة حسب لونها (5 ألوان)",photos:["المناشف الخمس"]},
+  {n:12,axis:"materials",resp:"mgmt",ar:"مواد التنظيف عليها ملصق سويتر — لا فراغ ولا تلف",photos:["مواد التنظيف"]},
+  {n:13,axis:"washing",resp:"biker",ar:"يطبّق تسلسل الغسيل الصحيح: ماء ← صابون ← إسفنجة ← منشفة",photos:["أثناء الغسيل"]},
+  {n:14,axis:"washing",resp:"biker",ar:"يضع مخلفات السيارة في الكيس — لا رمي قمامة حول المركبة",photos:["كيس المخلفات"]},
 ];
 export const bikerItems=ITEMS.filter(i=>i.resp!=="mgmt");   // 9 بنود قابلة للتقييم
 export const mgmtItems=ITEMS.filter(i=>i.resp==="mgmt");     // 5 بنود إدارة

@@ -17,8 +17,26 @@ export default function FieldRounds({opId}){
   const[showNew,setShowNew]=useState(false);
   const[hd,setHd]=useState({sweater_id:"",date:todayStr(),location:"",inspector:""});
   const[res,setRes]=useState({});
+  const[photos,setPhotos]=useState({});   // {itemN:[url,...]} حسب ترتيب الزوايا
+  const[uploading,setUploading]=useState("");
   const[notes,setNotes]=useState("");
   const[msg,setMsg]=useState(null);const[saving,setSaving]=useState(false);
+  const[viewer,setViewer]=useState(null); // رابط صورة للعرض المكبّر
+
+  const upload=async(n,idx,file)=>{
+    if(!file)return;const key=`${n}-${idx}`;setUploading(key);setMsg(null);
+    try{
+      const ext=(String(file.name).split(".").pop()||"jpg").toLowerCase();
+      const rand=Math.floor(Math.random()*1e9);
+      const op=(opId&&opId!=="all")?opId:"default";
+      const path=`${op}/${hd.date.slice(0,7)}/${hd.sweater_id||"x"}/${n}-${idx}-${Date.now()}-${rand}.${ext}`;
+      const{error}=await supabase.storage.from("field-evidence").upload(path,file,{contentType:file.type||"image/jpeg",upsert:true});
+      if(error)throw error;
+      const{data}=supabase.storage.from("field-evidence").getPublicUrl(path);
+      setPhotos(p=>{const a=[...(p[n]||[])];a[idx]=data.publicUrl;return{...p,[n]:a};});
+    }catch(e){setMsg({ok:false,t:"تعذّر رفع الصورة: "+(e.message||e)});}
+    setUploading("");
+  };
 
   useEffect(()=>{(async()=>{
     setLoading(true);setMsg(null);
@@ -39,11 +57,12 @@ export default function FieldRounds({opId}){
     setSaving(true);setMsg(null);
     try{
       const emp=empBySid[String(hd.sweater_id).trim()];
-      const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,location:hd.location||null,inspector:hd.inspector||null,results:res,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,notes:notes||null};
+      const cleanPhotos={};Object.entries(photos).forEach(([k,arr])=>{const f=(arr||[]).filter(Boolean);if(f.length)cleanPhotos[k]=f;});
+      const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,location:hd.location||null,inspector:hd.inspector||null,results:res,photos:cleanPhotos,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,notes:notes||null};
       const{data,error}=await supabase.from("field_rounds").insert(row).select().single();
       if(error)throw error;
       if(row.period===period)setRounds(p=>[data,...p]);
-      setShowNew(false);setHd({sweater_id:"",date:todayStr(),location:"",inspector:""});setRes({});setNotes("");
+      setShowNew(false);setHd({sweater_id:"",date:todayStr(),location:"",inspector:""});setRes({});setPhotos({});setNotes("");
       setMsg({ok:true,t:"تم حفظ الجولة"});
     }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
     setSaving(false);
@@ -81,14 +100,32 @@ export default function FieldRounds({opId}){
         <label className="fr-fld"><span>منفّذ الجولة</span><input value={hd.inspector} onChange={e=>setHd({...hd,inspector:e.target.value})} placeholder="المشرف/المالك"/></label>
       </div>
 
+      {/* مفتاح الرموز */}
+      <div className="fr-legend">
+        <span className="fr-lg"><b className="fr-o g on">✓</b> مطابق</span>
+        <span className="fr-lg"><b className="fr-o a on">≈</b> جزئي</span>
+        <span className="fr-lg"><b className="fr-o r on">✕</b> غير مطابق</span>
+        <span className="fr-lg"><b className="fr-o m on">∅</b> معفى (إمداد)</span>
+        <span className="fr-lg fr-lg-cam"><Icon n="camera" s={13}/> صورة توثيق مطلوبة</span>
+      </div>
+
       {/* المحاور والبنود */}
       {Object.entries(AXES).map(([ax,meta])=>(
         <div className="fr-axis" key={ax}>
           <div className="fr-axis-h"><Icon n={meta.ic} s={15}/> {meta.ar}</div>
-          {ITEMS.filter(i=>i.axis===ax).map(it=>{const mgmt=it.resp==="mgmt";const opts=mgmt?MRES:RES;return(
+          {ITEMS.filter(i=>i.axis===ax).map(it=>{const mgmt=it.resp==="mgmt";const opts=mgmt?MRES:RES;const ph=it.photos||[];const got=(photos[it.n]||[]).filter(Boolean).length;return(
             <div className={"fr-item"+(mgmt?" mg":"")} key={it.n}>
-              <div className="fr-i-txt"><span className="fr-i-n">{it.n}</span><div><div className="fr-i-ar">{it.ar}</div><div className="fr-i-resp">{RESP_AR[it.resp]}{mgmt&&" ⚠ لا تُحتسب على البايكر"}</div></div></div>
-              <div className="fr-i-opts">{opts.map(([v,sym,lbl,tone])=><button key={v} className={"fr-o "+tone+(res[it.n]===v?" on":"")} title={lbl} onClick={()=>setRes(p=>({...p,[it.n]:p[it.n]===v?undefined:v}))}>{sym}</button>)}</div>
+              <div className="fr-i-row">
+                <div className="fr-i-txt"><span className="fr-i-n">{it.n}</span><div><div className="fr-i-ar">{it.ar}</div><div className="fr-i-resp">{RESP_AR[it.resp]}{mgmt&&" ⚠ لا تُحتسب على البايكر"}{ph.length>0&&<span className={"fr-i-cam"+(got>=ph.length?" ok":"")}> · <Icon n="camera" s={10}/> {got}/{ph.length}</span>}</div></div></div>
+                <div className="fr-i-opts">{opts.map(([v,sym,lbl,tone])=><button key={v} className={"fr-o "+tone+(res[it.n]===v?" on":"")} title={lbl} onClick={()=>setRes(p=>({...p,[it.n]:p[it.n]===v?undefined:v}))}>{sym}</button>)}</div>
+              </div>
+              {ph.length>0&&<div className="fr-photos">
+                {ph.map((lbl,idx)=>{const url=(photos[it.n]||[])[idx];const up=uploading===`${it.n}-${idx}`;return(
+                  <label className={"fr-ph"+(url?" has":"")} key={idx}>
+                    <input type="file" accept="image/*" capture="environment" hidden onChange={e=>upload(it.n,idx,e.target.files[0])}/>
+                    {up?<span className="fr-ph-up">…</span>:url?<img src={url} alt={lbl} onClick={e=>{e.preventDefault();setViewer(url);}}/>:<><Icon n="camera" s={15}/><span>{lbl}</span></>}
+                  </label>);})}
+              </div>}
             </div>);})}
         </div>
       ))}
@@ -123,8 +160,11 @@ export default function FieldRounds({opId}){
         <div className="fr-c-eff" style={{background:ef.bg,color:ef.color}}>{ef.ar}</div>
         {(r.action_items||[]).length>0&&<div className="fr-c-act"><Icon n="wrench" s={12}/> بنود إدارة معلّقة: {(r.action_items||[]).map(n=>"#"+n).join("، ")}</div>}
         {r.notes&&<div className="fr-c-notes">{r.notes}</div>}
+        {(()=>{const all=Object.values(r.photos||{}).flat().filter(Boolean);return all.length>0&&<div className="fr-c-gal"><div className="fr-c-gal-h"><Icon n="camera" s={12}/> {all.length} صورة توثيق</div><div className="fr-c-thumbs">{all.slice(0,8).map((u,i)=><img key={i} src={u} onClick={()=>setViewer(u)}/>)}{all.length>8&&<span className="fr-more">+{all.length-8}</span>}</div></div>;})()}
         <div className="fr-c-actions"><button className="fr-del" onClick={()=>del(r)}><Icon n="trash" s={13}/> حذف</button></div>
       </div>);})}
+
+    {viewer&&<div className="fr-viewer" onClick={()=>setViewer(null)}><img src={viewer}/><button className="fr-v-close"><Icon n="x" s={20}/></button></div>}
   </div>);
 }
 function K({ic,c,bg,t,v}){return(<div className="fr-kpi"><span className="fr-ki" style={{background:bg,color:c}}><Icon n={ic} s={17}/></span><div><div className="fr-kv">{v}</div><div className="fr-kl">{t}</div></div></div>);}
@@ -145,10 +185,31 @@ const CSS=`
 .fr-fld span{font-size:11px;color:#64748b;font-weight:600}
 .fr-fld select,.fr-fld input{border:1px solid #e6e9ee;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;color:#0f172a;outline:none;background:#fff;width:100%;box-sizing:border-box}
 .fr-fld select:focus,.fr-fld input:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(232,113,43,.1)}
+.fr-legend{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#fafbfc;border:1px solid #f1f3f5;border-radius:11px;padding:9px 12px;margin-bottom:6px}
+.fr-lg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600}
+.fr-lg .fr-o{width:22px;height:22px;font-size:12px;cursor:default}
+.fr-lg-cam{color:#175cd3;margin-inline-start:auto}
 .fr-axis{margin-bottom:6px}
 .fr-axis-h{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800;color:#0f172a;margin:12px 0 6px;padding-bottom:5px;border-bottom:1px solid #f1f3f5}
-.fr-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f6f7f9}
+.fr-item{display:flex;flex-direction:column;gap:9px;padding:10px 0;border-bottom:1px solid #f6f7f9}
+.fr-i-row{display:flex;align-items:center;gap:10px}
 .fr-item.mg{opacity:.9}
+.fr-i-cam{color:#94a3b8;font-weight:700}.fr-i-cam.ok{color:#087443}
+.fr-photos{display:flex;flex-wrap:wrap;gap:7px;padding-inline-start:31px}
+.fr-ph{width:66px;height:66px;border-radius:10px;border:1.5px dashed #d7dde5;background:#fafbfc;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:#94a3b8;overflow:hidden;flex:none;position:relative}
+.fr-ph:hover{border-color:var(--b);color:var(--b)}
+.fr-ph span{font-size:8.5px;font-weight:700;text-align:center;line-height:1.15;padding:0 3px}
+.fr-ph.has{border-style:solid;border-color:#b7e4cd}
+.fr-ph img{width:100%;height:100%;object-fit:cover}
+.fr-ph-up{font-size:18px;color:var(--b);font-weight:800}
+.fr-c-gal{margin-top:10px}
+.fr-c-gal-h{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#64748b;font-weight:700;margin-bottom:6px}
+.fr-c-thumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.fr-c-thumbs img{width:52px;height:52px;border-radius:9px;object-fit:cover;cursor:pointer;border:1px solid #eceef1}
+.fr-more{font-size:12px;color:#64748b;font-weight:700}
+.fr-viewer{position:fixed;inset:0;background:rgba(2,6,12,.9);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px}
+.fr-viewer img{max-width:100%;max-height:100%;border-radius:12px}
+.fr-v-close{position:fixed;top:16px;inset-inline-start:16px;width:42px;height:42px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .fr-i-txt{flex:1;min-width:0;display:flex;gap:9px}
 .fr-i-n{width:22px;height:22px;border-radius:7px;background:#f4f5f7;color:#64748b;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none}
 .fr-i-ar{font-size:12.5px;font-weight:600;color:#0f172a;line-height:1.4}
