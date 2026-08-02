@@ -63,3 +63,15 @@ export function payoutForBiker(orders){
     orders:Number(orders||0), billableOrders:billable,
     total:+(billable*t.price).toFixed(2), totalVat:+(billable*t.priceVat).toFixed(2) };
 }
+
+// سطر تسوية بايكر: الأساس (الملحق) + الحافز (البند التاسع) − خصم التذاكر
+export function settlementLine({orders,rating,complaintsPct,ticketsPct}){
+  const base=payoutForBiker(orders);
+  const qualifies=Number(rating||0)>=SSP_CONTRACT.incentive_conditions.min_rating
+                 && Number(complaintsPct||0)<=SSP_CONTRACT.incentive_conditions.max_complaints_pct;
+  const incentive=qualifies?+(base.billableOrders*SSP_CONTRACT.incentive).toFixed(2):0;
+  const deduction=(Number(ticketsPct||0)>SSP_CONTRACT.incentive_conditions.max_complaints_pct)
+                 ?+(base.billableOrders*SSP_CONTRACT.ticket_penalty_per_order).toFixed(2):0;
+  return { tier:base.tier, unit:base.unit, billableOrders:base.billableOrders, base:base.total,
+    qualifies, incentive, deduction, net:+(base.total+incentive-deduction).toFixed(2) };
+}

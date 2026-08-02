@@ -20,6 +20,7 @@ const Supply=lazy(()=>import("./Supply"));
 const Renewals=lazy(()=>import("./Renewals"));
 const Fleet=lazy(()=>import("./Fleet"));
 const SweaterPricing=lazy(()=>import("./SweaterPricing"));
+const Settlement=lazy(()=>import("./Settlement"));
 const Housing=lazy(()=>import("./Housing"));
 const SUPERVISOR_POS=["sec_ops","ops1","field_sup"];
 
@@ -36,6 +37,7 @@ const NAV=[
   {k:"performance",ar:"الأداء",ic:"performance"},
   {k:"payroll",ar:"الرواتب",ic:"payroll"},
   {k:"pricing",ar:"المقابل والتسعير",ic:"cash"},
+  {k:"settlement",ar:"تسوية سويتر",ic:"compare"},
   {k:"complaints",ar:"الشكاوى",ic:"complaints"},
   {k:"field_rounds",ar:"الجولات الميدانية",ic:"rounds"},
   {k:"myteam",ar:"فريقي",ic:"bike",sup:1},
@@ -51,7 +53,7 @@ const NAV=[
   {k:"users",ar:"المستخدمون",ic:"users"},
   {k:"tma",ar:"المواهب TMA",ic:"tma",lock:1},
 ];
-const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],vendors:["الموردون","الصيانة والقطع والدراجات والسكن ومصروفاتها"],supply:["سلاسل الإمداد","المخزون والطلبات والاستلام والعُهد والجرد"],fleet:["الأسطول والحوادث","سجل المركبات والتتبّع والكاميرات والمفاتيح وحوادث السرقة والأعطال"],housing:["السكن والإقامة","الوحدات والساكنون وجدول الدفعات ومخالفات السكن"],renewals:["الوثائق والتجديدات","متابعة صلاحية التأمين والاستمارات والرخص والإقامات"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],pricing:["المقابل والتسعير","نموذج غسلات سويتر — الشرائح وحاسبة المقابل الشهري"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"]};
+const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],vendors:["الموردون","الصيانة والقطع والدراجات والسكن ومصروفاتها"],supply:["سلاسل الإمداد","المخزون والطلبات والاستلام والعُهد والجرد"],fleet:["الأسطول والحوادث","سجل المركبات والتتبّع والكاميرات والمفاتيح وحوادث السرقة والأعطال"],housing:["السكن والإقامة","الوحدات والساكنون وجدول الدفعات ومخالفات السكن"],renewals:["الوثائق والتجديدات","متابعة صلاحية التأمين والاستمارات والرخص والإقامات"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],pricing:["المقابل والتسعير","نموذج غسلات سويتر — الشرائح وحاسبة المقابل الشهري"],settlement:["تسوية سويتر","احتساب المستحق الشهري لكل بايكر ومطابقته بالفاتورة"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"]};
 
 export default function Shell({onLogout,me}){
   const[view,setView]=useState("dashboard");
@@ -107,6 +109,7 @@ export default function Shell({onLogout,me}){
         {view==="users"&&owner&&<Suspense fallback={<Sk/>}><UserManagement/></Suspense>}
         {view==="payroll"&&<Suspense fallback={<Sk/>}><Payroll opId={op}/></Suspense>}
         {view==="pricing"&&<Suspense fallback={<Sk/>}><SweaterPricing/></Suspense>}
+        {view==="settlement"&&<Suspense fallback={<Sk/>}><Settlement opId={op}/></Suspense>}
         {view==="operations"&&<Suspense fallback={<Sk/>}><Operations opId={op}/></Suspense>}
         {view==="complaints"&&<Suspense fallback={<Sk/>}><Complaints opId={op}/></Suspense>}
         {view==="performance"&&<Suspense fallback={<Sk/>}><Performance opId={op}/></Suspense>}
