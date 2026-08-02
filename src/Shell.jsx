@@ -15,6 +15,7 @@ const TMA=lazy(()=>import("./TMA"));
 const Sourcing=lazy(()=>import("./Sourcing"));
 const OrgStructure=lazy(()=>import("./OrgStructure"));
 const MyTeam=lazy(()=>import("./MyTeam"));
+const Vendors=lazy(()=>import("./Vendors"));
 const SUPERVISOR_POS=["sec_ops","ops1","field_sup"];
 
 const NAV=[
@@ -35,12 +36,12 @@ const NAV=[
   {g:"الإدارة"},
   {k:"org",ar:"الهيكل التنظيمي",ic:"building"},
   {k:"employees",ar:"الموظفون",ic:"employees"},
-  {k:"vendors",ar:"الموردون",ic:"vendors",soon:1},
+  {k:"vendors",ar:"الموردون",ic:"vendors"},
   {k:"reports",ar:"التقارير",ic:"reports"},
   {k:"users",ar:"المستخدمون",ic:"users"},
   {k:"tma",ar:"المواهب TMA",ic:"tma",lock:1},
 ];
-const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"]};
+const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],vendors:["الموردون","الصيانة والقطع والدراجات والسكن ومصروفاتها"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"]};
 
 export default function Shell({onLogout,me}){
   const[view,setView]=useState("dashboard");
@@ -105,7 +106,7 @@ export default function Shell({onLogout,me}){
         {view==="sourcing"&&<Suspense fallback={<Sk/>}><Sourcing/></Suspense>}
         {view==="org"&&<Suspense fallback={<Sk/>}><OrgStructure owner={owner} opId={op}/></Suspense>}
         {view==="tma"&&owner&&<Suspense fallback={<Sk/>}><TMA opId={op} target={tmaTarget} onTargetDone={()=>setTmaTarget(null)}/></Suspense>}
-        {["vendors"].includes(view)&&<Soon ic={NAV.find(n=>n.k===view)?.ic} name={NAV.find(n=>n.k===view)?.ar}/>}
+        {view==="vendors"&&<Suspense fallback={<Sk/>}><Vendors opId={op}/></Suspense>}
       </div>
     </div>
   </div>);
