@@ -11,7 +11,7 @@ const MODULES=[
   {k:"applicants",ar:"التوظيف"},{k:"interviews",ar:"المقابلات"},{k:"onboarding",ar:"التعاقد والإعداد"},
   {k:"operations",ar:"العمليات اليومية"},{k:"performance",ar:"الأداء"},{k:"payroll",ar:"الرواتب"},
   {k:"complaints",ar:"الشكاوى والتصعيد"},{k:"field_rounds",ar:"الجولات الميدانية"},{k:"vendors",ar:"الموردون"},
-  {k:"referrals",ar:"الإحالات"},{k:"reports",ar:"التقارير"},{k:"employees",ar:"الموظفون"},
+  {k:"renewals",ar:"الوثائق"},{k:"referrals",ar:"الإحالات"},{k:"reports",ar:"التقارير"},{k:"employees",ar:"الموظفون"},
 ];
 const call=async(payload)=>{
   const{data,error}=await supabase.functions.invoke("admin-users",{body:payload});
