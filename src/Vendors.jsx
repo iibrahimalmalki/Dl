@@ -21,7 +21,7 @@ export default function Vendors({opId}){
   const load=async()=>{
     setLoading(true);
     let vq=supabase.from("vendors").select("*").order("created_at",{ascending:false});
-    if(opId&&opId!=="all")vq=vq.eq("operator_id",opId);
+    if(opId&&opId!=="all")vq=vq.or("operator_id.eq."+opId+",operator_id.is.null");
     const{data:v}=await vq;setVendors(v||[]);
     const{data:e}=await supabase.from("vendor_expenses").select("*").order("exp_date",{ascending:false});
     setExps(e||[]);

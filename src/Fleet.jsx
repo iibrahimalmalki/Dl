@@ -35,7 +35,7 @@ export default function Fleet({opId,owner}){
     setLoading(true);
     let vq=supabase.from("fleet_vehicles").select("*").eq("active",true);
     let iq=supabase.from("fleet_incidents").select("*").eq("active",true);
-    if(opId&&opId!=="all"){vq=vq.eq("operator_id",opId);iq=iq.eq("operator_id",opId);}
+    if(opId&&opId!=="all"){const f="operator_id.eq."+opId+",operator_id.is.null";vq=vq.or(f);iq=iq.or(f);}
     const[v,i]=await Promise.all([vq,iq]);
     const vr=(v.data||[]).slice().sort((a,b)=>V_ORDER.indexOf(a.status)-V_ORDER.indexOf(b.status)||(a.plate||"").localeCompare(b.plate||""));
     const ir=(i.data||[]).slice().sort((a,b)=>String(b.occurred_on||"").localeCompare(String(a.occurred_on||"")));

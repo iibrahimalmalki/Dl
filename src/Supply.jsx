@@ -16,7 +16,7 @@ export default function Supply({owner,opId}){
 
   const load=async()=>{
     setLoading(true);
-    const opF=q=>opId&&opId!=="all"?q.eq("operator_id",opId):q;
+    const opF=q=>opId&&opId!=="all"?q.or("operator_id.eq."+opId+",operator_id.is.null"):q;
     const[it,rq,ri,cu,tk,em,vn]=await Promise.all([
       opF(supabase.from("sc_items").select("*").order("category")).then(r=>r.data||[]),
       opF(supabase.from("sc_requests").select("*").order("seq",{ascending:false})).then(r=>r.data||[]),

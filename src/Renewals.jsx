@@ -20,6 +20,7 @@ const fmtD=d=>d?new Date(d+"T00:00:00").toLocaleDateString("en-GB"):"—";
 export default function Renewals({opId}){
   const[loading,setLoading]=useState(true);
   const[docs,setDocs]=useState([]);
+  const[emps,setEmps]=useState([]);
   const[filter,setFilter]=useState("all");
   const[form,setForm]=useState(null);const[msg,setMsg]=useState(null);const[busy,setBusy]=useState(false);
   const note=(ok,t)=>setMsg({ok,t});
@@ -27,13 +28,14 @@ export default function Renewals({opId}){
   const load=async()=>{
     setLoading(true);
     let q=supabase.from("renewal_docs").select("*").eq("active",true);
-    if(opId&&opId!=="all")q=q.eq("operator_id",opId);
+    if(opId&&opId!=="all")q=q.or("operator_id.eq."+opId+",operator_id.is.null");
     const{data}=await q;
     const rows=(data||[]).map(r=>({...r,_d:daysLeft(r.end_date)}));
     rows.sort((a,b)=>(a._d==null?1e9:a._d)-(b._d==null?1e9:b._d));
     setDocs(rows);setLoading(false);
   };
   useEffect(()=>{load();/*eslint-disable-next-line*/},[opId]);
+  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
   const kpis=useMemo(()=>{
     const withEnd=docs.filter(d=>d._d!=null);
@@ -46,7 +48,7 @@ export default function Renewals({opId}){
   const save=async()=>{
     if(!form.subject.trim()){note(false,"أدخل موضوع الوثيقة (اللوحة/الاسم)");return;}
     setBusy(true);note(false,"");
-    const row={operator_id:(opId&&opId!=="all")?opId:null,doc_type:form.doc_type,title:form.title||null,subject:form.subject.trim(),subject_kind:form.subject_kind||null,provider:form.provider||null,ref_no:form.ref_no||null,start_date:form.start_date||null,end_date:form.end_date||null,notes:form.notes||null,active:form.active!==false};
+    const row={operator_id:(opId&&opId!=="all")?opId:null,doc_type:form.doc_type,title:form.title||null,subject:form.subject.trim(),subject_kind:form.subject_kind||null,employee_id:form.employee_id||null,provider:form.provider||null,ref_no:form.ref_no||null,start_date:form.start_date||null,end_date:form.end_date||null,notes:form.notes||null,active:form.active!==false};
     try{
       if(form.id)await supabase.from("renewal_docs").update(row).eq("id",form.id);
       else await supabase.from("renewal_docs").insert(row);
@@ -122,6 +124,7 @@ export default function Renewals({opId}){
       <div className="rn-sheet">
         <div className="rn-sheet-h"><b>{form.id?"تعديل/تجديد وثيقة":"وثيقة جديدة"}</b><button onClick={()=>setForm(null)}><Icon n="x" s={16}/></button></div>
         <div className="rn-g2"><F l="نوع الوثيقة"><select value={form.doc_type} onChange={e=>setForm({...form,doc_type:e.target.value})}>{DOC_TYPES.map(t=><option key={t}>{t}</option>)}</select></F><F l="نوع الموضوع"><select value={form.subject_kind} onChange={e=>setForm({...form,subject_kind:e.target.value})}><option value="مركبة">مركبة</option><option value="شخص">شخص</option><option value="مؤسسة">مؤسسة</option></select></F></div>
+        {form.subject_kind==="شخص"&&<F l="الموظف المرتبط"><select value={form.employee_id||""} onChange={e=>{const id=e.target.value;const emp=emps.find(x=>x.id===id);setForm({...form,employee_id:id||null,subject:emp?emp.full_name:form.subject});}}><option value="">— اختر موظفاً —</option>{emps.map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></F>}
         <F l="الموضوع (اللوحة / الاسم)"><input value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} placeholder="مثال: 5532 ق ب / سلمان المالكي"/></F>
         <F l="العنوان"><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="تأمين المسؤولية تجاه الغير"/></F>
         <div className="rn-g2"><F l="الجهة المُصدِرة"><input value={form.provider} onChange={e=>setForm({...form,provider:e.target.value})} placeholder="التعاونية للتأمين"/></F><F l="رقم الوثيقة"><input value={form.ref_no} onChange={e=>setForm({...form,ref_no:e.target.value})}/></F></div>

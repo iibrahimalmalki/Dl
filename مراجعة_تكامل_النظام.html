@@ -1,0 +1,160 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مراجعة تكامل النظام — دلو ورغوة</title>
+<style>
+:root{--brand:#E8712B;--ink:#0f172a;--mut:#64748b;--line:#e6e9ee;--bg:#f4f5f7;--ok:#087443;--okbg:#e7f7ef;--warn:#b54708;--warnbg:#fef3e2;--crit:#b42318;--critbg:#feecea}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Segoe UI',Tahoma,system-ui,sans-serif;font-size:14px;line-height:1.7}
+.wrap{max-width:1000px;margin:0 auto;padding:26px 18px 60px}
+.hero{background:linear-gradient(135deg,#0e1622,#1a2a3f);color:#fff;border-radius:20px;padding:26px 28px;margin-bottom:20px}
+.hero h1{margin:0 0 6px;font-size:23px;font-weight:800}
+.hero p{margin:0;color:#c7d0dc;font-size:13.5px}
+.hero .tag{display:inline-block;background:rgba(232,113,43,.2);color:#f5a35f;font-weight:700;font-size:12px;padding:3px 12px;border-radius:20px;margin-top:12px}
+h2{font-size:17px;font-weight:800;margin:26px 0 12px;display:flex;align-items:center;gap:9px}
+h2 .n{width:26px;height:26px;border-radius:8px;background:var(--brand);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 1px 2px rgba(16,24,40,.05);margin-bottom:14px}
+.lead{color:#334155}
+.map{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.grp{border:1px solid var(--line);border-radius:14px;padding:14px;background:#fff}
+.grp h3{margin:0 0 10px;font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px}
+.grp h3 i{width:9px;height:9px;border-radius:3px}
+.mod{font-size:12.5px;font-weight:700;padding:6px 0;border-bottom:1px dashed #eef1f4}
+.mod:last-child{border:none}
+.mod small{display:block;color:var(--mut);font-weight:500;font-size:11px}
+.lnk{font-size:11px;color:#1d5bbf;font-weight:700}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;font-weight:700;margin:6px 0 2px}
+.legend span{display:flex;align-items:center;gap:7px}
+.legend i{width:12px;height:12px;border-radius:4px}
+table{width:100%;border-collapse:collapse;margin-top:4px}
+th{font-size:11.5px;color:var(--mut);text-align:right;padding:9px 10px;border-bottom:2px solid var(--line);background:#fafbfc}
+td{padding:10px;border-bottom:1px solid #f1f3f5;font-size:12.5px;vertical-align:top}
+.pill{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:20px;white-space:nowrap}
+.p-ok{background:var(--okbg);color:var(--ok)}.p-warn{background:var(--warnbg);color:var(--warn)}.p-crit{background:var(--critbg);color:var(--crit)}.p-info{background:#eef4ff;color:#1d5bbf}
+ul.clean{margin:6px 0;padding-inline-start:20px}ul.clean li{margin-bottom:7px}
+.kbd{background:#f1f3f5;border-radius:6px;padding:1px 6px;font-size:11.5px;font-weight:700;color:#334155;font-family:ui-monospace,monospace}
+.foot{text-align:center;color:#94a3b8;font-size:11.5px;margin-top:22px}
+</style></head><body><div class="wrap">
+
+<div class="hero">
+  <h1>مراجعة تكامل النظام — منصّة دلو ورغوة</h1>
+  <p>حلقات الربط بين الوحدات · التكامل · التقاطع · الازدواجية — مبنية على خريطة المفاتيح الخارجية الفعلية في قاعدة البيانات</p>
+  <span class="tag">2 أغسطس 2026 · SSP Partner 47</span>
+</div>
+
+<div class="card lead">
+  <b>الخلاصة:</b> العمود الفقري للموارد البشرية (المتقدّم ← المقابلة ← الموظف ← الحساب ← الفريق ← العمليات ← الرواتب ← المخالفات ← الجولات) <b>مترابط بإحكام عبر مفاتيح خارجية سليمة</b>. الوحدات الأحدث (الأسطول، السكن، الوثائق، الإمداد، التسعير) مرتبطة جزئياً: روابطها البنيوية جيدة، لكن تبقّت <b>خمس فجوات ربط</b> و<b>أربع نقاط ازدواجية</b> أهمها أن هوية البايكر تُخزَّن كنصّ حرّ في بعض الوحدات بدل ربطها بجدول الموظفين، وأن نموذج التسعير غير موصول بالرواتب بعد.
+</div>
+
+<h2><span class="n">١</span> خريطة التكامل</h2>
+<div class="card">
+  <div class="legend">
+    <span><i style="background:#12b76a"></i> مترابط بمفتاح خارجي</span>
+    <span><i style="background:#f79009"></i> ربط نصّي ضعيف / ناقص</span>
+    <span><i style="background:#f04438"></i> ازدواجية / تقاطع</span>
+  </div>
+  <div class="map" style="margin-top:12px">
+    <div class="grp"><h3><i style="background:#12b76a"></i> نواة الموارد البشرية</h3>
+      <div class="mod">المتقدّمون <small><span class="lnk">← operators</span></small></div>
+      <div class="mod">المقابلات <small><span class="lnk">← applicants</span></small></div>
+      <div class="mod">الموظفون <small><span class="lnk">← applicants · teams · app_users</span></small></div>
+      <div class="mod">التعاقد/الإعداد <small><span class="lnk">← employees</span></small></div>
+      <div class="mod">الفرق <small><span class="lnk">← leader · supervisor</span></small></div>
+      <div class="mod">الصلاحيات <small><span class="lnk">← app_users</span></small></div>
+    </div>
+    <div class="grp"><h3><i style="background:#12b76a"></i> التشغيل والمال</h3>
+      <div class="mod">العمليات الشهرية <small><span class="lnk">← employees</span> · <span style="color:#b54708">+ اسم نصّي</span></small></div>
+      <div class="mod">الرواتب <small><span class="lnk">← employees · runs</span></small></div>
+      <div class="mod">المخالفات/الشكاوى <small><span class="lnk">← employees</span></small></div>
+      <div class="mod">الجولات الميدانية <small><span class="lnk">← employees</span></small></div>
+      <div class="mod">التسعير (sweaterContract) <small><span style="color:#b42318">غير موصول بالرواتب</span></small></div>
+    </div>
+    <div class="grp"><h3><i style="background:#f79009"></i> الدعم اللوجستي</h3>
+      <div class="mod">الموردون <small><span class="lnk">← vendor_expenses</span></small></div>
+      <div class="mod">الإمداد (الطلبات/العُهد/الجرد) <small><span class="lnk">← vendors · items · employees</span></small></div>
+      <div class="mod">الأسطول <small><span class="lnk">← renewal_docs (تأمين)</span> · <span style="color:#b54708">بايكر نصّي</span></small></div>
+      <div class="mod">السكن <small><span class="lnk">← units · employees · lease_doc</span></small></div>
+      <div class="mod">الوثائق والتجديدات <small><span class="lnk">مركز الوثائق للأسطول والسكن والعقد</span></small></div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">٢</span> الحلقات المتكاملة جيداً</h2>
+<div class="card">
+  <ul class="clean">
+    <li><b>حلقة التوظيف الكاملة:</b> المتقدّم ← المقابلة ← الموظف (يحمل <span class="kbd">applicant_id</span>) ← حساب المستخدم ← الفريق. مغلقة وسليمة.</li>
+    <li><b>حلقة التشغيل المالي:</b> الموظف ← العمليات الشهرية ← الرواتب (<span class="kbd">run_id</span>) ← المخالفات/الغرامات — كلها موصولة بالموظف والمشغّل.</li>
+    <li><b>حلقة الإمداد:</b> طلب ← أصناف الطلب ← الأصناف ← حركات المخزون ← العُهد ← الجرد، والطلب موصول بالمورّد. مكتملة.</li>
+    <li><b>حلقة الوثائق:</b> الأسطول ← وثيقة التأمين، والسكن ← وثيقة الإيجار (<span class="kbd">lease_doc_id</span>) — الوثائق أصبحت مركزاً تُشير إليه الوحدات.</li>
+    <li><b>حلقة السكن:</b> الوحدة ← الساكنون (موصولون بالموظفين ٣/٣) ← الدفعات ← المخالفات. مترابطة.</li>
+  </ul>
+</div>
+
+<h2><span class="n">٣</span> فجوات الربط (حلقات مفتوحة)</h2>
+<div class="card"><table>
+  <thead><tr><th>الفجوة</th><th>الأثر</th><th>الأولوية</th></tr></thead>
+  <tbody>
+    <tr><td><b>التسعير غير موصول بالرواتب/التسوية</b><br><small>نموذج الغسلات يُحسب في لوحة القيادة فقط كتقدير</small></td><td>لا يوجد احتساب رسمي لمستحق المؤسسة من سويتر ولا مطابقة مع الفاتورة</td><td><span class="pill p-crit">عالية</span></td></tr>
+    <tr><td><b>هوية البايكر نصّية في الأسطول</b><br><small>current_biker و incident.biker نصّ حرّ بلا employee_id</small></td><td>إعادة تسمية أو نقل الموظف لا تنعكس؛ خطر تعارض البيانات</td><td><span class="pill p-warn">متوسطة</span></td></tr>
+    <tr><td><b>لا كيان لتسوية/فاتورة سويتر الشهرية</b></td><td>الإيراد تقدير برمجي فقط؛ لا سجل تاريخي للتسويات</td><td><span class="pill p-warn">متوسطة</span></td></tr>
+    <tr><td><b>الاستمارة (رخصة السير) غير مربوطة بالمركبة</b><br><small>يُربط التأمين فقط عبر insurance_doc_id</small></td><td>تشتّت وثائق المركبة الواحدة بين سجلّين</td><td><span class="pill p-info">منخفضة</span></td></tr>
+    <tr><td><b>خطوة تجهيز المعدات في الإعداد غير موصولة بالعُهد/الأسطول</b></td><td>تسليم الدراجة/العُهدة يُسجّل يدوياً مرتين</td><td><span class="pill p-info">منخفضة</span></td></tr>
+  </tbody>
+</table></div>
+
+<h2><span class="n">٤</span> الازدواجية والتقاطع</h2>
+<div class="card"><table>
+  <thead><tr><th>النقطة</th><th>الوصف</th><th>التوصية</th></tr></thead>
+  <tbody>
+    <tr><td>ثلاثة سجلّات «مخالفات/حوادث»</td><td>مخالفات سويتر · مخالفات السكن · حوادث الأسطول — منفصلة تماماً</td><td>فصل مقصود ومقبول؛ يكفي «عرض موحّد» اختياري لاحقاً</td></tr>
+    <tr><td>الدراجة أصل + عُهدة</td><td>الدراجة في الأسطول، وأيضاً بند عُهدة في الإمداد (STANDARD_KIT)</td><td>توحيد المصدر: الأسطول هو المرجع، والعُهدة تشير إليه</td></tr>
+    <tr><td>هوية البايكر مكرّرة</td><td>الاسم كنصّ في الأسطول/مخالفات السكن/اسم العمليات بجانب جدول الموظفين</td><td>اعتماد جدول الموظفين مصدراً وحيداً + قوائم اختيار</td></tr>
+    <tr><td>حقائق مكرّرة نصّياً</td><td>VIN واللوحة في الأسطول وفي ملاحظات الوثيقة؛ شروط العقد في الكود وملاحظات الوثيقة</td><td>الإبقاء على الوثيقة كنسخة مرجعية والوحدة كبيانات تشغيلية مع ربط محكم</td></tr>
+    <tr><td>حدود الصلاحيات غير موحّدة</td><td>الوثائق تُحكم بصلاحية «الوثائق» بينما الأسطول والسكن بصلاحية الموردين/الموظفين</td><td>مواءمة الصلاحيات للنطاقات المترابطة (تجميع لوجستي)</td></tr>
+  </tbody>
+</table></div>
+
+<h2><span class="n">٥</span> التعارض (تضارب البيانات والمنطق)</h2>
+<div class="card"><table>
+  <thead><tr><th>التعارض</th><th>الدليل الفعلي</th><th>الخطورة</th></tr></thead>
+  <tbody>
+    <tr><td><b>هوية الشخص الواحد بصيغ متعارضة</b><br><small>لا رابط بجدول الموظفين يفرض التوحيد</small></td><td>البايكر 1700 يظهر بأربع صيغ: <span class="kbd">Mohamad Rakib</span> (الموظفون) · <span class="kbd">Mohamad Rakib (1700)</span> (الأسطول) · <span class="kbd">رقيب (1700)</span> (حادثة) · <span class="kbd">محمد رقيب (1700)</span> (السكن)</td><td><span class="pill p-crit">عالية</span></td></tr>
+    <tr><td><b>تعارض فلترة المشغّل يُخفي البيانات</b><br><small>الوحدات تُفلتر بـ operator_id بينما الصفوف بمشغّل فارغ</small></td><td>كل صفوف الأسطول (5) والسكن والدفعات (4) والوثائق (13) والحوادث (3) بـ <span class="kbd">operator_id = NULL</span> — فاختيار مشغّل محدّد من الأعلى يُخفيها جميعاً</td><td><span class="pill p-crit">عالية</span></td></tr>
+    <tr><td><b>التعيين يمسح المنح اليدوية</b></td><td>التعيين في منصب يحذف كل <span class="kbd">user_permissions</span> ثم يزرع حزمة المنصب — فيمسح منحاً يدوياً مثل صلاحية «الوثائق»</td><td><span class="pill p-warn">متوسطة</span></td></tr>
+    <tr><td><b>منطق الضمان غير مشروط</b></td><td>الدالة تطبّق الحد الأدنى 196 دائماً، بينما العقد يشترط استيفاء مؤشرات الأداء (SLA) لصرف الضمان</td><td><span class="pill p-warn">متوسطة</span></td></tr>
+    <tr><td><b>تعريف «الطلب» مقابل «الغسلة»</b></td><td>التسعير يحتسب بالطلب، والعمليات تُخزَّن كـ net_washes؛ لوحة القيادة تعاملها كمكافئ دون تعريف موحّد موثّق</td><td><span class="pill p-info">منخفضة</span></td></tr>
+  </tbody>
+</table></div>
+
+<h2><span class="n">٦</span> النقص (نواقص وظيفية وامتثالية)</h2>
+<div class="card"><table>
+  <thead><tr><th>النقص</th><th>الدليل / الأثر</th><th>الأولوية</th></tr></thead>
+  <tbody>
+    <tr><td><b>وثائق الأفراد غير مُتابَعة</b><br><small>إقامات ورخص قيادة العمالة البنغلاديشية</small></td><td>عدد وثائق «إقامة/رخصة قيادة» = <b>0</b>، ولا رابط من الموظف لوثائقه — أخطر ثغرة امتثالية (انتهاء إقامة = مخالفة نظامية)</td><td><span class="pill p-crit">عالية</span></td></tr>
+    <tr><td><b>تسوية/مطابقة تقارير سويتر الشهرية</b></td><td>لا وحدة تستوعب التقارير التسعة وتطابقها بالفاتورة وتُخرج الرواتب — الحلقة المالية مفتوحة (رغم توفّر المهارة)</td><td><span class="pill p-crit">عالية</span></td></tr>
+    <tr><td><b>لا عملية إنهاء خدمة (Offboarding)</b></td><td>جدول offboarding غير موجود — لا مسار لإعادة العُهد وإخلاء السكن وتسليم الوثائق عند مغادرة موظف (الإعداد موجود فقط)</td><td><span class="pill p-warn">متوسطة</span></td></tr>
+    <tr><td><b>تنبيهات استباقية غائبة</b></td><td>التنبيهات سلبية على اللوحة فقط؛ لا إشعار مجدول (واتساب/مهام مجدولة) قبل انتهاء وثيقة أو استحقاق دفعة</td><td><span class="pill p-warn">متوسطة</span></td></tr>
+    <tr><td><b>لا التقاط لتكاليف الأسطول/الصيانة</b></td><td><span class="kbd">vendor_expenses = 0</span> — تكلفة إصلاح 5532 وصيانة الأسطول غير مسجّلة ولا تنعكس في الهامش</td><td><span class="pill p-warn">متوسطة</span></td></tr>
+    <tr><td><b>تواريخ انتهاء ناقصة</b></td><td><b>6</b> وثائق بلا تاريخ انتهاء (الاستمارات + المشتقّات) — نقاط عمياء في تنبيهات التجديد</td><td><span class="pill p-info">منخفضة</span></td></tr>
+    <tr><td><b>مرفقات/أدلة محدودة</b></td><td>الإرفاق متاح على الوثائق فقط؛ لا صور أضرار على الحوادث ولا نموذج استلام/تسليم للسكن</td><td><span class="pill p-info">منخفضة</span></td></tr>
+    <tr><td><b>لا سجل تدقيق ولا مخرجات</b></td><td>لا Audit log لمن غيّر ماذا؛ ولا تصدير (قائمة الساكنين لمنزل، كشوف PDF/Excel)، ولا مراقبة SLA مقابل 99%/95%</td><td><span class="pill p-info">منخفضة</span></td></tr>
+  </tbody>
+</table>
+<p style="font-size:12px;color:#64748b;margin:10px 2px 0">ملاحظة: العمليات والرواتب والمخالفات فارغة حالياً (0 صفوف) — النظام مبنيّ وسابق لبياناته التشغيلية، وليس نقصاً في القدرات.</p>
+</div>
+
+<h2><span class="n">٧</span> التوصيات المرتّبة</h2>
+<div class="card">
+  <ul class="clean">
+    <li><span class="pill p-crit">أولوية ١</span> &nbsp;<b>وصل نموذج التسعير بالرواتب/التسوية</b> — احتساب مستحق المؤسسة ومقابل كل بايكر من العقد مباشرةً، مع مطابقة فاتورة سويتر (يتكامل مع مهارة التقارير الشهرية).</li>
+    <li><span class="pill p-crit">أولوية ١</span> &nbsp;<b>ربط البايكر بجدول الموظفين</b> في الأسطول ومخالفات السكن (إضافة <span class="kbd">employee_id</span> + قوائم اختيار بدل النصّ الحرّ) — يقضي على ازدواجية وتعارض الهوية.</li>
+    <li><span class="pill p-crit">أولوية ١</span> &nbsp;<b>إصلاح فلترة المشغّل</b> — تضمين الصفوف على مستوى المؤسسة (operator_id فارغ) في الأسطول والسكن والوثائق، أو إسناد المشغّل الحالي لها، حتى لا تختفي عند اختيار مشغّل محدّد. إصلاح سريع.</li>
+    <li><span class="pill p-crit">أولوية ١</span> &nbsp;<b>متابعة وثائق الأفراد (إقامة/رخصة قيادة)</b> مربوطةً بالموظف مع تواريخ الانتهاء — سدّ أخطر ثغرة امتثالية للعمالة البنغلاديشية.</li>
+    <li><span class="pill p-warn">أولوية ٢</span> &nbsp;<b>وحدة تسوية سويتر الشهرية</b> + <b>عملية إنهاء خدمة</b> (عُهد/سكن/وثائق) + <b>تنبيهات استباقية مجدولة</b> (واتساب) للوثائق والدفعات.</li>
+    <li><span class="pill p-warn">أولوية ٢</span> &nbsp;<b>كيان تسوية/فاتورة سويتر شهري</b> يُغذّي الإيراد والهامش ويحفظ السجل التاريخي.</li>
+    <li><span class="pill p-warn">أولوية ٢</span> &nbsp;<b>تعميم ربط الوثيقة بالكيان</b> (استمارة/تأمين ← مركبة، سجل تجاري/عقد ← المؤسسة) عبر مرجع كيان في الوثيقة.</li>
+    <li><span class="pill p-warn">أولوية ٢</span> &nbsp;<b>توحيد عُهدة الدراجة مع الأسطول</b> وربط خطوة تجهيز المعدات في الإعداد بالعُهد.</li>
+    <li><span class="pill p-info">أولوية ٣</span> &nbsp;<b>عرض موحّد «الحوادث والجزاءات»</b> يجمع السجلّات الثلاثة للقراءة فقط، ومواءمة صلاحيات النطاقات اللوجستية.</li>
+  </ul>
+</div>
+
+<div class="foot">مراجعة داخلية — مؤسسة دلو ورغوة التجارية · بُنيت من خريطة المفاتيح الخارجية الفعلية وقياس الروابط النصّية مقابل المرتبطة</div>
+</div></body></html>

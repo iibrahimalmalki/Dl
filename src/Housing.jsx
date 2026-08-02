@@ -19,7 +19,7 @@ export default function Housing({opId}){
   const load=async()=>{
     setLoading(true);
     let uq=supabase.from("housing_units").select("*").eq("active",true);
-    if(opId&&opId!=="all")uq=uq.eq("operator_id",opId);
+    if(opId&&opId!=="all")uq=uq.or("operator_id.eq."+opId+",operator_id.is.null");
     const[u,o,p,v]=await Promise.all([
       uq,
       supabase.from("housing_occupants").select("*").eq("active",true),
