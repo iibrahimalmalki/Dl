@@ -63,7 +63,7 @@ export default function Fleet({opId,owner}){
     setBusy(true);
     const row={operator_id:(opId&&opId!=="all")?opId:null,plate:vForm.plate.trim(),plate_en:vForm.plate_en||null,make:vForm.make||null,
       model_year:vForm.model_year?Number(vForm.model_year):null,vin:vForm.vin||null,serial_no:vForm.serial_no||null,
-      has_gps:!!vForm.has_gps,has_camera:!!vForm.has_camera,key_status:vForm.key_status||null,key_holder:vForm.key_holder||null,
+      color:vForm.color||null,has_gps:!!vForm.has_gps,has_camera:!!vForm.has_camera,key_status:vForm.key_status||null,key_holder:vForm.key_holder||null,
       current_biker:vForm.current_biker||null,status:vForm.status||"active",notes:vForm.notes||null,active:vForm.active!==false};
     try{
       if(vForm.id)await supabase.from("fleet_vehicles").update(row).eq("id",vForm.id);
@@ -124,6 +124,7 @@ export default function Fleet({opId,owner}){
             <div className="fl-meta">
               {v.current_biker&&<span className="fl-mi"><Icon n="employees" s={13}/> {v.current_biker}</span>}
               {v.make&&<span className="fl-mi"><Icon n="bike" s={13}/> {v.make}{v.model_year?" "+v.model_year:""}</span>}
+              {v.color&&<span className="fl-mi"><Icon n="ruler" s={13}/> {v.color}</span>}
             </div>
             <div className="fl-tags">
               <span className={"fl-tag"+(v.has_gps?" y":" n")}><Icon n="pin" s={12}/> تتبّع {v.has_gps?"✓":"✕"}</span>
@@ -215,6 +216,10 @@ function VehModal({f,set,save,busy}){
       <div className="fl-2">
         <Fld l="النوع"><input value={f.make||""} onChange={e=>u("make",e.target.value)} placeholder="بوكسر"/></Fld>
         <Fld l="سنة الصنع"><input type="number" value={f.model_year||""} onChange={e=>u("model_year",e.target.value)} placeholder="2024"/></Fld>
+      </div>
+      <div className="fl-2">
+        <Fld l="اللون"><input value={f.color||""} onChange={e=>u("color",e.target.value)} placeholder="أصفر"/></Fld>
+        <div/>
       </div>
       <div className="fl-2">
         <Fld l="رقم الهيكل VIN"><input value={f.vin||""} onChange={e=>u("vin",e.target.value)}/></Fld>
