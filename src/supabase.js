@@ -1,6 +1,27 @@
 import{createClient}from"@supabase/supabase-js";
-export const supabase=createClient("https://cnmggdrlkgsyrjxmvydv.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNubWdnZHJsa2dzeXJqeG12eWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjc3NDYsImV4cCI6MjA5MTYwMzc0Nn0.gUvtS3AgNhF69D8CimZxGHTbCoGDw5u2fDStgKcTI8Q");
+export const SUPA_URL="https://cnmggdrlkgsyrjxmvydv.supabase.co";
+export const SUPA_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNubWdnZHJsa2dzeXJqeG12eWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjc3NDYsImV4cCI6MjA5MTYwMzc0Nn0.gUvtS3AgNhF69D8CimZxGHTbCoGDw5u2fDStgKcTI8Q";
+export const supabase=createClient(SUPA_URL,SUPA_ANON);
 export const SITE_URL="https://db1-sandy.vercel.app";
+
+// رفع موثّق مباشر إلى التخزين — يرفق توكن دخول المستخدم صراحةً في الترويسة.
+// نتجاوز بهذا أي حالة لا يُرفق فيها عميل التخزين توكن المستخدم فيصل الطلب كزائر مجهول
+// فيرفضه أمان الصفوف (سبب اختفاء صور الجولة). يُرجع الرابط العام عند النجاح.
+export async function uploadAuthed(bucket,path,file,contentType="image/jpeg"){
+  const{data}=await supabase.auth.getSession();
+  const s=data&&data.session;
+  if(!s||!s.access_token){const e=new Error("انتهت الجلسة — سجّل الدخول من جديد");e.code="NO_SESSION";throw e;}
+  const url=`${SUPA_URL}/storage/v1/object/${bucket}/${encodeURI(path)}`;
+  const res=await fetch(url,{method:"POST",headers:{
+    Authorization:`Bearer ${s.access_token}`,
+    apikey:SUPA_ANON,
+    "x-upsert":"true",
+    "Content-Type":contentType,
+    "cache-control":"3600",
+  },body:file});
+  if(!res.ok){let t="";try{t=await res.text();}catch(_){}throw new Error(t||("HTTP "+res.status));}
+  return`${SUPA_URL}/storage/v1/object/public/${bucket}/${encodeURI(path)}`;
+}
 
 // يضمن توكن دخول صالح قبل عمليات التخزين (الرفع).
 // على الجوال، فتح الكاميرا يُخلّي الصفحة في الخلفية فيتوقّف تجديد التوكن التلقائي،

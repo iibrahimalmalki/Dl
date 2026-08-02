@@ -1,5 +1,5 @@
 import{useState,useEffect}from"react";
-import{supabase,ensureFreshToken,compressImage}from"./supabase";
+import{supabase,ensureFreshToken,compressImage,uploadAuthed}from"./supabase";
 import Icon from"./Icon";
 import{SEVERITY,byCode,objectionState}from"./violations";
 import{AXES,bikerItems,compliance as frCompliance,complianceByAxis,effect as frEffect}from"./fieldChecklist";
@@ -48,13 +48,11 @@ export default function BikerPortal({me,onLogout}){
   const openSelf=()=>{if(selfR){setSres(selfR.results||{});setSphotos(selfR.photos||{});setSnotes(selfR.item_notes||{});}else{setSres({});setSphotos({});setSnotes({});}setSmsg(null);setSelfOpen(true);};
   const supload=async(n,idx,file)=>{if(!file)return;const key=`${n}-${idx}`;setSuploading(key);
     try{
-      const fresh=await ensureFreshToken();
-      if(!fresh.ok){setSmsg({ok:false,t:"انتهت الجلسة — سجّل الدخول من جديد ثم أعد الرفع."});setSuploading("");return;}
+      await ensureFreshToken();
       const img=await compressImage(file);const rand=Math.floor(Math.random()*1e9);
       const path=`self/${period}/${sid}/${n}-${idx}-${Date.now()}-${rand}.jpg`;
-      const{error}=await supabase.storage.from("field-evidence").upload(path,img,{contentType:"image/jpeg",upsert:true});if(error)throw error;
-      const{data}=supabase.storage.from("field-evidence").getPublicUrl(path);
-      setSphotos(p=>{const a=[...(p[n]||[])];a[idx]=data.publicUrl;return{...p,[n]:a};});
+      const publicUrl=await uploadAuthed("field-evidence",path,img,"image/jpeg");
+      setSphotos(p=>{const a=[...(p[n]||[])];a[idx]=publicUrl;return{...p,[n]:a};});
     }catch(e){setSmsg({ok:false,t:"تعذّر رفع الصورة: "+(e.message||e)});}
     setSuploading("");};
   const scomp=useMemo(()=>frCompliance(sres),[sres]);
