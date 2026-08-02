@@ -21,6 +21,7 @@ export default function Renewals({opId}){
   const[loading,setLoading]=useState(true);
   const[docs,setDocs]=useState([]);
   const[emps,setEmps]=useState([]);
+  const[veh,setVeh]=useState([]);
   const[filter,setFilter]=useState("all");
   const[form,setForm]=useState(null);const[msg,setMsg]=useState(null);const[busy,setBusy]=useState(false);
   const note=(ok,t)=>setMsg({ok,t});
@@ -36,6 +37,7 @@ export default function Renewals({opId}){
   };
   useEffect(()=>{load();/*eslint-disable-next-line*/},[opId]);
   useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id").order("full_name").then(({data})=>setEmps(data||[]));},[]);
+  useEffect(()=>{supabase.from("fleet_vehicles").select("id,plate,plate_en").eq("active",true).order("plate").then(({data})=>setVeh(data||[]));},[]);
 
   const kpis=useMemo(()=>{
     const withEnd=docs.filter(d=>d._d!=null);
@@ -48,7 +50,7 @@ export default function Renewals({opId}){
   const save=async()=>{
     if(!form.subject.trim()){note(false,"أدخل موضوع الوثيقة (اللوحة/الاسم)");return;}
     setBusy(true);note(false,"");
-    const row={operator_id:(opId&&opId!=="all")?opId:null,doc_type:form.doc_type,title:form.title||null,subject:form.subject.trim(),subject_kind:form.subject_kind||null,employee_id:form.employee_id||null,provider:form.provider||null,ref_no:form.ref_no||null,start_date:form.start_date||null,end_date:form.end_date||null,notes:form.notes||null,active:form.active!==false};
+    const row={operator_id:(opId&&opId!=="all")?opId:null,doc_type:form.doc_type,title:form.title||null,subject:form.subject.trim(),subject_kind:form.subject_kind||null,employee_id:form.employee_id||null,vehicle_id:form.vehicle_id||null,provider:form.provider||null,ref_no:form.ref_no||null,start_date:form.start_date||null,end_date:form.end_date||null,notes:form.notes||null,active:form.active!==false};
     try{
       if(form.id)await supabase.from("renewal_docs").update(row).eq("id",form.id);
       else await supabase.from("renewal_docs").insert(row);
@@ -137,6 +139,7 @@ export default function Renewals({opId}){
         <div className="rn-sheet-h"><b>{form.id?"تعديل/تجديد وثيقة":"وثيقة جديدة"}</b><button onClick={()=>setForm(null)}><Icon n="x" s={16}/></button></div>
         <div className="rn-g2"><F l="نوع الوثيقة"><select value={form.doc_type} onChange={e=>setForm({...form,doc_type:e.target.value})}>{DOC_TYPES.map(t=><option key={t}>{t}</option>)}</select></F><F l="نوع الموضوع"><select value={form.subject_kind} onChange={e=>setForm({...form,subject_kind:e.target.value})}><option value="مركبة">مركبة</option><option value="شخص">شخص</option><option value="مؤسسة">مؤسسة</option></select></F></div>
         {form.subject_kind==="شخص"&&<F l="الموظف المرتبط"><select value={form.employee_id||""} onChange={e=>{const id=e.target.value;const emp=emps.find(x=>x.id===id);setForm({...form,employee_id:id||null,subject:emp?emp.full_name:form.subject});}}><option value="">— اختر موظفاً —</option>{emps.map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></F>}
+        {form.subject_kind==="مركبة"&&<F l="المركبة المرتبطة"><select value={form.vehicle_id||""} onChange={e=>{const id=e.target.value;const v=veh.find(x=>x.id===id);setForm({...form,vehicle_id:id||null,subject:v?(v.plate+(v.plate_en&&v.plate_en!=="—"?" / "+v.plate_en:"")):form.subject});}}><option value="">— اختر مركبة —</option>{veh.map(x=><option key={x.id} value={x.id}>{x.plate}</option>)}</select></F>}
         <F l="الموضوع (اللوحة / الاسم)"><input value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} placeholder="مثال: 5532 ق ب / سلمان المالكي"/></F>
         <F l="العنوان"><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="تأمين المسؤولية تجاه الغير"/></F>
         <div className="rn-g2"><F l="الجهة المُصدِرة"><input value={form.provider} onChange={e=>setForm({...form,provider:e.target.value})} placeholder="التعاونية للتأمين"/></F><F l="رقم الوثيقة"><input value={form.ref_no} onChange={e=>setForm({...form,ref_no:e.target.value})}/></F></div>

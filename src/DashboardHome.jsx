@@ -70,6 +70,7 @@ export default function DashboardHome({onNav}){
     const compVals=d.rounds.map(r=>Number(r.compliance_pct)).filter(x=>!isNaN(x));
     const avgComp=compVals.length?Math.round(compVals.reduce((a,b)=>a+b,0)/compVals.length):null;
     const vendMonth=d.vexp.filter(e=>String(e.exp_date||"").slice(0,7)===curMonth()).reduce((a,e)=>a+Number(e.amount||0),0);
+    const expTotal=d.vexp.reduce((a,e)=>a+Number(e.amount||0),0);
     const ivPending=d.ivs.filter(i=>i.status!=="completed").length;
     const onbAvg=d.onb.length?Math.round(d.onb.reduce((a,o)=>a+Number(o.progress||0),0)/d.onb.length):0;
 
@@ -115,14 +116,14 @@ export default function DashboardHome({onNav}){
     alerts.sort((a,b)=>sevRank[a.sev]-sevRank[b.sev]);
 
     return{A,accepted,rejected,pending,funnel,total0,bikers,teams:d.teams,opP,opsL,washes,avgRating,topBikers,maxW,payP,payrollTotal,
-      openViol,finesTotal,avgComp,rounds:d.rounds,vendMonth,ivPending,onbAvg,
+      openViol,finesTotal,avgComp,rounds:d.rounds,vendMonth,expTotal,ivPending,onbAvg,
       docExpired:docExpired.length,docSoon:docSoon.length,nVeh:fveh.length,stolen,fMaint,fIncOpen,gpsCov,
       hpNext,hpNextDl,hvOpen,houseMonthly,scPending,scLow,revenue,costs,margin,alerts};
   },[d]);
 
   if(!s)return(<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>{[...Array(6)].map((_,i)=><div key={i} className="dw-skel" style={{height:92}}/>)}</div>);
 
-  const {A,accepted,rejected,pending,funnel,total0,bikers,teams,opP,washes,avgRating,topBikers,maxW,payP,payrollTotal,openViol,finesTotal,avgComp,vendMonth,ivPending,onbAvg,
+  const {A,accepted,rejected,pending,funnel,total0,bikers,teams,opP,washes,avgRating,topBikers,maxW,payP,payrollTotal,openViol,finesTotal,avgComp,vendMonth,expTotal,ivPending,onbAvg,
     docExpired,docSoon,nVeh,stolen,fMaint,fIncOpen,gpsCov,hpNext,hpNextDl,hvOpen,houseMonthly,scPending,scLow,revenue,costs,margin,alerts}=s;
   const recent=A.slice(0,4);
   const scoreCol=v=>v==null?["#eef1f4","#94a3b8"]:v>=6.5?["#e7f7ef","#087443"]:v>=5?["#fef3e2","#b54708"]:["#feecea","#b42318"];
@@ -207,7 +208,8 @@ export default function DashboardHome({onNav}){
           <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#fff2e8",color:"#b54708"}}><Icon n="vendors" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">مصروفات موردين (الشهر)</div></div><b>{vendMonth?money(vendMonth):"—"}</b></div>
           <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef4ff",color:"#1d5bbf"}}><Icon n="home" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إيجار السكن (شهرياً)</div></div><b>{houseMonthly?money(houseMonthly):"—"}</b></div>
           <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#feecea",color:"#b42318"}}><Icon n="alert" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">غرامات مخالفات</div></div><b>{finesTotal?money(finesTotal):"—"}</b></div>
-          <div className="dh-fin-tot"><span>الهامش التقديري (إيراد − تكاليف)</span><b style={{color:margin>=0?"#087443":"#b42318"}}>{revenue?money(margin):"—"}</b></div>
+          <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef1f4",color:"#334155"}}><Icon n="reports" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إجمالي المصروفات المسجّلة (تأسيس+تشغيل)</div></div><b>{expTotal?money(expTotal):"—"}</b></div>
+          <div className="dh-fin-tot"><span>الهامش التقديري (إيراد − تكاليف الشهر)</span><b style={{color:margin>=0?"#087443":"#b42318"}}>{revenue?money(margin):"—"}</b></div>
         </div>
       </div>
     </div>
