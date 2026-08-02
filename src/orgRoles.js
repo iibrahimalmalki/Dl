@@ -9,6 +9,7 @@ export const MODULE_LABELS={
   onboarding:"التعاقد والإعداد",operations:"العمليات اليومية",performance:"الأداء",payroll:"الرواتب",
   complaints:"الشكاوى",field_rounds:"الجولات الميدانية",org:"الهيكل التنظيمي",employees:"الموظفون",
   vendors:"الموردون",reports:"التقارير",renewals:"الوثائق",
+  fleet:"الأسطول",housing:"السكن",supply:"سلاسل الإمداد",offboarding:"إنهاء الخدمة",settlement:"تسوية سويتر",
 };
 
 // v = عرض فقط · ve = عرض + تعديل
@@ -18,7 +19,7 @@ export const POSITIONS=[
   {k:"sec_strat",ar:"مدير الاستراتيجية والتطوير",sector:"strat",level:"مدير قطاع", parent:null,
     perms:{dashboard:"v",complaints:"ve",performance:"v",operations:"v",reports:"ve",sourcing:"v",org:"v"}},
   {k:"sec_sup",  ar:"مدير الخدمات المساندة",     sector:"sup",  level:"مدير قطاع", parent:null,
-    perms:{dashboard:"v",employees:"ve",payroll:"ve",onboarding:"v",vendors:"ve",reports:"v",org:"v"}},
+    perms:{dashboard:"v",employees:"ve",payroll:"ve",onboarding:"v",offboarding:"ve",vendors:"ve",fleet:"ve",housing:"ve",supply:"ve",settlement:"v",reports:"v",org:"v"}},
 
   {k:"ops1",ar:"مدير التشغيل الميداني",   sector:"ops",level:"مدير إدارة",parent:"sec_ops",
     perms:{dashboard:"v",operations:"ve",performance:"ve",field_rounds:"ve",complaints:"v",employees:"v"}},
@@ -39,11 +40,11 @@ export const POSITIONS=[
     perms:{dashboard:"v",reports:"ve",org:"v"}},
 
   {k:"su1",ar:"مدير الموارد البشرية",      sector:"sup",level:"مدير إدارة",parent:"sec_sup",
-    perms:{dashboard:"v",employees:"ve",payroll:"ve",onboarding:"v",recruitment:"v",reports:"v"}},
+    perms:{dashboard:"v",employees:"ve",offboarding:"ve",payroll:"ve",onboarding:"v",recruitment:"v",reports:"v"}},
   {k:"su2",ar:"مدير الدعم اللوجستي",       sector:"sup",level:"مدير إدارة",parent:"sec_sup",
-    perms:{dashboard:"v",vendors:"ve",operations:"v",employees:"v"}},
+    perms:{dashboard:"v",vendors:"ve",fleet:"ve",housing:"ve",supply:"ve",renewals:"ve",operations:"v",employees:"v"}},
   {k:"su3",ar:"مدير المالية والإدارة",     sector:"sup",level:"مدير إدارة",parent:"sec_sup",
-    perms:{dashboard:"v",payroll:"v",reports:"ve",operations:"v"}},
+    perms:{dashboard:"v",payroll:"ve",settlement:"ve",vendors:"v",reports:"ve",operations:"v"}},
 ];
 
 export const POS_BY_KEY=Object.fromEntries(POSITIONS.map(p=>[p.k,p]));

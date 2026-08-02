@@ -8,11 +8,18 @@ const loginURL=()=>`${SITE_URL}#admin`;
 
 // الوحدات القابلة للمنح — TMA غير مدرجة عمداً (مقصورة على المالك ولا تُمنح لأحد)
 const MODULES=[
-  {k:"applicants",ar:"التوظيف"},{k:"interviews",ar:"المقابلات"},{k:"onboarding",ar:"التعاقد والإعداد"},
-  {k:"operations",ar:"العمليات اليومية"},{k:"performance",ar:"الأداء"},{k:"payroll",ar:"الرواتب"},
-  {k:"complaints",ar:"الشكاوى والتصعيد"},{k:"field_rounds",ar:"الجولات الميدانية"},{k:"vendors",ar:"الموردون"},
-  {k:"renewals",ar:"الوثائق"},{k:"referrals",ar:"الإحالات"},{k:"reports",ar:"التقارير"},{k:"employees",ar:"الموظفون"},
+  {g:"الموارد البشرية"},
+  {k:"applicants",ar:"التوظيف"},{k:"interviews",ar:"المقابلات"},{k:"onboarding",ar:"التعاقد والإعداد"},{k:"employees",ar:"الموظفون"},{k:"offboarding",ar:"إنهاء الخدمة"},
+  {g:"التشغيل"},
+  {k:"operations",ar:"العمليات اليومية"},{k:"performance",ar:"الأداء"},{k:"field_rounds",ar:"الجولات الميدانية"},{k:"complaints",ar:"الشكاوى والمخالفات"},
+  {g:"المالية"},
+  {k:"payroll",ar:"الرواتب"},{k:"settlement",ar:"تسوية سويتر"},{k:"vendors",ar:"الموردون والمصروفات"},
+  {g:"الدعم اللوجستي وسلاسل الإمداد"},
+  {k:"fleet",ar:"الأسطول والحوادث"},{k:"housing",ar:"السكن والإقامة"},{k:"renewals",ar:"الوثائق والتجديدات"},{k:"supply",ar:"سلاسل الإمداد"},
+  {g:"الإدارة والحوكمة"},
+  {k:"reports",ar:"التقارير"},
 ];
+const MOD_KEYS=MODULES.filter(m=>m.k);
 // منهجية RACI — تحدّد الوصول تلقائياً: A/R عرض+تعديل · C/I عرض فقط · بلا رمز لا وصول
 const RACI=[
   {k:"A",ar:"معتمِد / مُساءَل",c:"#7c3aed"},
@@ -47,9 +54,9 @@ export default function UserManagement(){
 
   const openUser=async(u)=>{setSel(u);note("");const{data}=await supabase.from("user_permissions").select("module,can_view,can_edit,raci").eq("user_id",u.id);const m={};(data||[]).forEach(r=>{m[r.module]=r.raci||(r.can_edit?"R":(r.can_view?"I":null));});setPerms(m);};
   const setRaci=(mod,code)=>setPerms(p=>({...p,[mod]:p[mod]===code?null:code}));
-  const grantAll=()=>{const m={};MODULES.forEach(x=>m[x.k]="R");setPerms(m);};
+  const grantAll=()=>{const m={};MOD_KEYS.forEach(x=>m[x.k]="R");setPerms(m);};
   const revokeAll=()=>setPerms({});
-  const savePerms=async()=>{if(!sel)return;setSaving(true);note("");await supabase.from("user_permissions").delete().eq("user_id",sel.id);const rows=MODULES.filter(x=>perms[x.k]).map(x=>({user_id:sel.id,module:x.k,raci:perms[x.k],can_view:true,can_edit:raciEdit(perms[x.k])}));if(rows.length){const{error}=await supabase.from("user_permissions").insert(rows);if(error){note("خطأ: "+error.message);setSaving(false);return;}}setSaving(false);note("تم حفظ مصفوفة RACI",true);};
+  const savePerms=async()=>{if(!sel)return;setSaving(true);note("");await supabase.from("user_permissions").delete().eq("user_id",sel.id);const rows=MOD_KEYS.filter(x=>perms[x.k]).map(x=>({user_id:sel.id,module:x.k,raci:perms[x.k],can_view:true,can_edit:raciEdit(perms[x.k])}));if(rows.length){const{error}=await supabase.from("user_permissions").insert(rows);if(error){note("خطأ: "+error.message);setSaving(false);return;}}setSaving(false);note("تم حفظ مصفوفة RACI",true);};
 
   const reloadEmps=()=>supabase.from("employees").select("id,full_name,mobile,employee_id").order("full_name").then(({data})=>setEmps(data||[]));
   const pickEmp=id=>{const e=emps.find(x=>x.id===id);setQ(p=>({...p,emp:id,kind:id?"biker":p.kind,name:e?e.full_name:p.name,phone:e?(e.mobile||p.phone):p.phone}));};
@@ -111,12 +118,12 @@ export default function UserManagement(){
       <div className="um-card">
         <table className="um-tbl">
           <thead><tr><th>الوحدة</th><th>المسؤولية (RACI)</th></tr></thead>
-          <tbody>{MODULES.map(m=>{const cur=perms[m.k]||null;return(<tr key={m.k}>
+          <tbody>{MODULES.map(m=>m.g?(<tr key={m.g} className="um-grp"><td colSpan={2}>{m.g}</td></tr>):(<tr key={m.k}>
             <td className="um-mod">{m.ar}</td>
             <td><div className="um-raci">{RACI.map(r=>(
-              <button key={r.k} className={"um-rc"+(cur===r.k?" on":"")} style={cur===r.k?{background:r.c,borderColor:r.c,color:"#fff"}:{}} onClick={()=>setRaci(m.k,r.k)} title={r.ar}>{r.k}</button>))}
+              <button key={r.k} className={"um-rc"+((perms[m.k]||null)===r.k?" on":"")} style={(perms[m.k]||null)===r.k?{background:r.c,borderColor:r.c,color:"#fff"}:{}} onClick={()=>setRaci(m.k,r.k)} title={r.ar}>{r.k}</button>))}
             </div></td>
-          </tr>);})}</tbody>
+          </tr>))}</tbody>
         </table>
       </div>
       <div className="um-note"><Icon n="lock" s={13}/> بيانات المواهب (TMA) غير مدرجة في الصلاحيات — مقصورة عليك وحدك حتى مع «منح كل شيء».</div>
@@ -211,6 +218,7 @@ const CSS=`
 .um-tbl td{padding:11px 14px;border-bottom:1px solid #f1f3f5;text-align:center}
 .um-tbl tr:last-child td{border-bottom:none}
 .um-mod{text-align:right!important;font-weight:700;font-size:13px;color:#0f172a}
+.um-grp td{background:#0e1622;color:#fff;font-weight:800;font-size:12px;padding:8px 14px!important;text-align:right}
 .um-raci{display:inline-flex;gap:6px}
 .um-rc{width:34px;height:34px;border-radius:9px;border:1.5px solid #e6e9ee;background:#fff;font-family:inherit;font-size:13px;font-weight:800;color:#94a3b8;cursor:pointer;transition:.12s}
 .um-rc:hover{border-color:#cbd5e1}
