@@ -59,6 +59,18 @@ export default function Renewals({opId}){
   const del=async(d)=>{if(!confirm("حذف وثيقة «"+d.subject+"»؟"))return;if(d.storage_path)await supabase.storage.from("legal-docs").remove([d.storage_path]);await supabase.from("renewal_docs").delete().eq("id",d.id);await load();};
   const renew=(d)=>setForm({...d});   // فتح للتعديل (تحديث تاريخ النهاية)
 
+  // إبلاغ يدوي عبر واتساب للمالية والرئيس لاستكمال السداد/التجديد
+  const notifyPay=(d)=>{
+    const days=d._d;
+    const msg="مطلوب استكمال إجراءات السداد/التجديد\n"+
+      "الوثيقة: "+d.doc_type+" — "+d.subject+"\n"+
+      (d.provider?"الجهة: "+d.provider+"\n":"")+
+      (d.ref_no?"الرقم: "+d.ref_no+"\n":"")+
+      "تاريخ الانتهاء: "+fmtD(d.end_date)+(days!=null?" ("+(days<0?"منتهية":days+" يوم")+")":"")+"\n\n"+
+      "إلى: المالية والرئيس — يرجى اعتماد السداد وإكمال الإجراء.";
+    window.open("https://wa.me/966566884419?text="+encodeURIComponent(msg),"_blank");
+  };
+
   // ── مرفقات أصلية (دلو تخزين خاص legal-docs) ──
   const upload=async(file)=>{
     if(!file||!form.id)return;
@@ -113,7 +125,7 @@ export default function Renewals({opId}){
           <small>{d._d==null?"":"يوم"}</small>
         </div>
         <span className="rn-band" style={{background:b.bg,color:b.c}}>{b.ar}</span>
-        <div className="rn-act">{d.storage_path&&<button className="att" onClick={()=>viewFile(d.storage_path)} title="عرض المرفق الأصلي"><Icon n="eye" s={13}/></button>}<button onClick={()=>renew(d)} title="تجديد/تعديل"><Icon n="refresh" s={13}/></button><button className="del" onClick={()=>del(d)} title="حذف"><Icon n="trash" s={13}/></button></div>
+        <div className="rn-act"><button className="wa" onClick={()=>notifyPay(d)} title="إبلاغ المالية والرئيس عبر واتساب للسداد/التجديد"><Icon n="phone" s={13}/></button>{d.storage_path&&<button className="att" onClick={()=>viewFile(d.storage_path)} title="عرض المرفق الأصلي"><Icon n="eye" s={13}/></button>}<button onClick={()=>renew(d)} title="تجديد/تعديل"><Icon n="refresh" s={13}/></button><button className="del" onClick={()=>del(d)} title="حذف"><Icon n="trash" s={13}/></button></div>
       </div>);})}</div>}
 
     <div className="rn-legend">
@@ -174,6 +186,7 @@ const CSS=`
 .rn-act button{border:1px solid #e6e9ee;background:#fff;width:30px;height:30px;border-radius:9px;cursor:pointer;color:#64748b;display:flex;align-items:center;justify-content:center}
 .rn-act button.del{color:#b42318;background:#feecea;border-color:#f7bfba}
 .rn-act button.att{color:#1d5bbf;background:#eef4ff;border-color:#c7d9f7}
+.rn-act button.wa{color:#087443;background:#e7f7ef;border-color:#bbe8cf}
 .rn-attach{border:1px dashed #e6e9ee;border-radius:12px;padding:11px 12px;margin-bottom:10px;background:#fbfcfd}
 .rn-attach-h{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:#334155;margin-bottom:8px}
 .rn-attach-hint{font-size:11.5px;color:#94a3b8}

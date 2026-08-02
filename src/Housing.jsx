@@ -55,6 +55,16 @@ export default function Housing({opId}){
   };
   const delRow=async(table,id,hard)=>{if(!confirm("تأكيد الحذف؟"))return;if(hard)await supabase.from(table).delete().eq("id",id);else await supabase.from(table).update({active:false}).eq("id",id);await load();};
   const togglePaid=async(p)=>{await supabase.from("housing_payments").update({paid:!p.paid,paid_date:!p.paid?new Date().toISOString().slice(0,10):null}).eq("id",p.id);await load();};
+  // إبلاغ يدوي عبر واتساب للمالية والرئيس لاستكمال السداد
+  const notifyPay=(p)=>{
+    const msg="مطلوب استكمال سداد دفعة سكن\n"+
+      "الدفعة رقم: "+(p.seq||"—")+"\n"+
+      "المبلغ: "+money(p.amount)+"\n"+
+      "تاريخ الاستحقاق: "+fmtD(p.due_date)+"\n"+
+      "المستفيد: شركة منزل (عقد 10582119043)\n\n"+
+      "إلى: المالية والرئيس — يرجى اعتماد السداد.";
+    window.open("https://wa.me/966566884419?text="+encodeURIComponent(msg),"_blank");
+  };
 
   if(loading)return <div className="dw-skel" style={{height:260}}/>;
 
@@ -126,6 +136,7 @@ export default function Housing({opId}){
             <td><span className="hs-badge" style={{color:b.c,background:b.bg}}>{b.ar}</span></td>
             <td>{p.paid?fmtD(p.paid_date):"—"}</td>
             <td className="hs-tact">
+              {!p.paid&&<button className="wa" onClick={()=>notifyPay(p)} title="إبلاغ المالية والرئيس عبر واتساب للسداد"><Icon n="phone" s={13}/></button>}
               <button className={p.paid?"":"ok"} onClick={()=>togglePaid(p)} title={p.paid?"إلغاء السداد":"تحديد كمسدّدة"}><Icon n={p.paid?"refresh":"check"} s={13}/></button>
               <button onClick={()=>setPForm({...p})}><Icon n="edit" s={13}/></button>
               <button className="d" onClick={()=>delRow("housing_payments",p.id,true)}><Icon n="trash" s={13}/></button>
@@ -257,6 +268,7 @@ const CSS=`
 .hs-tact{display:flex;gap:5px;justify-content:flex-end}
 .hs-tact button{border:1px solid var(--line);background:#fff;width:28px;height:28px;border-radius:8px;cursor:pointer;color:var(--mut);display:flex;align-items:center;justify-content:center}
 .hs-tact button.ok{color:#087443;background:#e7f7ef;border-color:#bbe8cf}
+.hs-tact button.wa{color:#087443;background:#e7f7ef;border-color:#bbe8cf}
 .hs-tact button.d{color:#b42318}
 .hs-recs{font-size:11.5px;color:#475569;padding:12px 16px;background:#fff8f3;border-top:1px solid var(--line)}
 .hs-violog{display:flex;flex-direction:column;padding:6px 0;border-bottom:1px solid var(--line)}
