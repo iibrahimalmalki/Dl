@@ -24,6 +24,7 @@ const Settlement=lazy(()=>import("./Settlement"));
 const Housing=lazy(()=>import("./Housing"));
 const Offboarding=lazy(()=>import("./Offboarding"));
 const IncidentsPenalties=lazy(()=>import("./IncidentsPenalties"));
+const AuditLog=lazy(()=>import("./AuditLog"));
 const SUPERVISOR_POS=["sec_ops","ops1","field_sup"];
 
 const NAV=[
@@ -55,9 +56,10 @@ const NAV=[
   {k:"renewals",ar:"الوثائق والتجديدات",ic:"doc"},
   {k:"reports",ar:"التقارير",ic:"reports"},
   {k:"users",ar:"المستخدمون",ic:"users"},
+  {k:"audit",ar:"سجل التدقيق",ic:"eye",lock:1},
   {k:"tma",ar:"المواهب TMA",ic:"tma",lock:1},
 ];
-const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],vendors:["الموردون","الصيانة والقطع والدراجات والسكن ومصروفاتها"],supply:["سلاسل الإمداد","المخزون والطلبات والاستلام والعُهد والجرد"],fleet:["الأسطول والحوادث","سجل المركبات والتتبّع والكاميرات والمفاتيح وحوادث السرقة والأعطال"],offboarding:["إنهاء الخدمة","مخالصة المغادرة — عُهد ودراجة وسكن وتسوية ووثائق وحساب"],incidents:["الحوادث والجزاءات","عرض موحّد — مخالفات سويتر ومخالفات السكن وحوادث الأسطول"],housing:["السكن والإقامة","الوحدات والساكنون وجدول الدفعات ومخالفات السكن"],renewals:["الوثائق والتجديدات","متابعة صلاحية التأمين والاستمارات والرخص والإقامات"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],pricing:["المقابل والتسعير","نموذج غسلات سويتر — الشرائح وحاسبة المقابل الشهري"],settlement:["تسوية سويتر","احتساب المستحق الشهري لكل بايكر ومطابقته بالفاتورة"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"]};
+const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["التقارير","القمع والزيارات والتحليلات"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],vendors:["الموردون","الصيانة والقطع والدراجات والسكن ومصروفاتها"],supply:["سلاسل الإمداد","المخزون والطلبات والاستلام والعُهد والجرد"],fleet:["الأسطول والحوادث","سجل المركبات والتتبّع والكاميرات والمفاتيح وحوادث السرقة والأعطال"],offboarding:["إنهاء الخدمة","مخالصة المغادرة — عُهد ودراجة وسكن وتسوية ووثائق وحساب"],incidents:["الحوادث والجزاءات","عرض موحّد — مخالفات سويتر ومخالفات السكن وحوادث الأسطول"],audit:["سجل التدقيق","من غيّر ماذا ومتى — مقصور على المالك"],housing:["السكن والإقامة","الوحدات والساكنون وجدول الدفعات ومخالفات السكن"],renewals:["الوثائق والتجديدات","متابعة صلاحية التأمين والاستمارات والرخص والإقامات"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],pricing:["المقابل والتسعير","نموذج غسلات سويتر — الشرائح وحاسبة المقابل الشهري"],settlement:["تسوية سويتر","احتساب المستحق الشهري لكل بايكر ومطابقته بالفاتورة"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"]};
 
 export default function Shell({onLogout,me}){
   const[view,setView]=useState("dashboard");
@@ -69,7 +71,7 @@ export default function Shell({onLogout,me}){
   const nm=(me&&me.display_name)||"إبراهيم المالكي";
   const owner=!!(me&&me.is_owner);
   const isSup=SUPERVISOR_POS.includes(me&&me.position);
-  const nav=NAV.filter(n=>{if(n.k==="users"||n.k==="tma")return owner;if(n.k==="myteam")return isSup;return true;});
+  const nav=NAV.filter(n=>{if(n.k==="users"||n.k==="tma"||n.k==="audit")return owner;if(n.k==="myteam")return isSup;return true;});
   const go=k=>{setView(k);setOpen(false);};
   const [t,sub]=TITLES[view]||[NAV.find(n=>n.k===view)?.ar||"",""];
 
@@ -130,6 +132,7 @@ export default function Shell({onLogout,me}){
         {view==="housing"&&<Suspense fallback={<Sk/>}><Housing opId={op}/></Suspense>}
         {view==="offboarding"&&<Suspense fallback={<Sk/>}><Offboarding opId={op}/></Suspense>}
         {view==="incidents"&&<Suspense fallback={<Sk/>}><IncidentsPenalties opId={op}/></Suspense>}
+        {view==="audit"&&owner&&<Suspense fallback={<Sk/>}><AuditLog/></Suspense>}
         {view==="renewals"&&<Suspense fallback={<Sk/>}><Renewals opId={op}/></Suspense>}
       </div>
     </div>
