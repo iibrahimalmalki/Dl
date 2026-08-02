@@ -1,5 +1,5 @@
 import{useState,useEffect}from"react";
-import{supabase}from"./supabase";
+import{supabase,ensureFreshToken,compressImage}from"./supabase";
 import Icon from"./Icon";
 import{SEVERITY,byCode,objectionState}from"./violations";
 import{AXES,bikerItems,compliance as frCompliance,complianceByAxis,effect as frEffect}from"./fieldChecklist";
@@ -47,12 +47,15 @@ export default function BikerPortal({me,onLogout}){
   const[suploading,setSuploading]=useState("");const[ssaving,setSsaving]=useState(false);const[smsg,setSmsg]=useState(null);
   const openSelf=()=>{if(selfR){setSres(selfR.results||{});setSphotos(selfR.photos||{});setSnotes(selfR.item_notes||{});}else{setSres({});setSphotos({});setSnotes({});}setSmsg(null);setSelfOpen(true);};
   const supload=async(n,idx,file)=>{if(!file)return;const key=`${n}-${idx}`;setSuploading(key);
-    try{const ext=(String(file.name).split(".").pop()||"jpg").toLowerCase();const rand=Math.floor(Math.random()*1e9);
-      const path=`self/${period}/${sid}/${n}-${idx}-${Date.now()}-${rand}.${ext}`;
-      const{error}=await supabase.storage.from("field-evidence").upload(path,file,{contentType:file.type||"image/jpeg",upsert:true});if(error)throw error;
+    try{
+      const fresh=await ensureFreshToken();
+      if(!fresh.ok){setSmsg({ok:false,t:"انتهت الجلسة — سجّل الدخول من جديد ثم أعد الرفع."});setSuploading("");return;}
+      const img=await compressImage(file);const rand=Math.floor(Math.random()*1e9);
+      const path=`self/${period}/${sid}/${n}-${idx}-${Date.now()}-${rand}.jpg`;
+      const{error}=await supabase.storage.from("field-evidence").upload(path,img,{contentType:"image/jpeg",upsert:true});if(error)throw error;
       const{data}=supabase.storage.from("field-evidence").getPublicUrl(path);
       setSphotos(p=>{const a=[...(p[n]||[])];a[idx]=data.publicUrl;return{...p,[n]:a};});
-    }catch(e){setSmsg({ok:false,t:"تعذّر رفع الصورة"});}
+    }catch(e){setSmsg({ok:false,t:"تعذّر رفع الصورة: "+(e.message||e)});}
     setSuploading("");};
   const scomp=useMemo(()=>frCompliance(sres),[sres]);
   const submitSelf=async()=>{setSsaving(true);setSmsg(null);

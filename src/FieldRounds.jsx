@@ -1,5 +1,5 @@
 import{useState,useEffect,useMemo}from"react";
-import{supabase}from"./supabase";
+import{supabase,ensureFreshToken,compressImage}from"./supabase";
 import Icon from"./Icon";
 import{AXES,ITEMS,bikerItems,mgmtItems,compliance,complianceByAxis,effect,RESP_AR}from"./fieldChecklist";
 import{analyzeRound}from"./fieldAnalysis";
@@ -30,11 +30,13 @@ export default function FieldRounds({opId}){
   const upload=async(n,idx,file)=>{
     if(!file)return;const key=`${n}-${idx}`;setUploading(key);setMsg(null);
     try{
-      const ext=(String(file.name).split(".").pop()||"jpg").toLowerCase();
+      const fresh=await ensureFreshToken();
+      if(!fresh.ok){setMsg({ok:false,t:"انتهت الجلسة — سجّل الدخول من جديد ثم أعد الرفع."});setUploading("");return;}
+      const img=await compressImage(file);
       const rand=Math.floor(Math.random()*1e9);
       const op=(opId&&opId!=="all")?opId:"default";
-      const path=`${op}/${hd.date.slice(0,7)}/${hd.sweater_id||"x"}/${n}-${idx}-${Date.now()}-${rand}.${ext}`;
-      const{error}=await supabase.storage.from("field-evidence").upload(path,file,{contentType:file.type||"image/jpeg",upsert:true});
+      const path=`${op}/${hd.date.slice(0,7)}/${hd.sweater_id||"x"}/${n}-${idx}-${Date.now()}-${rand}.jpg`;
+      const{error}=await supabase.storage.from("field-evidence").upload(path,img,{contentType:"image/jpeg",upsert:true});
       if(error)throw error;
       const{data}=supabase.storage.from("field-evidence").getPublicUrl(path);
       setPhotos(p=>{const a=[...(p[n]||[])];a[idx]=data.publicUrl;return{...p,[n]:a};});
