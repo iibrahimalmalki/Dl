@@ -2,8 +2,8 @@ import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 
-const DOC_TYPES=["تأمين مركبة","استمارة سير","رخصة قيادة","إقامة","رخصة بلدية","عقد إيجار","عقد تشغيلي","ملحق عقد","اشتراك/رخصة تشغيل","أخرى"];
-const TYPE_ICON={"تأمين مركبة":"bike","استمارة سير":"id","رخصة قيادة":"id","إقامة":"id","رخصة بلدية":"building","عقد إيجار":"home","عقد تشغيلي":"reports","ملحق عقد":"doc","اشتراك/رخصة تشغيل":"doc","أخرى":"doc"};
+const DOC_TYPES=["تأمين مركبة","استمارة سير","رخصة قيادة","إقامة","رخصة بلدية","عقد إيجار","عقد تشغيلي","ملحق عقد","سجل تجاري","اشتراك/رخصة تشغيل","أخرى"];
+const TYPE_ICON={"تأمين مركبة":"bike","استمارة سير":"id","رخصة قيادة":"id","إقامة":"id","رخصة بلدية":"building","عقد إيجار":"home","عقد تشغيلي":"reports","ملحق عقد":"doc","سجل تجاري":"building","اشتراك/رخصة تشغيل":"doc","أخرى":"doc"};
 
 // عتبات الحالة (مطابقة لملف المتابعة)
 function band(days){
@@ -54,8 +54,29 @@ export default function Renewals({opId}){
     }catch(e){note(false,"خطأ: "+(e.message||e));}
     setBusy(false);
   };
-  const del=async(d)=>{if(!confirm("حذف وثيقة «"+d.subject+"»؟"))return;await supabase.from("renewal_docs").delete().eq("id",d.id);await load();};
+  const del=async(d)=>{if(!confirm("حذف وثيقة «"+d.subject+"»؟"))return;if(d.storage_path)await supabase.storage.from("legal-docs").remove([d.storage_path]);await supabase.from("renewal_docs").delete().eq("id",d.id);await load();};
   const renew=(d)=>setForm({...d});   // فتح للتعديل (تحديث تاريخ النهاية)
+
+  // ── مرفقات أصلية (دلو تخزين خاص legal-docs) ──
+  const upload=async(file)=>{
+    if(!file||!form.id)return;
+    setBusy(true);note(false,"");
+    try{
+      const safe=file.name.replace(/[^\w.\-]+/g,"_");
+      const path=form.id+"/"+Date.now()+"_"+safe;
+      const{error}=await supabase.storage.from("legal-docs").upload(path,file,{upsert:true});
+      if(error)throw error;
+      if(form.storage_path)await supabase.storage.from("legal-docs").remove([form.storage_path]);
+      await supabase.from("renewal_docs").update({storage_path:path}).eq("id",form.id);
+      setForm({...form,storage_path:path});note(true,"تم إرفاق الملف الأصلي");await load();
+    }catch(e){note(false,"تعذّر الرفع: "+(e.message||e));}
+    setBusy(false);
+  };
+  const viewFile=async(path)=>{
+    const{data,error}=await supabase.storage.from("legal-docs").createSignedUrl(path,120);
+    if(error){note(false,"تعذّر فتح المرفق: "+error.message);return;}
+    window.open(data.signedUrl,"_blank");
+  };
 
   if(loading)return <div className="dw-skel" style={{height:260}}/>;
 
@@ -90,7 +111,7 @@ export default function Renewals({opId}){
           <small>{d._d==null?"":"يوم"}</small>
         </div>
         <span className="rn-band" style={{background:b.bg,color:b.c}}>{b.ar}</span>
-        <div className="rn-act"><button onClick={()=>renew(d)} title="تجديد/تعديل"><Icon n="refresh" s={13}/></button><button className="del" onClick={()=>del(d)} title="حذف"><Icon n="trash" s={13}/></button></div>
+        <div className="rn-act">{d.storage_path&&<button className="att" onClick={()=>viewFile(d.storage_path)} title="عرض المرفق الأصلي"><Icon n="eye" s={13}/></button>}<button onClick={()=>renew(d)} title="تجديد/تعديل"><Icon n="refresh" s={13}/></button><button className="del" onClick={()=>del(d)} title="حذف"><Icon n="trash" s={13}/></button></div>
       </div>);})}</div>}
 
     <div className="rn-legend">
@@ -107,6 +128,14 @@ export default function Renewals({opId}){
         <div className="rn-g2"><F l="تاريخ البداية"><input type="date" value={form.start_date||""} onChange={e=>setForm({...form,start_date:e.target.value})}/></F><F l="تاريخ النهاية"><input type="date" value={form.end_date||""} onChange={e=>setForm({...form,end_date:e.target.value})}/></F></div>
         {form.end_date&&<div className="rn-preview" style={{background:band(daysLeft(form.end_date)).bg,color:band(daysLeft(form.end_date)).c}}><Icon n="clock" s={13}/> {band(daysLeft(form.end_date)).ar} — {daysLeft(form.end_date)} يوم متبقٍّ</div>}
         <F l="ملاحظات"><textarea rows={2} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="VIN، تسلسلي، تفاصيل…"/></F>
+        <div className="rn-attach">
+          <div className="rn-attach-h"><Icon n="doc" s={14}/> المرفق الأصلي (تخزين خاص مؤمّن)</div>
+          {!form.id?<div className="rn-attach-hint">احفظ الوثيقة أولاً ثم أرفق ملفها الأصلي.</div>:
+          <div className="rn-attach-row">
+            {form.storage_path&&<button type="button" className="rn-b ghost" onClick={()=>viewFile(form.storage_path)}><Icon n="eye" s={13}/> عرض الحالي</button>}
+            <label className="rn-b ghost" style={{cursor:"pointer"}}><Icon n="save" s={13}/> {form.storage_path?"استبدال الملف":"إرفاق ملف"}<input type="file" accept="image/*,application/pdf" style={{display:"none"}} onChange={e=>upload(e.target.files&&e.target.files[0])}/></label>
+          </div>}
+        </div>
         <div className="rn-mact"><button className="rn-b brand" onClick={save} disabled={busy}><Icon n="save" s={14}/> حفظ</button>{form.id&&<button className="rn-b danger" onClick={()=>del(form)}><Icon n="trash" s={14}/> حذف</button>}<div style={{flex:1}}/><button className="rn-b ghost" onClick={()=>setForm(null)}>إلغاء</button></div>
       </div>
     </div>}
@@ -141,6 +170,11 @@ const CSS=`
 .rn-act{display:flex;gap:6px;flex:none}
 .rn-act button{border:1px solid #e6e9ee;background:#fff;width:30px;height:30px;border-radius:9px;cursor:pointer;color:#64748b;display:flex;align-items:center;justify-content:center}
 .rn-act button.del{color:#b42318;background:#feecea;border-color:#f7bfba}
+.rn-act button.att{color:#1d5bbf;background:#eef4ff;border-color:#c7d9f7}
+.rn-attach{border:1px dashed #e6e9ee;border-radius:12px;padding:11px 12px;margin-bottom:10px;background:#fbfcfd}
+.rn-attach-h{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:#334155;margin-bottom:8px}
+.rn-attach-hint{font-size:11.5px;color:#94a3b8}
+.rn-attach-row{display:flex;gap:8px;flex-wrap:wrap}
 .rn-legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .rn-lg{font-size:10.5px;font-weight:800;padding:3px 11px;border-radius:20px}
 .rn-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:16px;padding:38px 24px;text-align:center}
