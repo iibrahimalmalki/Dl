@@ -13,6 +13,15 @@ const MODULES=[
   {k:"complaints",ar:"الشكاوى والتصعيد"},{k:"field_rounds",ar:"الجولات الميدانية"},{k:"vendors",ar:"الموردون"},
   {k:"renewals",ar:"الوثائق"},{k:"referrals",ar:"الإحالات"},{k:"reports",ar:"التقارير"},{k:"employees",ar:"الموظفون"},
 ];
+// منهجية RACI — تحدّد الوصول تلقائياً: A/R عرض+تعديل · C/I عرض فقط · بلا رمز لا وصول
+const RACI=[
+  {k:"A",ar:"معتمِد / مُساءَل",c:"#7c3aed"},
+  {k:"R",ar:"مسؤول تنفيذي",c:"#087443"},
+  {k:"C",ar:"يُستشار",c:"#b54708"},
+  {k:"I",ar:"مُطّلع",c:"#1d5bbf"},
+];
+const raciEdit=c=>c==="A"||c==="R";
+
 const call=async(payload)=>{
   const{data,error}=await supabase.functions.invoke("admin-users",{body:payload});
   if(data&&data.error)return{error:data.error};
@@ -36,11 +45,11 @@ export default function UserManagement(){
   useEffect(()=>{loadUsers();supabase.auth.getUser().then(({data})=>setMyId(data.user&&data.user.id));
     supabase.from("employees").select("id,full_name,mobile,employee_id").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
-  const openUser=async(u)=>{setSel(u);note("");const{data}=await supabase.from("user_permissions").select("module,can_view,can_edit").eq("user_id",u.id);const m={};(data||[]).forEach(r=>{m[r.module]={view:r.can_view,edit:r.can_edit};});setPerms(m);};
-  const setP=(mod,key,val)=>setPerms(p=>{const c={...(p[mod]||{view:false,edit:false})};c[key]=val;if(key==="edit"&&val)c.view=true;if(key==="view"&&!val)c.edit=false;return{...p,[mod]:c};});
-  const grantAll=()=>{const m={};MODULES.forEach(x=>m[x.k]={view:true,edit:true});setPerms(m);};
+  const openUser=async(u)=>{setSel(u);note("");const{data}=await supabase.from("user_permissions").select("module,can_view,can_edit,raci").eq("user_id",u.id);const m={};(data||[]).forEach(r=>{m[r.module]=r.raci||(r.can_edit?"R":(r.can_view?"I":null));});setPerms(m);};
+  const setRaci=(mod,code)=>setPerms(p=>({...p,[mod]:p[mod]===code?null:code}));
+  const grantAll=()=>{const m={};MODULES.forEach(x=>m[x.k]="R");setPerms(m);};
   const revokeAll=()=>setPerms({});
-  const savePerms=async()=>{if(!sel)return;setSaving(true);note("");await supabase.from("user_permissions").delete().eq("user_id",sel.id);const rows=MODULES.filter(x=>perms[x.k]&&(perms[x.k].view||perms[x.k].edit)).map(x=>({user_id:sel.id,module:x.k,can_view:!!perms[x.k].view,can_edit:!!perms[x.k].edit}));if(rows.length){const{error}=await supabase.from("user_permissions").insert(rows);if(error){note("خطأ: "+error.message);setSaving(false);return;}}setSaving(false);note("تم حفظ الصلاحيات",true);};
+  const savePerms=async()=>{if(!sel)return;setSaving(true);note("");await supabase.from("user_permissions").delete().eq("user_id",sel.id);const rows=MODULES.filter(x=>perms[x.k]).map(x=>({user_id:sel.id,module:x.k,raci:perms[x.k],can_view:true,can_edit:raciEdit(perms[x.k])}));if(rows.length){const{error}=await supabase.from("user_permissions").insert(rows);if(error){note("خطأ: "+error.message);setSaving(false);return;}}setSaving(false);note("تم حفظ مصفوفة RACI",true);};
 
   const reloadEmps=()=>supabase.from("employees").select("id,full_name,mobile,employee_id").order("full_name").then(({data})=>setEmps(data||[]));
   const pickEmp=id=>{const e=emps.find(x=>x.id===id);setQ(p=>({...p,emp:id,kind:id?"biker":p.kind,name:e?e.full_name:p.name,phone:e?(e.mobile||p.phone):p.phone}));};
@@ -95,13 +104,18 @@ export default function UserManagement(){
         <div style={{flex:1}}/>
         <button className="um-btn" onClick={savePerms} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":"حفظ الصلاحيات"}</button>
       </div>
+      <div className="um-raci-legend">
+        {RACI.map(r=><span key={r.k}><i style={{background:r.c}}>{r.k}</i> {r.ar}</span>)}
+        <b>· A/R تعديل · C/I عرض فقط · بلا رمز لا وصول</b>
+      </div>
       <div className="um-card">
         <table className="um-tbl">
-          <thead><tr><th>الوحدة</th><th>عرض</th><th>تعديل</th></tr></thead>
-          <tbody>{MODULES.map(m=>{const p=perms[m.k]||{view:false,edit:false};return(<tr key={m.k}>
+          <thead><tr><th>الوحدة</th><th>المسؤولية (RACI)</th></tr></thead>
+          <tbody>{MODULES.map(m=>{const cur=perms[m.k]||null;return(<tr key={m.k}>
             <td className="um-mod">{m.ar}</td>
-            <td><input type="checkbox" className="um-ck v" checked={!!p.view} onChange={e=>setP(m.k,"view",e.target.checked)}/></td>
-            <td><input type="checkbox" className="um-ck e" checked={!!p.edit} onChange={e=>setP(m.k,"edit",e.target.checked)}/></td>
+            <td><div className="um-raci">{RACI.map(r=>(
+              <button key={r.k} className={"um-rc"+(cur===r.k?" on":"")} style={cur===r.k?{background:r.c,borderColor:r.c,color:"#fff"}:{}} onClick={()=>setRaci(m.k,r.k)} title={r.ar}>{r.k}</button>))}
+            </div></td>
           </tr>);})}</tbody>
         </table>
       </div>
@@ -197,6 +211,14 @@ const CSS=`
 .um-tbl td{padding:11px 14px;border-bottom:1px solid #f1f3f5;text-align:center}
 .um-tbl tr:last-child td{border-bottom:none}
 .um-mod{text-align:right!important;font-weight:700;font-size:13px;color:#0f172a}
+.um-raci{display:inline-flex;gap:6px}
+.um-rc{width:34px;height:34px;border-radius:9px;border:1.5px solid #e6e9ee;background:#fff;font-family:inherit;font-size:13px;font-weight:800;color:#94a3b8;cursor:pointer;transition:.12s}
+.um-rc:hover{border-color:#cbd5e1}
+.um-rc.on{box-shadow:0 3px 10px rgba(16,24,40,.14)}
+.um-raci-legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid #eceef1;border-radius:12px;padding:10px 13px;margin-bottom:12px;font-size:12px;font-weight:700;color:#334155}
+.um-raci-legend span{display:inline-flex;align-items:center;gap:6px}
+.um-raci-legend i{width:20px;height:20px;border-radius:6px;color:#fff;font-style:normal;font-weight:800;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+.um-raci-legend b{color:#64748b;font-weight:600;font-size:11px}
 .um-ck{width:19px;height:19px;cursor:pointer}
 .um-ck.v{accent-color:#175cd3}.um-ck.e{accent-color:#087443}
 .um-note{display:flex;align-items:center;gap:7px;background:#fffbeb;border:1px solid #fde9c8;color:#92600e;font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-top:12px}

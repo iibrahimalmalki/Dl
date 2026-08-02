@@ -60,7 +60,7 @@ export function permsRows(posKey){
   const p=POS_BY_KEY[posKey]; if(!p) return [];
   return Object.entries(p.perms)
     .filter(([m])=>!OWNER_ONLY.includes(m))
-    .map(([m,lvl])=>({module:m,can_view:true,can_edit:lvl==="ve"}));
+    .map(([m,lvl])=>({module:m,can_view:true,can_edit:lvl==="ve",raci:lvl==="ve"?"R":"I"}));
 }
 
 // قائمة الوحدات الممنوحة (للعرض)
