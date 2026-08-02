@@ -55,6 +55,11 @@ export default function Reports({opId}){
 
   return(<div className="rp">
     <style>{CSS}</style>
+    <div className="rp-print-hd">
+      <img src="/brand-mark.png" alt="دلو ورغوة"/>
+      <div><b>دلو ورغوة</b><span>{cur.ar}{["margin","expenses","bikers","sla","payroll"].includes(active)?" · "+periodAr(period):""}</span></div>
+      <div className="rp-print-meta">مؤسسة دلو ورغوة التجارية · SSP Partner 47</div>
+    </div>
     <div className="rp-bar">
       <button className="rp-back" onClick={()=>setActive(null)}><Icon n="back" s={15}/> التقارير</button>
       <b className="rp-title">{cur.ar}</b>
@@ -413,9 +418,15 @@ const CSS=`
 .rp-exp button{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12.5px;font-weight:700;color:#334155;cursor:pointer}
 .rp-note{font-size:11.5px;color:#94a3b8;margin:0 2px 14px;line-height:1.7}
 @media(max-width:820px){.rp-kpis{grid-template-columns:1fr 1fr}.rp-brow{grid-template-columns:110px 1fr 70px}}
+.rp-print-hd{display:none}
 @media print{
   .rp-exp,.rp-back,.rp-per,.rp-scope{display:none !important}
-  .rp-bar{margin-bottom:10px;border-bottom:1px solid #d7dde5;padding-bottom:8px}
+  .rp-print-hd{display:flex;align-items:center;gap:12px;border-bottom:2px solid #E8712B;padding-bottom:10px;margin-bottom:12px}
+  .rp-print-hd img{width:40px;height:40px;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .rp-print-hd b{font-size:16px;font-weight:800;display:block;color:#0f172a}
+  .rp-print-hd span{font-size:12px;color:#64748b;font-weight:600}
+  .rp-print-meta{margin-inline-start:auto;font-size:10px;color:#94a3b8;text-align:left}
+  .rp-bar{display:none !important}
   .rp{font-size:12px}
   .rp-intro{display:none}
   .rp-kpis{grid-template-columns:repeat(4,1fr) !important;gap:8px}

@@ -82,7 +82,7 @@ export default function Shell({onLogout,me}){
     <style>{CSS}</style>
     {open&&<div className="sh-scrim" onClick={()=>setOpen(false)}/>}
     <aside className={"sh-side"+(open?" open":"")}>
-      <div className="sh-brand"><div className="sh-logo"><Icon n="bucket" s={22}/></div><div><b>دلو ورغوة</b><span>منصّة إدارة العمليات</span></div></div>
+      <div className="sh-brand"><div className="sh-logo"><img src="/brand-mark.png" alt="دلو ورغوة"/></div><div><b>دلو ورغوة</b><span>منصّة إدارة العمليات</span></div></div>
       <nav className="sh-nav">
         {nav.map((n,i)=>n.g?<div className="sh-navlbl" key={i}>{n.g}</div>:
           <div key={n.k} className={"sh-item"+(view===n.k?" on":"")} onClick={()=>go(n.k)}>
@@ -150,7 +150,8 @@ const CSS=`
 .sh-scrim{display:none}
 .sh-side{background:var(--side);color:var(--sidink);display:flex;flex-direction:column;position:sticky;top:0;height:100dvh}
 .sh-brand{display:flex;align-items:center;gap:11px;padding:20px 20px 14px}
-.sh-logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--brand),#f5a35f);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 6px 16px rgba(232,113,43,.35)}
+.sh-logo{width:42px;height:42px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(232,113,43,.35);flex:none}
+.sh-logo img{width:30px;height:30px;object-fit:contain}
 .sh-brand b{font-size:15px;font-weight:800;color:#fff;display:block}.sh-brand span{font-size:11px;color:var(--sidmut)}
 .sh-nav{padding:6px 12px;flex:1;overflow:auto}
 .sh-navlbl{font-size:10.5px;color:var(--sidmut);font-weight:700;letter-spacing:.4px;padding:13px 10px 5px}

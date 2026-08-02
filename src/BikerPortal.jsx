@@ -90,7 +90,7 @@ export default function BikerPortal({me,onLogout}){
   return(<div className="bp">
     <style>{CSS+FCF_CSS}</style>
     <header className="bp-top">
-      <div className="bp-brand"><div className="bp-logo"><Icon n="bucket" s={20}/></div><div><b>دلو ورغوة</b><span>বায়কার পোর্টাল · بوابة البايكر</span></div></div>
+      <div className="bp-brand"><div className="bp-logo"><img src="/brand-mark.png" alt="دلو ورغوة"/></div><div><b>دلو ورغوة</b><span>বায়কার পোর্টাল · بوابة البايكر</span></div></div>
       <button className="bp-out" onClick={onLogout}><Icon n="logout" s={18}/></button>
     </header>
 
@@ -216,7 +216,8 @@ const CSS=`
 .bp *{box-sizing:border-box}
 .bp-top{background:#0e1622;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
 .bp-brand{display:flex;align-items:center;gap:11px}
-.bp-logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#E8712B,#f5a35f);display:flex;align-items:center;justify-content:center;color:#fff}
+.bp-logo{width:40px;height:40px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.bp-logo img{width:28px;height:28px;object-fit:contain}
 .bp-brand b{font-size:14.5px;font-weight:800;display:block}.bp-brand span{font-size:10.5px;color:#8794a8}
 .bp-out{width:38px;height:38px;border-radius:11px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .bp-body{max-width:480px;margin:0 auto;padding:16px}

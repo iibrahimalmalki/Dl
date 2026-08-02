@@ -4,7 +4,7 @@ import{ITEMS,AXES,RESP_AR,complianceByAxis,effect,bikerItems}from"./fieldCheckli
 const RES_LBL={pass:["مطابق","#087443","#e7f7ef"],half:["جزئي","#b54708","#fef3e2"],fail:["غير مطابق","#b42318","#feecea"],excused:["معفى (إمداد)","#475569","#eef0f3"]};
 const MRES_LBL={pass:["متوفّر","#087443","#e7f7ef"],fail:["ناقص","#b42318","#feecea"]};
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const LOGO=`<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h16l-1.5 11a2 2 0 0 1-2 1.8H7.5a2 2 0 0 1-2-1.8z"/><path d="M3 8a9 4 0 0 1 18 0"/><path d="M8 8a7 3 0 0 1 8 0"/></svg>`;
+const LOGO=`<img src="${(typeof location!=="undefined"?location.origin:"")}/brand-mark.png" alt="دلو ورغوة" style="width:34px;height:34px;object-fit:contain"/>`;
 
 function meter(pct,color){const w=pct==null?0:Math.max(pct,2);return`<div class="meter"><div class="mfill" style="width:${w}%;background:${color}"></div></div>`;}
 
@@ -56,7 +56,7 @@ export function buildReportHTML(round,analysis,opName){
 body{font-family:'Segoe UI',Tahoma,sans-serif;color:#0f172a;margin:0;background:#f1f5f9;font-size:13px;line-height:1.6}
 .page{max-width:820px;margin:18px auto;background:#fff;box-shadow:0 2px 20px rgba(0,0,0,.08)}
 .hd{background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;padding:20px 26px;display:flex;align-items:center;gap:14px}
-.logo{width:48px;height:48px;border-radius:13px;background:linear-gradient(135deg,#E8712B,#f5a35f);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(232,113,43,.4)}
+.logo{width:48px;height:48px;border-radius:13px;background:#fff;border:1px solid #f0e2d6;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(232,113,43,.25)}
 .hd b{font-size:17px;display:block}.hd .sub{font-size:11.5px;color:#94a3b8}
 .hd .rt{margin-inline-start:auto;text-align:left}.hd .rt .t{font-size:14px;font-weight:800}.hd .rt .r{font-size:10.5px;color:#94a3b8}
 .body{padding:22px 26px}
