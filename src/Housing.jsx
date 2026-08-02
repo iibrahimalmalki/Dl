@@ -30,7 +30,7 @@ export default function Housing({opId}){
     setUnits(u.data||[]);setOcc(o.data||[]);setPays(p.data||[]);setVios(v.data||[]);setLoading(false);
   };
   useEffect(()=>{load();/*eslint-disable-next-line*/},[opId]);
-  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role").order("full_name").then(({data})=>setEmps(data||[]));},[]);
+  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role,mobile").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
   const k=useMemo(()=>{
     const due=pays.filter(p=>!p.paid);
@@ -103,7 +103,7 @@ export default function Housing({opId}){
 
     {tab==="occ"&&<div className="hs-panel">
       <div className="hs-ph"><b>الساكنون <span className="hs-hint">تُزوَّد بها شركة منزل (أسماء/جوالات/هويات)</span></b><button className="hs-add" onClick={()=>setOForm({unit_id:uid,move_in:new Date().toISOString().slice(0,10)})}><Icon n="plus" s={15}/> إضافة ساكن</button></div>
-      <table className="hs-tbl">
+      <div className="hs-tblwrap"><table className="hs-tbl">
         <thead><tr><th>الاسم</th><th>الجوال</th><th>الهوية/الإقامة</th><th>الصفة</th><th>الوحدة</th><th>الدخول</th><th></th></tr></thead>
         <tbody>
           {occ.map(o=>(<tr key={o.id}>
@@ -113,12 +113,12 @@ export default function Housing({opId}){
           </tr>))}
           {!occ.length&&<tr><td colSpan={7} className="hs-empt">لا ساكنون مسجّلون</td></tr>}
         </tbody>
-      </table>
+      </table></div>
     </div>}
 
     {tab==="pays"&&<div className="hs-panel">
       <div className="hs-ph"><b>جدول دفعات الإيجار/الخدمة</b><button className="hs-add" onClick={()=>setPForm({unit_id:uid,amount:5110,paid:false})}><Icon n="plus" s={15}/> إضافة دفعة</button></div>
-      <table className="hs-tbl">
+      <div className="hs-tblwrap"><table className="hs-tbl">
         <thead><tr><th>#</th><th>تاريخ الاستحقاق</th><th>المبلغ</th><th>الحالة</th><th>تاريخ السداد</th><th></th></tr></thead>
         <tbody>
           {pays.map(p=>{const b=payBand(p);return(<tr key={p.id}>
@@ -134,7 +134,7 @@ export default function Housing({opId}){
           {!pays.length&&<tr><td colSpan={6} className="hs-empt">لا دفعات</td></tr>}
         </tbody>
         {pays.length>0&&<tfoot><tr><td colSpan={2}>الإجمالي</td><td colSpan={4}><b>{money(pays.reduce((s,p)=>s+Number(p.amount||0),0))}</b> · مسدَّد {money(k.paidSum)} · متبقٍّ {money(k.dueSum)}</td></tr></tfoot>}
-      </table>
+      </table></div>
       <div className="hs-recs">مهلة السداد 15 يوماً بعد كل استحقاق قبل حق المؤجر بالفسخ (لأن الدورة أقل من 180 يوماً).</div>
     </div>}
 
@@ -153,15 +153,15 @@ export default function Housing({opId}){
       </div>}
 
       <div className="hs-poltitle">اللائحة المعتمدة (اتفاقية منزل)</div>
-      <table className="hs-tbl hs-pol">
+      <div className="hs-tblwrap"><table className="hs-tbl hs-pol">
         <thead><tr><th>المخالفة</th><th>المرة 1</th><th>المرة 2</th><th>المرة 3</th><th>المرة 4</th></tr></thead>
         <tbody>{HOUSING_VIOLATIONS.map(r=>(<tr key={r.cat}><td><b>{r.cat}</b></td>{r.steps.map((s,i)=><td key={i} className={s.includes("إخلاء")?"hs-evict":""}>{s}</td>)}</tr>))}</tbody>
-      </table>
+      </table></div>
       <div className="hs-red"><Icon n="alert" s={14}/> خطوط حمراء — إخلاء فوري من المرة الأولى بلا إنذار: {HOUSING_REDLINES.join(" · ")}</div>
     </div>}
 
     {uForm&&<UnitModal f={uForm} set={setUForm} busy={busy} save={()=>{const r={operator_id:(opId&&opId!=="all")?opId:null,name:uForm.name,national_address:uForm.national_address||null,unit_no:uForm.unit_no||null,unit_type:uForm.unit_type||null,floor:uForm.floor||null,area_m2:num(uForm.area_m2),rooms:num(uForm.rooms),kitchens:num(uForm.kitchens),deed_no:uForm.deed_no||null,provider:uForm.provider||null,provider_cr:uForm.provider_cr||null,contact_name:uForm.contact_name||null,contact_phone:uForm.contact_phone||null,lease_ref:uForm.lease_ref||null,start_date:uForm.start_date||null,end_date:uForm.end_date||null,annual_rent:num(uForm.annual_rent),deposit:num(uForm.deposit),per_person_day:num(uForm.per_person_day),capacity:num(uForm.capacity),beds:num(uForm.beds),status:uForm.status||"active",notes:uForm.notes||null};if(!r.name){note(false,"أدخل اسم الوحدة");return;}savRow("housing_units",r,uForm,()=>setUForm(null));}}/>}
-    {oForm&&<OccModal f={oForm} set={setOForm} busy={busy} units={units} save={()=>{const r={unit_id:oForm.unit_id||null,name:(oForm.name||"").trim(),mobile:oForm.mobile||null,national_id:oForm.national_id||null,role:oForm.role||null,move_in:oForm.move_in||null,active:oForm.active!==false};if(!r.name){note(false,"أدخل اسم الساكن");return;}savRow("housing_occupants",r,oForm,()=>setOForm(null));}}/>}
+    {oForm&&<OccModal f={oForm} set={setOForm} busy={busy} units={units} emps={emps} save={()=>{const r={unit_id:oForm.unit_id||null,employee_id:oForm.employee_id||null,name:(oForm.name||"").trim(),mobile:oForm.mobile||null,national_id:oForm.national_id||null,role:oForm.role||null,move_in:oForm.move_in||null,active:oForm.active!==false};if(!r.name){note(false,"أدخل اسم الساكن");return;}savRow("housing_occupants",r,oForm,()=>setOForm(null));}}/>}
     {pForm&&<PayModal f={pForm} set={setPForm} busy={busy} save={()=>{const r={unit_id:pForm.unit_id||null,operator_id:(opId&&opId!=="all")?opId:null,seq:num(pForm.seq),due_date:pForm.due_date||null,amount:num(pForm.amount),paid:!!pForm.paid,paid_date:pForm.paid?(pForm.paid_date||new Date().toISOString().slice(0,10)):null,method:pForm.method||null,ref:pForm.ref||null};savRow("housing_payments",r,pForm,()=>setPForm(null));}}/>}
     {vForm&&<VioModal f={vForm} set={setVForm} busy={busy} units={units} emps={emps} save={()=>{const r={unit_id:vForm.unit_id||null,occupant:vForm.occupant||null,occupant_employee_id:vForm.occupant_employee_id||null,category:vForm.category||null,occurrence:num(vForm.occurrence),amount:vForm.amount===""||vForm.amount==null?null:num(vForm.amount),action:vForm.action||null,incident_date:vForm.incident_date||null,status:vForm.status||"open",notes:vForm.notes||null,active:true};if(!r.category){note(false,"اختر نوع المخالفة");return;}savRow("housing_violations",r,vForm,()=>setVForm(null));}}/>}
   </div>);
@@ -185,7 +185,10 @@ function UnitModal({f,set,busy,save}){const u=(k,v)=>set({...f,[k]:v});return(<M
   <Fld l="ملاحظات"><textarea rows={2} value={f.notes||""} onChange={e=>u("notes",e.target.value)}/></Fld>
 </Modal>);}
 
-function OccModal({f,set,busy,save,units}){const u=(k,v)=>set({...f,[k]:v});return(<Modal title={f.id?"تعديل ساكن":"إضافة ساكن"} set={set} busy={busy} save={save}>
+function OccModal({f,set,busy,save,units,emps}){const u=(k,v)=>set({...f,[k]:v});
+  const pickEmp=id=>{const e=(emps||[]).find(x=>x.id===id);set({...f,employee_id:id||null,name:e?e.full_name+(e.employee_id?" ("+e.employee_id+")":""):f.name,mobile:e&&e.mobile?e.mobile.trim():f.mobile,role:f.role||"بايكر"});};
+  return(<Modal title={f.id?"تعديل ساكن":"إضافة ساكن"} set={set} busy={busy} save={save}>
+  <Fld l="اختر الموظف *"><select value={f.employee_id||""} onChange={e=>pickEmp(e.target.value)}><option value="">— اختر من الموظفين —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
   <Fld l="الاسم *"><input value={f.name||""} onChange={e=>u("name",e.target.value)}/></Fld>
   <div className="hs-2"><Fld l="الجوال"><input value={f.mobile||""} onChange={e=>u("mobile",e.target.value)}/></Fld><Fld l="الهوية/الإقامة"><input value={f.national_id||""} onChange={e=>u("national_id",e.target.value)}/></Fld></div>
   <div className="hs-2"><Fld l="الصفة"><input value={f.role||""} onChange={e=>u("role",e.target.value)} placeholder="بايكر"/></Fld><Fld l="الوحدة"><select value={f.unit_id||""} onChange={e=>u("unit_id",e.target.value)}><option value="">—</option>{units.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Fld></div>
@@ -243,7 +246,9 @@ const CSS=`
 .hs-act{display:flex;gap:7px}
 .hs-act button{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:7px;border-radius:9px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer}
 .hs-act button.d{flex:0 0 40px;color:#b42318}
-.hs-tbl{width:100%;border-collapse:collapse}
+.hs-tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.hs-tbl{width:100%;border-collapse:collapse;min-width:560px}
+.hs-tbl.hs-pol{min-width:520px}
 .hs-tbl th{font-size:11px;color:var(--mut);font-weight:700;text-align:right;padding:11px 16px;border-bottom:1px solid var(--line);background:#fafbfc}
 .hs-tbl td{padding:11px 16px;border-bottom:1px solid var(--line);font-size:12.5px}
 .hs-tbl tfoot td{background:#fafbfc;font-size:12px;color:var(--mut)}
