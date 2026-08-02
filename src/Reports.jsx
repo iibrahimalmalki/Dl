@@ -413,5 +413,19 @@ const CSS=`
 .rp-exp button{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12.5px;font-weight:700;color:#334155;cursor:pointer}
 .rp-note{font-size:11.5px;color:#94a3b8;margin:0 2px 14px;line-height:1.7}
 @media(max-width:820px){.rp-kpis{grid-template-columns:1fr 1fr}.rp-brow{grid-template-columns:110px 1fr 70px}}
-@media print{.rp-bar,.rp-exp,.rp-back{display:none}}
+@media print{
+  .rp-exp,.rp-back,.rp-per,.rp-scope{display:none !important}
+  .rp-bar{margin-bottom:10px;border-bottom:1px solid #d7dde5;padding-bottom:8px}
+  .rp{font-size:12px}
+  .rp-intro{display:none}
+  .rp-kpis{grid-template-columns:repeat(4,1fr) !important;gap:8px}
+  .rp-kpi,.rp-panel,.rp-card{box-shadow:none !important;border-color:#d7dde5 !important;break-inside:avoid}
+  .rp-panel{break-inside:avoid}
+  .rp-bars{break-inside:avoid}
+  .rp-brow{grid-template-columns:150px 1fr 80px}
+  .rp-bt div{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .rp-tbl{font-size:10.5px}.rp-tbl th,.rp-tbl td{padding:6px 8px}
+  .rp-title{font-size:15px}
+  .rp-badge,.rp-bt div,.rp-ic{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 `;

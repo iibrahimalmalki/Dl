@@ -45,7 +45,17 @@ export default function BikerPortal({me,onLogout}){
   const[selfOpen,setSelfOpen]=useState(false);
   const[sres,setSres]=useState({});const[sphotos,setSphotos]=useState({});const[snotes,setSnotes]=useState({});
   const[suploading,setSuploading]=useState("");const[ssaving,setSsaving]=useState(false);const[smsg,setSmsg]=useState(null);
-  const openSelf=()=>{if(selfR){setSres(selfR.results||{});setSphotos(selfR.photos||{});setSnotes(selfR.item_notes||{});}else{setSres({});setSphotos({});setSnotes({});}setSmsg(null);setSelfOpen(true);};
+  const[sloc,setSloc]=useState({location_url:"",gps_lat:null,gps_lng:null});const[sgeo,setSgeo]=useState("");
+  const slocate=()=>{
+    if(!navigator.geolocation){setSgeo("err");setSmsg({ok:false,t:"جهازك لا يدعم تحديد الموقع"});return;}
+    setSgeo("loading");setSmsg(null);
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const lat=+pos.coords.latitude.toFixed(6),lng=+pos.coords.longitude.toFixed(6);
+      setSloc({location_url:`https://maps.google.com/?q=${lat},${lng}`,gps_lat:lat,gps_lng:lng});setSgeo("done");
+    },err=>{setSgeo("err");setSmsg({ok:false,t:err.code===1?"تم رفض إذن الموقع — فعّله من الإعدادات":"تعذّر تحديد الموقع"});},
+    {enableHighAccuracy:true,timeout:10000,maximumAge:0});
+  };
+  const openSelf=()=>{if(selfR){setSres(selfR.results||{});setSphotos(selfR.photos||{});setSnotes(selfR.item_notes||{});}else{setSres({});setSphotos({});setSnotes({});}setSloc({location_url:"",gps_lat:null,gps_lng:null});setSgeo("");setSmsg(null);setSelfOpen(true);};
   const supload=async(n,idx,file)=>{if(!file)return;const key=`${n}-${idx}`;setSuploading(key);
     try{
       await ensureFreshToken();
@@ -61,9 +71,10 @@ export default function BikerPortal({me,onLogout}){
       const ax=complianceByAxis(sres);const ef=frEffect(scomp.pct);
       const cleanPhotos={};Object.entries(sphotos).forEach(([k,arr])=>{const f=(arr||[]).filter(Boolean);if(f.length)cleanPhotos[k]=f;});
       const cleanNotes={};Object.entries(snotes).forEach(([k,vv])=>{if(vv&&String(vv).trim())cleanNotes[k]=vv.trim();});
-      const payload={results:sres,photos:cleanPhotos,item_notes:cleanNotes,compliance_pct:scomp.pct,effect:ef.key,by_axis:ax,action_items:scomp.actions,status:"submitted",submitted_at:new Date().toISOString()};
+      const _d=new Date();const rtime=`${String(_d.getHours()).padStart(2,"0")}:${String(_d.getMinutes()).padStart(2,"0")}`;
+      const payload={results:sres,photos:cleanPhotos,item_notes:cleanNotes,compliance_pct:scomp.pct,effect:ef.key,by_axis:ax,action_items:scomp.actions,round_time:rtime,location_url:sloc.location_url||null,gps_lat:sloc.gps_lat,gps_lng:sloc.gps_lng,status:"submitted",submitted_at:_d.toISOString()};
       if(selfR){const{error}=await supabase.from("field_rounds").update(payload).eq("id",selfR.id);if(error)throw error;}
-      else{const{error}=await supabase.from("field_rounds").insert({period,sweater_id:sid,biker_name:name,round_date:new Date().toISOString().slice(0,10),source:"self",inspector:"توثيق ذاتي",...payload});if(error)throw error;}
+      else{const{error}=await supabase.from("field_rounds").insert({period,sweater_id:sid,biker_name:name,round_date:_d.toISOString().slice(0,10),source:"self",inspector:"توثيق ذاتي",...payload});if(error)throw error;}
       setSelfOpen(false);setReload(x=>x+1);
     }catch(e){setSmsg({ok:false,t:"خطأ: "+(e.message||e)});}
     setSsaving(false);};
@@ -184,6 +195,12 @@ export default function BikerPortal({me,onLogout}){
       <header className="bp-sf-top"><b>التوثيق الذاتي · {periodLabel(period)}</b><button onClick={()=>setSelfOpen(false)}><Icon n="x" s={20}/></button></header>
       <div className="bp-sf-body">
         <div className="bp-sf-hint"><Icon n="alert" s={13}/> صوّر كل بند من الزوايا المطلوبة وقيّم نفسك بصدق · সৎভাবে মূল্যায়ন করুন। سيراجع المشرف توثيقك.</div>
+        <div className="bp-sf-loc">
+          <button type="button" className={"bp-sf-locbtn"+(sgeo==="done"?" ok":"")} onClick={slocate}>
+            <Icon n={sgeo==="done"?"check":"target"} s={15}/> {sgeo==="loading"?"جارٍ التحديد…":sgeo==="done"?"تم تحديد موقعك":"تحديد موقعي الحالي"}
+          </button>
+          {sgeo==="done"&&<a className="bp-sf-locurl" href={sloc.location_url} target="_blank" rel="noreferrer">{sloc.gps_lat}, {sloc.gps_lng}</a>}
+        </div>
         {smsg&&<div className={"bp-sf-msg "+(smsg.ok?"ok":"err")}>{smsg.t}</div>}
         <FieldChecklistForm items={bikerItems} res={sres} onRes={(n,v)=>setSres(p=>({...p,[n]:v}))} notes={snotes} onNote={(n,t)=>setSnotes(p=>({...p,[n]:t}))} photos={sphotos} onUpload={supload} uploading={suploading} onView={u=>window.open(u,"_blank")}/>
       </div>
@@ -267,6 +284,10 @@ const CSS=`
 .bp-sf-top button{width:38px;height:38px;border-radius:11px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .bp-sf-body{flex:1;overflow:auto;padding:14px;max-width:560px;margin:0 auto;width:100%;box-sizing:border-box}
 .bp-sf-hint{display:flex;align-items:flex-start;gap:7px;background:#fffbeb;border:1px solid #fde9c8;color:#92600e;font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-bottom:10px;line-height:1.6}
+.bp-sf-loc{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.bp-sf-locbtn{display:inline-flex;align-items:center;gap:7px;background:#fff2e8;border:1px solid #f5c9a8;color:#c2410c;font-family:inherit;font-size:12.5px;font-weight:800;border-radius:11px;padding:10px 14px;cursor:pointer}
+.bp-sf-locbtn.ok{background:#e7f7ef;border-color:#b7e4cd;color:#087443}
+.bp-sf-locurl{font-size:11.5px;font-weight:700;color:#1d5bbf;text-decoration:none;direction:ltr}
 .bp-sf-msg{padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:700;margin-bottom:10px}
 .bp-sf-msg.ok{background:#e7f7ef;color:#087443}.bp-sf-msg.err{background:#feecea;color:#b42318}
 .bp-sf-bar{background:#fff;border-top:1px solid #eceef1;padding:12px 16px;display:flex;align-items:center;gap:12px;max-width:560px;margin:0 auto;width:100%;box-sizing:border-box}

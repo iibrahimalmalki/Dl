@@ -239,4 +239,13 @@ const CSS=`
   .sh-content{padding:14px}.sh-embed{margin:-14px}
   .sh-hm,.dw-hm{display:none}
 }
+/* ═══ الطباعة: إخفاء الهيكل وإظهار المحتوى فقط بعرض كامل ═══ */
+@media print{
+  .sh{display:block !important;background:#fff !important}
+  .sh-side,.sh-scrim,.sh-top,.sh-burger{display:none !important}
+  .sh-main{display:block !important}
+  .sh-content{padding:0 !important;max-width:none !important;margin:0 !important}
+  .sh-embed{margin:0 !important}
+}
+@page{margin:12mm}
 `;
