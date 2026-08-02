@@ -13,6 +13,9 @@ const q=(t,c)=>supabase.from(t).select(c).then(({data})=>data||[]).then(x=>x,()=
 const prevPeriod=p=>{const[y,m]=String(p).split("-").map(Number);const d=new Date(y,(m||1)-2,1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const monthsBack=(p,n)=>{const[y,m]=String(p).split("-").map(Number);const out=[];for(let i=n-1;i>=0;i--){const d=new Date(y,(m||1)-1-i,1);out.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);}return out;};
 const shortMonth=p=>{const[y,m]=String(p).split("-");return`${["ينا","فبر","مار","أبر","ماي","يون","يول","أغس","سبت","أكت","نوف","ديس"][(+m||1)-1]} ${String(y).slice(2)}`;};
+// إيراد الفترة: يفضّل صافي تسوية سويتر المعتمدة إن وُجد، وإلا التقدير من غسلات العمليات
+const settledNet=(setts,p)=>{const r=(setts||[]).find(x=>x.period===p&&x.status==="confirmed"&&x.net_total!=null);return r?Number(r.net_total):null;};
+const revForPeriod=(setts,ops,p)=>{const sn=settledNet(setts,p);if(sn!=null)return sn;return (ops||[]).filter(o=>o.period===p).reduce((a,o)=>a+payoutForBiker(Number(o.net_washes||0)).total,0);};
 function downloadCsv(name,header,rows){
   const esc=v=>{const s=String(v??"");return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
   const csv="﻿"+[header,...rows].map(r=>r.map(esc).join(",")).join("\n");
@@ -101,18 +104,19 @@ function Bars({rows,max,fmt}){return(<div className="rp-bars">{rows.map((r,i)=>(
 function MarginReport({period}){
   const[d,setD]=useState(null);
   useEffect(()=>{(async()=>{
-    const[ops,pay,vexp,units,viol]=await Promise.all([
+    const[ops,pay,vexp,units,viol,setts]=await Promise.all([
       q("ops_biker_month","period,net_washes"),q("payroll_lines","period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),q("violations","fine_applied"),
-    ]);setD({ops,pay,vexp,units,viol});
+      q("sweater_settlements","period,net_total,status"),
+    ]);setD({ops,pay,vexp,units,viol,setts});
   })();},[]);
   const s=useMemo(()=>{if(!d)return null;
-    const revenue=d.ops.filter(o=>o.period===period).reduce((a,o)=>a+payoutForBiker(Number(o.net_washes||0)).total,0);
+    const revenue=revForPeriod(d.setts,d.ops,period);const revSettled=settledNet(d.setts,period)!=null;
     const payroll=d.pay.filter(p=>p.period===period).reduce((a,p)=>a+Number(p.total||0),0);
     const vendors=d.vexp.filter(e=>String(e.exp_date||"").slice(0,7)===period).reduce((a,e)=>a+Number(e.amount||0),0);
     const housing=d.units.filter(u=>u.active!==false).reduce((a,u)=>a+Number(u.annual_rent||0),0)/12;
     const fines=d.viol.reduce((a,v)=>a+Number(v.fine_applied||0),0);
-    const costs=payroll+vendors+housing+fines;return{revenue,payroll,vendors,housing,fines,costs,margin:revenue-costs};
+    const costs=payroll+vendors+housing+fines;return{revenue,revSettled,payroll,vendors,housing,fines,costs,margin:revenue-costs};
   },[d,period]);
   if(!s)return<div className="dw-skel" style={{height:200}}/>;
   const rows=[{label:"رواتب",val:s.payroll},{label:"موردون",val:s.vendors},{label:"إيجار السكن",val:s.housing},{label:"غرامات",val:s.fines}];
@@ -120,7 +124,7 @@ function MarginReport({period}){
   const wa=`تقرير الهامش — ${periodAr(period)}\nالإيراد: ${money(s.revenue)}\nالتكاليف: ${money(s.costs)}\nالهامش: ${money(s.margin)}`;
   return(<div className="rp-body">
     <div className="rp-kpis">
-      <Kpi l="الإيراد التقديري" n={money(s.revenue)} c="#087443"/>
+      <Kpi l={s.revSettled?"الإيراد (تسوية معتمدة)":"الإيراد التقديري"} n={money(s.revenue)} c="#087443" sub={s.revSettled?"من تسوية سويتر":null}/>
       <Kpi l="إجمالي التكاليف" n={money(s.costs)} c="#b42318"/>
       <Kpi l="الهامش" n={money(s.margin)} c={s.margin>=0?"#087443":"#b42318"}/>
       <Kpi l="نسبة الهامش" n={s.revenue?Math.round(s.margin/s.revenue*100)+"%":"—"}/>
@@ -384,17 +388,18 @@ function FunnelReport(){
 function CashflowReport({period}){
   const[d,setD]=useState(null);
   useEffect(()=>{(async()=>{
-    const[ops,pay,vexp,units]=await Promise.all([
+    const[ops,pay,vexp,units,setts]=await Promise.all([
       q("ops_biker_month","period,net_washes"),q("payroll_lines","period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),
-    ]);setD({ops,pay,vexp,units});
+      q("sweater_settlements","period,net_total,status"),
+    ]);setD({ops,pay,vexp,units,setts});
   })();},[]);
   const s=useMemo(()=>{if(!d)return null;
     const months=monthsBack(period,6);
     const housM=d.units.filter(u=>u.active!==false).reduce((a,u)=>a+Number(u.annual_rent||0),0)/12;
     let cum=0;
     const rows=months.map(p=>{
-      const inflow=d.ops.filter(o=>o.period===p).reduce((a,o)=>a+payoutForBiker(Number(o.net_washes||0)).total,0);
+      const inflow=revForPeriod(d.setts,d.ops,p);
       const payroll=d.pay.filter(x=>x.period===p).reduce((a,x)=>a+Number(x.total||0),0);
       const vendors=d.vexp.filter(e=>String(e.exp_date||"").slice(0,7)===p).reduce((a,e)=>a+Number(e.amount||0),0);
       const outflow=payroll+vendors+housM;
@@ -436,18 +441,19 @@ function CashflowReport({period}){
 function CompareReport({period}){
   const[d,setD]=useState(null);const prev=prevPeriod(period);
   useEffect(()=>{(async()=>{
-    const[ops,pay,vexp,units,rounds,apps]=await Promise.all([
+    const[ops,pay,vexp,units,rounds,apps,setts]=await Promise.all([
       q("ops_biker_month","period,net_washes,rating,approved_complaints"),q("payroll_lines","period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),
       q("field_rounds","period,compliance_pct"),q("applicants","status,submitted_at"),
-    ]);setD({ops,pay,vexp,units,rounds,apps});
+      q("sweater_settlements","period,net_total,status"),
+    ]);setD({ops,pay,vexp,units,rounds,apps,setts});
   })();},[]);
   const s=useMemo(()=>{if(!d)return null;
     const housM=d.units.filter(u=>u.active!==false).reduce((a,u)=>a+Number(u.annual_rent||0),0)/12;
     const calc=p=>{
       const o=d.ops.filter(x=>x.period===p);
       const washes=o.reduce((a,x)=>a+Number(x.net_washes||0),0);
-      const revenue=o.reduce((a,x)=>a+payoutForBiker(Number(x.net_washes||0)).total,0);
+      const revenue=revForPeriod(d.setts,d.ops,p);
       const payroll=d.pay.filter(x=>x.period===p).reduce((a,x)=>a+Number(x.total||0),0);
       const vendors=d.vexp.filter(e=>String(e.exp_date||"").slice(0,7)===p).reduce((a,e)=>a+Number(e.amount||0),0);
       const costs=payroll+vendors+housM;
@@ -489,16 +495,17 @@ function CompareReport({period}){
 function ExecReport({period}){
   const[d,setD]=useState(null);
   useEffect(()=>{(async()=>{
-    const[ops,pay,vexp,units,viol,rounds,apps,emps]=await Promise.all([
+    const[ops,pay,vexp,units,viol,rounds,apps,emps,setts]=await Promise.all([
       q("ops_biker_month","period,net_washes,rating,approved_complaints,complaint_pct"),q("payroll_lines","period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),q("violations","fine_applied,status"),
       q("field_rounds","period,compliance_pct"),q("applicants","status,submitted_at"),q("employees","id,profession_ok"),
-    ]);setD({ops,pay,vexp,units,viol,rounds,apps,emps});
+      q("sweater_settlements","period,net_total,status"),
+    ]);setD({ops,pay,vexp,units,viol,rounds,apps,emps,setts});
   })();},[]);
   const s=useMemo(()=>{if(!d)return null;
     const o=d.ops.filter(x=>x.period===period);
     const washes=o.reduce((a,x)=>a+Number(x.net_washes||0),0);
-    const revenue=o.reduce((a,x)=>a+payoutForBiker(Number(x.net_washes||0)).total,0);
+    const revenue=revForPeriod(d.setts,d.ops,period);
     const payroll=d.pay.filter(x=>x.period===period).reduce((a,x)=>a+Number(x.total||0),0);
     const vendors=d.vexp.filter(e=>String(e.exp_date||"").slice(0,7)===period).reduce((a,e)=>a+Number(e.amount||0),0);
     const housM=d.units.filter(u=>u.active!==false).reduce((a,u)=>a+Number(u.annual_rent||0),0)/12;
