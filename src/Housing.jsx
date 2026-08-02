@@ -13,6 +13,7 @@ export default function Housing({opId}){
   const[loading,setLoading]=useState(true);
   const[units,setUnits]=useState([]);const[occ,setOcc]=useState([]);const[pays,setPays]=useState([]);const[vios,setVios]=useState([]);
   const[uForm,setUForm]=useState(null);const[oForm,setOForm]=useState(null);const[pForm,setPForm]=useState(null);const[vForm,setVForm]=useState(null);
+  const[emps,setEmps]=useState([]);
   const[msg,setMsg]=useState(null);const[busy,setBusy]=useState(false);
   const note=(ok,t)=>setMsg({ok,t});
 
@@ -29,6 +30,7 @@ export default function Housing({opId}){
     setUnits(u.data||[]);setOcc(o.data||[]);setPays(p.data||[]);setVios(v.data||[]);setLoading(false);
   };
   useEffect(()=>{load();/*eslint-disable-next-line*/},[opId]);
+  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
   const k=useMemo(()=>{
     const due=pays.filter(p=>!p.paid);
@@ -161,7 +163,7 @@ export default function Housing({opId}){
     {uForm&&<UnitModal f={uForm} set={setUForm} busy={busy} save={()=>{const r={operator_id:(opId&&opId!=="all")?opId:null,name:uForm.name,national_address:uForm.national_address||null,unit_no:uForm.unit_no||null,unit_type:uForm.unit_type||null,floor:uForm.floor||null,area_m2:num(uForm.area_m2),rooms:num(uForm.rooms),kitchens:num(uForm.kitchens),deed_no:uForm.deed_no||null,provider:uForm.provider||null,provider_cr:uForm.provider_cr||null,contact_name:uForm.contact_name||null,contact_phone:uForm.contact_phone||null,lease_ref:uForm.lease_ref||null,start_date:uForm.start_date||null,end_date:uForm.end_date||null,annual_rent:num(uForm.annual_rent),deposit:num(uForm.deposit),per_person_day:num(uForm.per_person_day),capacity:num(uForm.capacity),beds:num(uForm.beds),status:uForm.status||"active",notes:uForm.notes||null};if(!r.name){note(false,"أدخل اسم الوحدة");return;}savRow("housing_units",r,uForm,()=>setUForm(null));}}/>}
     {oForm&&<OccModal f={oForm} set={setOForm} busy={busy} units={units} save={()=>{const r={unit_id:oForm.unit_id||null,name:(oForm.name||"").trim(),mobile:oForm.mobile||null,national_id:oForm.national_id||null,role:oForm.role||null,move_in:oForm.move_in||null,active:oForm.active!==false};if(!r.name){note(false,"أدخل اسم الساكن");return;}savRow("housing_occupants",r,oForm,()=>setOForm(null));}}/>}
     {pForm&&<PayModal f={pForm} set={setPForm} busy={busy} save={()=>{const r={unit_id:pForm.unit_id||null,operator_id:(opId&&opId!=="all")?opId:null,seq:num(pForm.seq),due_date:pForm.due_date||null,amount:num(pForm.amount),paid:!!pForm.paid,paid_date:pForm.paid?(pForm.paid_date||new Date().toISOString().slice(0,10)):null,method:pForm.method||null,ref:pForm.ref||null};savRow("housing_payments",r,pForm,()=>setPForm(null));}}/>}
-    {vForm&&<VioModal f={vForm} set={setVForm} busy={busy} units={units} save={()=>{const r={unit_id:vForm.unit_id||null,occupant:vForm.occupant||null,category:vForm.category||null,occurrence:num(vForm.occurrence),amount:vForm.amount===""||vForm.amount==null?null:num(vForm.amount),action:vForm.action||null,incident_date:vForm.incident_date||null,status:vForm.status||"open",notes:vForm.notes||null,active:true};if(!r.category){note(false,"اختر نوع المخالفة");return;}savRow("housing_violations",r,vForm,()=>setVForm(null));}}/>}
+    {vForm&&<VioModal f={vForm} set={setVForm} busy={busy} units={units} emps={emps} save={()=>{const r={unit_id:vForm.unit_id||null,occupant:vForm.occupant||null,occupant_employee_id:vForm.occupant_employee_id||null,category:vForm.category||null,occurrence:num(vForm.occurrence),amount:vForm.amount===""||vForm.amount==null?null:num(vForm.amount),action:vForm.action||null,incident_date:vForm.incident_date||null,status:vForm.status||"open",notes:vForm.notes||null,active:true};if(!r.category){note(false,"اختر نوع المخالفة");return;}savRow("housing_violations",r,vForm,()=>setVForm(null));}}/>}
   </div>);
 }
 const num=v=>v===""||v==null?null:Number(v);
@@ -197,9 +199,9 @@ function PayModal({f,set,busy,save}){const u=(k,v)=>set({...f,[k]:v});return(<Mo
   {f.paid&&<Fld l="تاريخ السداد"><input type="date" value={f.paid_date||""} onChange={e=>u("paid_date",e.target.value)}/></Fld>}
 </Modal>);}
 
-function VioModal({f,set,busy,save,units}){const u=(k,v)=>set({...f,[k]:v});return(<Modal title={f.id?"تعديل مخالفة":"تسجيل مخالفة"} set={set} busy={busy} save={save}>
+function VioModal({f,set,busy,save,units,emps}){const u=(k,v)=>set({...f,[k]:v});const pickOcc=id=>{const e=(emps||[]).find(x=>x.id===id);set({...f,occupant_employee_id:id||null,occupant:e?e.full_name+(e.employee_id?" ("+e.employee_id+")":""):null});};return(<Modal title={f.id?"تعديل مخالفة":"تسجيل مخالفة"} set={set} busy={busy} save={save}>
   <Fld l="نوع المخالفة *"><select value={f.category||""} onChange={e=>u("category",e.target.value)}><option value="">— اختر —</option>{HOUSING_VIOLATIONS.map(v=><option key={v.cat}>{v.cat}</option>)}</select></Fld>
-  <div className="hs-2"><Fld l="الساكن"><input value={f.occupant||""} onChange={e=>u("occupant",e.target.value)}/></Fld><Fld l="رقم المرة"><select value={f.occurrence||1} onChange={e=>{const o=Number(e.target.value);const fine=suggestFine(o);u("occurrence",o);set(s=>({...s,occurrence:o,amount:fine==null?"":fine}));}}>{[1,2,3,4].map(n=><option key={n} value={n}>المرة {n}</option>)}</select></Fld></div>
+  <div className="hs-2"><Fld l="الساكن"><select value={f.occupant_employee_id||""} onChange={e=>pickOcc(e.target.value)}><option value="">— غير محدّد —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld><Fld l="رقم المرة"><select value={f.occurrence||1} onChange={e=>{const o=Number(e.target.value);const fine=suggestFine(o);u("occurrence",o);set(s=>({...s,occurrence:o,amount:fine==null?"":fine}));}}>{[1,2,3,4].map(n=><option key={n} value={n}>المرة {n}</option>)}</select></Fld></div>
   <div className="hs-2"><Fld l="الغرامة (﷼)"><input type="number" value={f.amount??""} onChange={e=>u("amount",e.target.value)} placeholder="إخلاء = فارغ"/></Fld><Fld l="الإجراء"><input value={f.action||""} onChange={e=>u("action",e.target.value)} placeholder="إنذار / غرامة / إخلاء"/></Fld></div>
   <div className="hs-2"><Fld l="التاريخ"><input type="date" value={f.incident_date||""} onChange={e=>u("incident_date",e.target.value)}/></Fld><Fld l="الحالة"><select value={f.status||"open"} onChange={e=>u("status",e.target.value)}><option value="open">مفتوحة</option><option value="closed">مغلقة</option></select></Fld></div>
   <Fld l="ملاحظات"><textarea rows={2} value={f.notes||""} onChange={e=>u("notes",e.target.value)}/></Fld>

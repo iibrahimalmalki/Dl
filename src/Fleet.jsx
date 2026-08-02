@@ -28,6 +28,7 @@ export default function Fleet({opId,owner}){
   const[loading,setLoading]=useState(true);
   const[veh,setVeh]=useState([]);const[inc,setInc]=useState([]);
   const[vForm,setVForm]=useState(null);const[iForm,setIForm]=useState(null);
+  const[emps,setEmps]=useState([]);
   const[msg,setMsg]=useState(null);const[busy,setBusy]=useState(false);
   const note=(ok,t)=>setMsg({ok,t});
 
@@ -42,6 +43,7 @@ export default function Fleet({opId,owner}){
     setVeh(vr);setInc(ir);setLoading(false);
   };
   useEffect(()=>{load();/*eslint-disable-next-line*/},[opId]);
+  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
   const k=useMemo(()=>{
     const n=veh.length;
@@ -64,7 +66,7 @@ export default function Fleet({opId,owner}){
     const row={operator_id:(opId&&opId!=="all")?opId:null,plate:vForm.plate.trim(),plate_en:vForm.plate_en||null,make:vForm.make||null,
       model_year:vForm.model_year?Number(vForm.model_year):null,vin:vForm.vin||null,serial_no:vForm.serial_no||null,
       color:vForm.color||null,has_gps:!!vForm.has_gps,has_camera:!!vForm.has_camera,key_status:vForm.key_status||null,key_holder:vForm.key_holder||null,
-      current_biker:vForm.current_biker||null,status:vForm.status||"active",notes:vForm.notes||null,active:vForm.active!==false};
+      current_biker:vForm.current_biker||null,biker_employee_id:vForm.biker_employee_id||null,status:vForm.status||"active",notes:vForm.notes||null,active:vForm.active!==false};
     try{
       if(vForm.id)await supabase.from("fleet_vehicles").update(row).eq("id",vForm.id);
       else await supabase.from("fleet_vehicles").insert(row);
@@ -79,7 +81,7 @@ export default function Fleet({opId,owner}){
     const row={operator_id:(opId&&opId!=="all")?opId:null,vehicle_id:iForm.vehicle_id||null,vehicle_label:vlabel||null,
       incident_type:iForm.incident_type,title:iForm.title||null,biker:iForm.biker||null,occurred_on:iForm.occurred_on||null,
       reported_on:iForm.reported_on||null,police_report_no:iForm.police_report_no||null,case_no:iForm.case_no||null,
-      emergency_refs:iForm.emergency_refs||null,responsibility:iForm.responsibility||null,corrective_actions:iForm.corrective_actions||null,
+      biker_employee_id:iForm.biker_employee_id||null,emergency_refs:iForm.emergency_refs||null,responsibility:iForm.responsibility||null,corrective_actions:iForm.corrective_actions||null,
       severity:iForm.severity||"high",status:iForm.status||"open",notes:iForm.notes||null,active:iForm.active!==false};
     try{
       if(iForm.id)await supabase.from("fleet_incidents").update(row).eq("id",iForm.id);
@@ -195,8 +197,8 @@ export default function Fleet({opId,owner}){
       <div className="fl-recs"><b>توصيات تصحيحية:</b> نقطة مركزية واحدة لحفظ نُسخ المفاتيح مع نسخة احتياطية موثّقة · استرجاع المفاتيح بحوزة أطراف خارجية · دراسة الانتقال لأقفال بالكود لإنهاء مشكلة «المفتاح المفقود» نهائياً.</div>
     </div>}
 
-    {vForm&&<VehModal f={vForm} set={setVForm} save={saveV} busy={busy}/>}
-    {iForm&&<IncModal f={iForm} set={setIForm} save={saveI} busy={busy} veh={veh}/>}
+    {vForm&&<VehModal f={vForm} set={setVForm} save={saveV} busy={busy} emps={emps}/>}
+    {iForm&&<IncModal f={iForm} set={setIForm} save={saveI} busy={busy} veh={veh} emps={emps}/>}
   </div>);
 }
 
@@ -204,8 +206,9 @@ function Kpi({ic,c,l,n,d}){return(<div className="fl-kpi"><div className="fl-kh"
 function Empty({t}){return<div className="fl-empty"><Icon n="bike" s={30}/><p>{t}</p></div>;}
 function Fld({l,children}){return(<label className="fl-fld"><span>{l}</span>{children}</label>);}
 
-function VehModal({f,set,save,busy}){
+function VehModal({f,set,save,busy,emps}){
   const u=(k,v)=>set({...f,[k]:v});
+  const pickBiker=id=>{const e=(emps||[]).find(x=>x.id===id);set({...f,biker_employee_id:id||null,current_biker:e?e.full_name+(e.employee_id?" ("+e.employee_id+")":""):null});};
   return(<div className="fl-scrim" onClick={()=>set(null)}><div className="fl-modal" onClick={e=>e.stopPropagation()}>
     <div className="fl-mh"><b>{f.id?"تعديل مركبة":"إضافة مركبة"}</b><button onClick={()=>set(null)}><Icon n="x" s={18}/></button></div>
     <div className="fl-mb">
@@ -227,7 +230,7 @@ function VehModal({f,set,save,busy}){
       </div>
       <div className="fl-2">
         <Fld l="الحالة"><select value={f.status||"active"} onChange={e=>u("status",e.target.value)}>{Object.entries(V_STATUS).map(([k,v])=><option key={k} value={k}>{v.ar}</option>)}</select></Fld>
-        <Fld l="البايكر الحالي"><input value={f.current_biker||""} onChange={e=>u("current_biker",e.target.value)} placeholder="الاسم (الرقم)"/></Fld>
+        <Fld l="البايكر الحالي"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير معيّن —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
       </div>
       <div className="fl-2">
         <Fld l="حالة المفتاح"><input value={f.key_status||""} onChange={e=>u("key_status",e.target.value)} placeholder="متوفر / مفقود / لا يوجد"/></Fld>
@@ -243,8 +246,9 @@ function VehModal({f,set,save,busy}){
   </div></div>);
 }
 
-function IncModal({f,set,save,busy,veh}){
+function IncModal({f,set,save,busy,veh,emps}){
   const u=(k,v)=>set({...f,[k]:v});
+  const pickBiker=id=>{const e=(emps||[]).find(x=>x.id===id);set({...f,biker_employee_id:id||null,biker:e?e.full_name+(e.employee_id?" ("+e.employee_id+")":""):null});};
   return(<div className="fl-scrim" onClick={()=>set(null)}><div className="fl-modal" onClick={e=>e.stopPropagation()}>
     <div className="fl-mh"><b>{f.id?"تعديل حادثة":"تسجيل حادثة/عطل"}</b><button onClick={()=>set(null)}><Icon n="x" s={18}/></button></div>
     <div className="fl-mb">
@@ -254,7 +258,7 @@ function IncModal({f,set,save,busy,veh}){
       </div>
       <Fld l="العنوان"><input value={f.title||""} onChange={e=>u("title",e.target.value)} placeholder="وصف مختصر"/></Fld>
       <div className="fl-2">
-        <Fld l="البايكر"><input value={f.biker||""} onChange={e=>u("biker",e.target.value)}/></Fld>
+        <Fld l="البايكر"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير محدّد —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
         <Fld l="الخطورة"><select value={f.severity||"high"} onChange={e=>u("severity",e.target.value)}>{Object.entries(SEV).map(([k,v])=><option key={k} value={k}>{v.ar}</option>)}</select></Fld>
       </div>
       <div className="fl-2">
