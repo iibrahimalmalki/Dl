@@ -9,6 +9,7 @@ import FieldChecklistForm,{FCF_CSS}from"./FieldChecklistForm";
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const periodLabel=p=>{const[y,m]=p.split("-");return`${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m} ${y}`;};
 const todayStr=()=>new Date().toISOString().slice(0,10);
+const nowTime=()=>{const d=new Date();return`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;};
 const RES=[["pass","✓","مطابق","g"],["half","≈","جزئي","a"],["fail","✕","غير مطابق","r"],["excused","∅","معفى (إمداد)","m"]];
 const MRES=[["pass","✓","متوفّر","g"],["fail","✕","ناقص","r"]];
 
@@ -18,7 +19,9 @@ export default function FieldRounds({opId}){
   const[emps,setEmps]=useState([]);
   const[rounds,setRounds]=useState([]);
   const[showNew,setShowNew]=useState(false);const[showReq,setShowReq]=useState(false);const[reqSid,setReqSid]=useState("");
-  const[hd,setHd]=useState({sweater_id:"",date:todayStr(),location:"",inspector:""});
+  const[hd,setHd]=useState({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:""});
+  const[me,setMe]=useState("");            // اسم المستخدم المسجّل — يملأ منفّذ الجولة تلقائياً
+  const[geo,setGeo]=useState("");          // حالة تحديد الموقع: ""/"loading"/"done"/"err"
   const[res,setRes]=useState({});
   const[itemNotes,setItemNotes]=useState({});   // ملاحظات الإعفاء لكل بند
   const[photos,setPhotos]=useState({});   // {itemN:[url,...]} حسب ترتيب الزوايا
@@ -39,6 +42,28 @@ export default function FieldRounds({opId}){
       setPhotos(p=>{const a=[...(p[n]||[])];a[idx]=publicUrl;return{...p,[n]:a};});
     }catch(e){setMsg({ok:false,t:"تعذّر رفع الصورة: "+(e.message||e)});}
     setUploading("");
+  };
+
+  // اسم المستخدم المسجّل دخوله — لملء «منفّذ الجولة» تلقائياً
+  useEffect(()=>{(async()=>{
+    try{const{data:{user}}=await supabase.auth.getUser();if(!user)return;
+      const{data:au}=await supabase.from("app_users").select("display_name").eq("id",user.id).maybeSingle();
+      const nm=(au&&au.display_name)||user.email||"";setMe(nm);
+      setHd(h=>h.inspector?h:{...h,inspector:nm});
+    }catch(_){}
+  })();},[]);
+
+  // تحديد الموقع المباشر عبر الخرائط (GPS المتصفّح)
+  const locate=()=>{
+    if(!navigator.geolocation){setGeo("err");setMsg({ok:false,t:"جهازك لا يدعم تحديد الموقع"});return;}
+    setGeo("loading");setMsg(null);
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const lat=+pos.coords.latitude.toFixed(6),lng=+pos.coords.longitude.toFixed(6);
+      const url=`https://maps.google.com/?q=${lat},${lng}`;
+      setHd(h=>({...h,gps_lat:lat,gps_lng:lng,location_url:url,location:h.location||`${lat}, ${lng}`}));
+      setGeo("done");
+    },err=>{setGeo("err");setMsg({ok:false,t:err.code===1?"تم رفض إذن الموقع — فعّله من إعدادات المتصفح":"تعذّر تحديد الموقع"});},
+    {enableHighAccuracy:true,timeout:10000,maximumAge:0});
   };
 
   useEffect(()=>{(async()=>{
@@ -67,11 +92,11 @@ export default function FieldRounds({opId}){
       const{data:hist}=await supabase.from("field_rounds").select("results,compliance_pct,round_date").eq("sweater_id",hd.sweater_id).order("round_date",{ascending:false}).limit(12);
       const roundObj={results:res,item_notes:cleanNotes,compliance_pct:comp.pct,round_date:hd.date,biker_name:emp?.full_name||"",sweater_id:hd.sweater_id,action_items:comp.actions};
       const analysis=analyzeRound(roundObj,hist||[]);
-      const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,location:hd.location||null,inspector:hd.inspector||null,results:res,item_notes:cleanNotes,photos:cleanPhotos,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,by_axis:cAxis,ai_analysis:analysis,notes:notes||null};
+      const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,round_time:hd.time||null,location:hd.location||null,location_url:hd.location_url||null,gps_lat:hd.gps_lat,gps_lng:hd.gps_lng,inspector:hd.inspector||me||null,results:res,item_notes:cleanNotes,photos:cleanPhotos,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,by_axis:cAxis,ai_analysis:analysis,notes:notes||null};
       const{data,error}=await supabase.from("field_rounds").insert(row).select().single();
       if(error)throw error;
       if(row.period===period)setRounds(p=>[data,...p]);
-      setShowNew(false);setHd({sweater_id:"",date:todayStr(),location:"",inspector:""});setRes({});setItemNotes({});setPhotos({});setNotes("");
+      setShowNew(false);setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setPhotos({});setNotes("");
       setMsg({ok:true,t:"تم حفظ الجولة"});
     }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
     setSaving(false);
@@ -123,8 +148,17 @@ export default function FieldRounds({opId}){
             <option value="">اختر…</option>{emps.map(e=><option key={e.id} value={e.employee_id}>{e.full_name} · #{e.employee_id}</option>)}
           </select></label>
         <label className="fr-fld"><span>تاريخ الجولة</span><input type="date" value={hd.date} onChange={e=>setHd({...hd,date:e.target.value})}/></label>
-        <label className="fr-fld"><span>المكان</span><input value={hd.location} onChange={e=>setHd({...hd,location:e.target.value})} placeholder="اختياري"/></label>
-        <label className="fr-fld"><span>منفّذ الجولة</span><input value={hd.inspector} onChange={e=>setHd({...hd,inspector:e.target.value})} placeholder="المشرف/المالك"/></label>
+        <label className="fr-fld"><span>وقت الجولة</span><input type="time" value={hd.time} onChange={e=>setHd({...hd,time:e.target.value})}/></label>
+        <label className="fr-fld"><span>المكان</span>
+          <div className="fr-loc">
+            <input value={hd.location} onChange={e=>setHd({...hd,location:e.target.value})} placeholder="اسم الموقع أو حدّده تلقائياً"/>
+            <button type="button" className={"fr-locbtn"+(geo==="done"?" ok":"")} onClick={locate} title="تحديد موقعي الحالي">
+              {geo==="loading"?<span className="fr-locsp">…</span>:<Icon n="target" s={15}/>}
+            </button>
+          </div>
+          {hd.location_url&&<a className="fr-locurl" href={hd.location_url} target="_blank" rel="noreferrer"><Icon n="target" s={11}/> عرض على الخريطة ({hd.gps_lat}, {hd.gps_lng})</a>}
+        </label>
+        <label className="fr-fld"><span>منفّذ الجولة</span><input value={hd.inspector} onChange={e=>setHd({...hd,inspector:e.target.value})} placeholder="يُملأ تلقائياً حسب حسابك"/></label>
       </div>
 
       <FieldChecklistForm items={ITEMS} res={res} onRes={(n,v)=>setRes(p=>({...p,[n]:v}))} notes={itemNotes} onNote={(n,t)=>setItemNotes(p=>({...p,[n]:t}))} photos={photos} onUpload={upload} uploading={uploading} onView={setViewer}/>
@@ -158,7 +192,7 @@ export default function FieldRounds({opId}){
     rounds.map(r=>{const ef=effect(r.compliance_pct);const self=r.source==="self";const stMap={requested:["مطلوب — بانتظار البايكر","#b54708","#fef3e2"],submitted:["ذاتي — بانتظار المراجعة","#175cd3","#eff6ff"],reviewed:["ذاتي — تمت المراجعة","#087443","#e7f7ef"]};const stx=self?stMap[r.status]:null;return(
       <div className="fr-card" key={r.id} style={{borderInlineStartColor:ef.color}}>
         <div className="fr-c-top">
-          <div><div className="fr-c-name">{r.biker_name||"—"}<small>#{r.sweater_id}</small>{self&&<span className="fr-self">توثيق ذاتي</span>}</div><div className="fr-c-sub">{r.round_date}{r.location?" · "+r.location:""}{r.inspector?" · "+r.inspector:""}</div></div>
+          <div><div className="fr-c-name">{r.biker_name||"—"}<small>#{r.sweater_id}</small>{self&&<span className="fr-self">توثيق ذاتي</span>}</div><div className="fr-c-sub">{r.round_date}{r.round_time?" · "+r.round_time:""}{r.location?" · "+r.location:""}{r.inspector?" · "+r.inspector:""}{r.location_url?<> · <a href={r.location_url} target="_blank" rel="noreferrer" style={{color:"#1d5bbf",fontWeight:700,textDecoration:"none"}}>الخريطة</a></>:null}</div></div>
           <div className="fr-c-pct" style={{color:ef.color}}>{r.compliance_pct!=null?r.compliance_pct+"%":"—"}</div>
         </div>
         {stx&&<div className="fr-c-st" style={{background:stx[2],color:stx[1]}}><span className="fr-sdot" style={{background:stx[1]}}/>{stx[0]}</div>}
@@ -205,6 +239,13 @@ const CSS=`
 .fr-fld span{font-size:11px;color:#64748b;font-weight:600}
 .fr-fld select,.fr-fld input{border:1px solid #e6e9ee;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;color:#0f172a;outline:none;background:#fff;width:100%;box-sizing:border-box}
 .fr-fld select:focus,.fr-fld input:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(232,113,43,.1)}
+.fr-loc{display:flex;gap:7px;align-items:stretch}
+.fr-loc input{flex:1}
+.fr-locbtn{flex:none;width:42px;border:1px solid #e6e9ee;border-radius:10px;background:#fff2e8;color:var(--b);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.fr-locbtn:hover{background:#ffe6d2}
+.fr-locbtn.ok{background:#e7f7ef;color:#087443;border-color:#b7e4cd}
+.fr-locsp{font-size:16px;font-weight:800;color:var(--b)}
+.fr-locurl{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#1d5bbf;margin-top:5px;text-decoration:none}
 .fr-legend{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#fafbfc;border:1px solid #f1f3f5;border-radius:11px;padding:9px 12px;margin-bottom:6px}
 .fr-lg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600}
 .fr-lg .fr-o{width:22px;height:22px;font-size:12px;cursor:default}
