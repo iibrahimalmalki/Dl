@@ -1,7 +1,7 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
-import{payoutForBiker}from"./sweaterContract";
+import{payoutForBiker,SSP_CONTRACT}from"./sweaterContract";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
 const int=n=>Number(n||0).toLocaleString("en-US");
@@ -24,7 +24,7 @@ const CATALOG=[
   ]},
   {g:"التشغيل",items:[
     {k:"bikers",ar:"أداء البايكرز",ic:"performance",ready:true,sub:"الغسلات والتقييم شهرياً"},
-    {k:"sla",ar:"مؤشرات العقد SLA",ic:"target",ready:false,sub:"قريباً"},
+    {k:"sla",ar:"مؤشرات العقد SLA",ic:"target",ready:true,sub:"الأداء مقابل التزامات العقد"},
   ]},
   {g:"الموارد البشرية والحوكمة",items:[
     {k:"compliance",ar:"تقرير الامتثال",ic:"id",ready:true,sub:"إقامات ووثائق ومهن"},
@@ -58,12 +58,13 @@ export default function Reports({opId}){
     <div className="rp-bar">
       <button className="rp-back" onClick={()=>setActive(null)}><Icon n="back" s={15}/> التقارير</button>
       <b className="rp-title">{cur.ar}</b>
-      {["margin","expenses","bikers"].includes(active)&&<div className="rp-per"><Icon n="calendar" s={14}/><input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/><span>{periodAr(period)}</span></div>}
+      {["margin","expenses","bikers","sla"].includes(active)&&<div className="rp-per"><Icon n="calendar" s={14}/><input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/><span>{periodAr(period)}</span></div>}
     </div>
     {active==="margin"&&<MarginReport period={period}/>}
     {active==="expenses"&&<ExpensesReport period={period}/>}
     {active==="compliance"&&<ComplianceReport/>}
     {active==="bikers"&&<BikerReport period={period}/>}
+    {active==="sla"&&<SLAReport period={period}/>}
     {active==="funnel"&&<FunnelReport/>}
   </div>);
 }
@@ -202,6 +203,63 @@ function BikerReport({period}){
       <Bars rows={s.map(o=>({label:(o.biker_name||"—")+(o.rating?" · ⭐"+Number(o.rating).toFixed(1):""),val:Number(o.net_washes||0)}))} max={max}/>}
     </div>
     <ExportBar onCsv={()=>downloadCsv("bikers_"+period,["البايكر","الغسلات","التقييم","شكاوى%"],s.map(o=>[o.biker_name,o.net_washes,o.rating,o.complaint_pct]))}/>
+  </div>);
+}
+
+// ── مؤشرات العقد SLA ──
+function SLAReport({period}){
+  const[d,setD]=useState(null);
+  useEffect(()=>{(async()=>{
+    const[ops,rounds]=await Promise.all([
+      q("ops_biker_month","period,net_washes,cancel_admin,cancel_client,rating,approved_complaints,complaint_pct"),
+      q("field_rounds","period,compliance_pct"),
+    ]);setD({ops,rounds});
+  })();},[]);
+  const s=useMemo(()=>{if(!d)return null;
+    const o=d.ops.filter(x=>x.period===period);
+    const washes=o.reduce((a,x)=>a+Number(x.net_washes||0),0);
+    const cAdmin=o.reduce((a,x)=>a+Number(x.cancel_admin||0),0);
+    const compl=o.reduce((a,x)=>a+Number(x.approved_complaints||0),0);
+    const rated=o.filter(x=>x.rating!=null);
+    const fulfil=(washes+cAdmin)>0?washes/(washes+cAdmin)*100:null;
+    const avgRating=rated.length?rated.reduce((a,x)=>a+Number(x.rating||0),0)/rated.length:null;
+    const complPct=washes>0?compl/washes*100:null;
+    const rd=d.rounds.filter(x=>x.period===period&&x.compliance_pct!=null);
+    const fieldComp=rd.length?rd.reduce((a,x)=>a+Number(x.compliance_pct||0),0)/rd.length:null;
+    return{washes,cAdmin,compl,fulfil,avgRating,complPct,fieldComp,hasData:o.length>0,rounds:rd.length};
+  },[d,period]);
+  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  const C=SSP_CONTRACT;
+  // مؤشر: {الاسم، القيمة، الهدف، اتجاه (≥/≤)، صيغة}
+  const pf=(val,target,dir)=>val==null?null:(dir==="ge"?val>=target:val<=target);
+  const rows=[
+    {k:"fulfil",l:"نسبة تنفيذ الطلبات",val:s.fulfil,target:C.sla.orders_fulfilled_pct,dir:"ge",fmt:v=>v==null?"—":v.toFixed(1)+"%",note:"غسلات ÷ (غسلات + إلغاء إداري)"},
+    {k:"rating",l:"متوسط التقييم (شرط الحافز)",val:s.avgRating,target:C.incentive_conditions.min_rating,dir:"ge",fmt:v=>v==null?"—":v.toFixed(2)+" / 5",note:"حافز 1﷼/طلب عند ≥4.75"},
+    {k:"compl",l:"نسبة الشكاوى المعتمدة",val:s.complPct,target:C.incentive_conditions.max_complaints_pct,dir:"le",fmt:v=>v==null?"—":v.toFixed(2)+"%",note:"خصم 1﷼/طلب عند تجاوز 1%"},
+    {k:"field",l:"الامتثال الميداني",val:s.fieldComp,target:95,dir:"ge",fmt:v=>v==null?"—":Math.round(v)+"%",note:s.rounds?s.rounds+" جولة هذا الشهر":"لا جولات"},
+  ];
+  const met=rows.filter(r=>pf(r.val,r.target,r.dir)===true).length;
+  const measured=rows.filter(r=>r.val!=null).length;
+  const stColor=r=>{const p=pf(r.val,r.target,r.dir);return p==null?"#94a3b8":p?"#087443":"#b42318";};
+  const stBg=r=>{const p=pf(r.val,r.target,r.dir);return p==null?"#f1f3f5":p?"#e7f7ef":"#feecea";};
+  const stTxt=r=>{const p=pf(r.val,r.target,r.dir);return p==null?"لا بيانات":p?"مُحقّق":"دون الهدف";};
+  const wa=`مؤشرات العقد SLA — ${periodAr(period)}\nمُحقّق: ${met}/${measured}\n`+rows.map(r=>`${r.l}: ${r.fmt(r.val)} (هدف ${r.dir==="ge"?"≥":"≤"}${r.target})`).join("\n");
+  return(<div className="rp-body">
+    <div className="rp-kpis">
+      <Kpi l="مؤشرات مُحقّقة" n={measured?met+" / "+measured:"—"} c={met===measured&&measured?"#087443":"#c2410c"}/>
+      <Kpi l="نسبة التنفيذ" n={s.fulfil!=null?s.fulfil.toFixed(1)+"%":"—"} c={s.fulfil==null?null:s.fulfil>=99?"#087443":"#b42318"} sub={"هدف ≥"+C.sla.orders_fulfilled_pct+"%"}/>
+      <Kpi l="متوسط التقييم" n={s.avgRating!=null?s.avgRating.toFixed(2):"—"} c={s.avgRating==null?null:s.avgRating>=4.75?"#087443":"#c2410c"} sub="هدف ≥4.75"/>
+      <Kpi l="الشكاوى" n={s.complPct!=null?s.complPct.toFixed(2)+"%":"—"} c={s.complPct==null?null:s.complPct<=1?"#087443":"#b42318"} sub="هدف ≤1%"/>
+    </div>
+    <div className="rp-panel"><div className="rp-ph">الأداء مقابل التزامات العقد — {periodAr(period)}</div>
+      {!s.hasData?<Empty t="لا بيانات عمليات لهذا الشهر — تُدخَل من العمليات/تسوية سويتر."/>:
+      <div className="rp-tblwrap"><table className="rp-tbl">
+        <thead><tr><th>المؤشر</th><th>القيمة</th><th>الهدف</th><th>الحالة</th></tr></thead>
+        <tbody>{rows.map(r=>(<tr key={r.k}><td>{r.l}<br/><small style={{color:"#94a3b8"}}>{r.note}</small></td><td style={{fontWeight:800}}>{r.fmt(r.val)}</td><td>{(r.dir==="ge"?"≥":"≤")+r.target+(r.k==="rating"?"":"%")}</td><td><span className="rp-badge" style={{color:stColor(r),background:stBg(r)}}>{stTxt(r)}</span></td></tr>))}</tbody>
+      </table></div>}
+    </div>
+    <p className="rp-note">مؤشّرا «الالتزام بمواعيد التسليم» و«الوصول للموقع» (هدف ≥{C.sla.on_time_pct}% و≥{C.sla.arrival_pct}%) غير مُلتقَطة آلياً بعد — تُضاف عند ربط بيانات التتبّع من بوّابة سويتر.</p>
+    <ExportBar waText={wa} onCsv={()=>downloadCsv("sla_"+period,["المؤشر","القيمة","الهدف","الحالة"],rows.map(r=>[r.l,r.fmt(r.val),(r.dir==="ge"?"≥":"≤")+r.target,stTxt(r)]))}/>
   </div>);
 }
 
