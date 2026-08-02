@@ -19,7 +19,7 @@ export default function DashboardHome({onNav}){
     const[apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems]=await Promise.all([
       q("applicants","full_name,application_number,status,ai_classification,ai_score_total,location,saudi_city,bangladesh_district,submitted_at"),
       supabase.from("page_visits").select("step,session_id").eq("page","ad_page").then(({data})=>data||[],()=>[]),
-      q("employees","full_name,employee_id,team_id,staff_role"),
+      q("employees","full_name,employee_id,team_id,staff_role,profession_ok"),
       q("teams","id,name,supervisor_user_id"),
       q("interview_sessions","status,decision,rating"),
       q("onboarding","progress"),
@@ -108,6 +108,8 @@ export default function DashboardHome({onNav}){
     if(scLow)alerts.push({sev:"warn",ic:"bucket",t:`${scLow} صنف تحت حدّ إعادة الطلب`,k:"supply"});
     if(fMaint)alerts.push({sev:"info",ic:"wrench",t:`${fMaint} دراجة في الصيانة`,k:"fleet"});
     if(scPending)alerts.push({sev:"info",ic:"bucket",t:`${scPending} طلب إمداد بانتظار الاعتماد`,k:"supply"});
+    const profMismatch=d.emps.filter(e=>e.profession_ok===false).length;
+    if(profMismatch)alerts.push({sev:"warn",ic:"employees",t:`${profMismatch} مهنة غير مطابقة للنشاط — تغيير مطلوب (1,000﷼/فرد)`,k:"employees"});
     if(openViol)alerts.push({sev:"info",ic:"complaints",t:`${openViol} مخالفة/شكوى مفتوحة`,k:"complaints"});
     const sevRank={crit:0,warn:1,info:2};
     alerts.sort((a,b)=>sevRank[a.sev]-sevRank[b.sev]);
