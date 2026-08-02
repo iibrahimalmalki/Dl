@@ -206,20 +206,66 @@ function BikerReport({period}){
 }
 
 // ── قمع التوظيف ──
+const stName=x=>x==="accepted"?"مقبول":x==="rejected"?"مرفوض":"معلّق";
+const stBand=x=>x==="accepted"?["#087443","#e7f7ef"]:x==="rejected"?["#b42318","#feecea"]:["#c2410c","#fff5e8"];
+const clsAr=c=>{const s=String(c||"").toLowerCase();if(/strong|قوي|excellent|ممتاز/.test(s))return"مرشّح قوي";if(/good|جيد|moderate|متوسط/.test(s))return"جيد";if(/weak|ضعيف|poor/.test(s))return"ضعيف";return c||"غير مصنّف";};
 function FunnelReport(){
   const[d,setD]=useState(null);
-  useEffect(()=>{supabase.from("page_visits").select("step,session_id").eq("page","ad_page").then(({data})=>setD(data||[]),()=>setD([]));},[]);
-  const s=useMemo(()=>{if(!d)return null;const sess={};d.forEach(v=>{const m=String(v.step||"").match(/^([0-9])/);if(!m)return;sess[v.session_id]=Math.max(sess[v.session_id]||0,+m[1]);});
+  useEffect(()=>{(async()=>{
+    const[visits,apps]=await Promise.all([
+      supabase.from("page_visits").select("step,session_id").eq("page","ad_page").then(({data})=>data||[],()=>[]),
+      q("applicants","full_name,application_number,status,ai_classification,ai_score_total,location,saudi_city,bangladesh_district,submitted_at"),
+    ]);setD({visits,apps});
+  })();},[]);
+  const s=useMemo(()=>{if(!d)return null;
+    const sess={};d.visits.forEach(v=>{const m=String(v.step||"").match(/^([0-9])/);if(!m)return;sess[v.session_id]=Math.max(sess[v.session_id]||0,+m[1]);});
     const sv=Object.values(sess);const reached=lv=>sv.filter(x=>x>=lv).length;const t0=reached(0)||sv.length;
-    return{t0,steps:[["دخول الإعلان",reached(0)],["المزايا",reached(1)],["الحاسبة",reached(2)],["يوم في الحياة",reached(3)],["الأسئلة",reached(4)],["زر التقديم",reached(5)]]};
+    const steps=[["دخول الإعلان",reached(0)],["المزايا",reached(1)],["الحاسبة",reached(2)],["يوم في الحياة",reached(3)],["الأسئلة",reached(4)],["زر التقديم",reached(5)]];
+    const A=d.apps;
+    const accepted=A.filter(a=>a.status==="accepted").length;
+    const rejected=A.filter(a=>a.status==="rejected").length;
+    const pending=A.filter(a=>a.status==="pending"||!a.status).length;
+    const submits=reached(5);const conv=submits?Math.round(A.length/submits*100):null;
+    const byCls={};A.forEach(a=>{const c=clsAr(a.ai_classification);byCls[c]=(byCls[c]||0)+1;});
+    const cls=Object.entries(byCls).map(([label,val])=>({label,val})).sort((a,b)=>b.val-a.val);
+    const strong=A.filter(a=>/قوي/.test(clsAr(a.ai_classification))).length;
+    const scored=A.filter(a=>a.ai_score_total!=null);
+    const avgScore=scored.length?Math.round(scored.reduce((x,a)=>x+Number(a.ai_score_total||0),0)/scored.length):null;
+    const recent=[...A].sort((a,b)=>String(b.submitted_at||"").localeCompare(String(a.submitted_at||""))).slice(0,20)
+      .map(a=>({name:a.full_name||"—",num:a.application_number||"—",loc:a.saudi_city||a.location||a.bangladesh_district||"—",score:a.ai_score_total,cls:clsAr(a.ai_classification),status:a.status,date:a.submitted_at}));
+    return{t0,steps,total:A.length,accepted,rejected,pending,conv,cls,strong,avgScore,recent,submits};
   },[d]);
   if(!s)return<div className="dw-skel" style={{height:200}}/>;
   return(<div className="rp-body">
-    <div className="rp-panel"><div className="rp-ph">قمع التوظيف — كل الزيارات</div>
+    <div className="rp-kpis">
+      <Kpi l="إجمالي المتقدّمين" n={int(s.total)} c="#1d5bbf"/>
+      <Kpi l="مقبول" n={int(s.accepted)} c="#087443"/>
+      <Kpi l="قيد المراجعة" n={int(s.pending)} c="#c2410c"/>
+      <Kpi l="مرفوض" n={int(s.rejected)} c="#b42318"/>
+    </div>
+    <div className="rp-kpis">
+      <Kpi l="مرشّحون أقوياء (AI)" n={int(s.strong)} c="#7c3aed"/>
+      <Kpi l="متوسط درجة AI" n={s.avgScore!=null?s.avgScore:"—"}/>
+      <Kpi l="زوّار وصلوا للتقديم" n={int(s.submits)}/>
+      <Kpi l="تحوّل الزيارة→تقديم" n={s.conv!=null?s.conv+"%":"—"} sub="من ضغط زر التقديم"/>
+    </div>
+    <div className="rp-panel"><div className="rp-ph">قمع الزيارات — من الإعلان إلى التقديم</div>
       {s.t0===0?<Empty t="لا زيارات مسجّلة بعد — شارك رابط الإعلان."/>:
       <Bars rows={s.steps.map(([label,val])=>({label:label+" ("+(s.t0?Math.round(val/s.t0*100):0)+"%)",val}))} max={s.t0}/>}
     </div>
-    <ExportBar onCsv={()=>downloadCsv("funnel",["المرحلة","العدد","النسبة%"],s.steps.map(([l,v])=>[l,v,s.t0?Math.round(v/s.t0*100):0]))}/>
+    {s.cls.length>0&&<div className="rp-panel"><div className="rp-ph">تصنيف الذكاء الاصطناعي</div>
+      <Bars rows={s.cls} max={Math.max(...s.cls.map(c=>c.val),1)}/>
+    </div>}
+    <div className="rp-panel"><div className="rp-ph">أحدث المتقدّمين ({s.recent.length})</div>
+      <div className="rp-tblwrap"><table className="rp-tbl">
+        <thead><tr><th>الاسم</th><th>رقم الطلب</th><th>الموقع</th><th>درجة AI</th><th>التصنيف</th><th>الحالة</th></tr></thead>
+        <tbody>{s.recent.map((a,i)=>{const[c,bg]=stBand(a.status);return(<tr key={i}><td>{a.name}</td><td>{a.num}</td><td>{a.loc}</td><td style={{fontWeight:800}}>{a.score!=null?a.score:"—"}</td><td>{a.cls}</td><td><span className="rp-badge" style={{color:c,background:bg}}>{stName(a.status)}</span></td></tr>);})}
+        {!s.recent.length&&<tr><td colSpan={6} className="rp-empt">لا متقدّمين بعد</td></tr>}</tbody>
+      </table></div>
+    </div>
+    <ExportBar
+      waText={`قمع التوظيف\nالمتقدّمون: ${s.total}\nمقبول: ${s.accepted} · معلّق: ${s.pending} · مرفوض: ${s.rejected}\nمرشّحون أقوياء: ${s.strong}`}
+      onCsv={()=>downloadCsv("applicants",["الاسم","رقم الطلب","الموقع","درجة AI","التصنيف","الحالة","التاريخ"],s.recent.map(a=>[a.name,a.num,a.loc,a.score,a.cls,stName(a.status),fmtD(a.date)]))}/>
   </div>);
 }
 
