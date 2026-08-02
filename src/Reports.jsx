@@ -20,7 +20,7 @@ const CATALOG=[
   {g:"المالية",items:[
     {k:"margin",ar:"الهامش المالي",ic:"cash",ready:true,sub:"إيراد − تكاليف الشهر"},
     {k:"expenses",ar:"المصروفات حسب الفئة",ic:"vendors",ready:true,sub:"توزيع المصروفات والموردين"},
-    {k:"payroll",ar:"مسير الرواتب",ic:"payroll",ready:false,sub:"قريباً"},
+    {k:"payroll",ar:"مسير الرواتب",ic:"payroll",ready:true,sub:"الأساسي والحوافز شهرياً"},
   ]},
   {g:"التشغيل",items:[
     {k:"bikers",ar:"أداء البايكرز",ic:"performance",ready:true,sub:"الغسلات والتقييم شهرياً"},
@@ -58,9 +58,10 @@ export default function Reports({opId}){
     <div className="rp-bar">
       <button className="rp-back" onClick={()=>setActive(null)}><Icon n="back" s={15}/> التقارير</button>
       <b className="rp-title">{cur.ar}</b>
-      {["margin","expenses","bikers","sla"].includes(active)&&<div className="rp-per"><Icon n="calendar" s={14}/><input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/><span>{periodAr(period)}</span></div>}
+      {["margin","expenses","bikers","sla","payroll"].includes(active)&&<div className="rp-per"><Icon n="calendar" s={14}/><input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/><span>{periodAr(period)}</span></div>}
     </div>
     {active==="margin"&&<MarginReport period={period}/>}
+    {active==="payroll"&&<PayrollReport period={period}/>}
     {active==="expenses"&&<ExpensesReport period={period}/>}
     {active==="compliance"&&<ComplianceReport/>}
     {active==="bikers"&&<BikerReport period={period}/>}
@@ -113,6 +114,42 @@ function MarginReport({period}){
     </div>
     {s.revenue===0&&<p className="rp-note">الإيراد صفر لأن بيانات العمليات لهذا الشهر غير مُدخلة بعد — يظهر تلقائياً عند تشغيل تسوية سويتر.</p>}
     <ExportBar waText={wa} onCsv={()=>downloadCsv("margin_"+period,["البند","القيمة"],[["الإيراد",s.revenue],["رواتب",s.payroll],["موردون",s.vendors],["إيجار",s.housing.toFixed(0)],["غرامات",s.fines],["التكاليف",s.costs],["الهامش",s.margin]])}/>
+  </div>);
+}
+
+// ── مسير الرواتب ──
+function PayrollReport({period}){
+  const[rows,setRows]=useState(null);
+  useEffect(()=>{q("payroll_lines","period,role,name,level,base,net_bonus,total").then(d=>setRows(d));},[]);
+  const s=useMemo(()=>{if(!rows)return null;
+    const r=rows.filter(x=>x.period===period);
+    const list=r.map(x=>({name:x.name||"—",role:x.role==="supervisor"?"مشرف":"بايكر",level:x.level||"—",base:Number(x.base||0),bonus:Number(x.net_bonus||0),total:Number(x.total||0)})).sort((a,b)=>b.total-a.total);
+    const base=list.reduce((a,x)=>a+x.base,0);
+    const bonus=list.reduce((a,x)=>a+x.bonus,0);
+    const total=list.reduce((a,x)=>a+x.total,0);
+    return{list,base,bonus,total,count:list.length};
+  },[rows,period]);
+  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  const max=Math.max(...s.list.map(x=>x.total),1);
+  const wa=`مسير الرواتب — ${periodAr(period)}\nالموظفون: ${s.count}\nالأساسي: ${money(s.base)}\nالحوافز: ${money(s.bonus)}\nالإجمالي: ${money(s.total)}`;
+  return(<div className="rp-body">
+    <div className="rp-kpis">
+      <Kpi l="إجمالي المسير" n={money(s.total)} c="#b42318"/>
+      <Kpi l="الأساسي" n={money(s.base)}/>
+      <Kpi l="الحوافز الصافية" n={money(s.bonus)} c="#087443"/>
+      <Kpi l="عدد الموظفين" n={int(s.count)}/>
+    </div>
+    <div className="rp-panel"><div className="rp-ph">توزيع المسير حسب الموظف</div>
+      {s.count===0?<Empty t="لا مسير معتمد لهذا الشهر — يُنشأ من وحدة الرواتب."/>:
+      <Bars rows={s.list.map(x=>({label:x.name,val:x.total}))} max={max} fmt={money}/>}
+    </div>
+    {s.count>0&&<div className="rp-panel"><div className="rp-ph">التفصيل ({s.count})</div>
+      <div className="rp-tblwrap"><table className="rp-tbl">
+        <thead><tr><th>الموظف</th><th>الدور</th><th>المستوى</th><th>الأساسي</th><th>الحوافز</th><th>الإجمالي</th></tr></thead>
+        <tbody>{s.list.map((x,i)=>(<tr key={i}><td>{x.name}</td><td>{x.role}</td><td>{x.level}</td><td>{money(x.base)}</td><td>{money(x.bonus)}</td><td style={{fontWeight:800}}>{money(x.total)}</td></tr>))}</tbody>
+      </table></div>
+    </div>}
+    <ExportBar waText={wa} onCsv={()=>downloadCsv("payroll_"+period,["الموظف","الدور","المستوى","الأساسي","الحوافز","الإجمالي"],s.list.map(x=>[x.name,x.role,x.level,x.base,x.bonus,x.total]))}/>
   </div>);
 }
 
