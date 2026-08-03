@@ -14,6 +14,10 @@ export default function SweaterPricing(){
   return(<div className="sp">
     <style>{CSS}</style>
 
+    <div style={{background:"#fff7ed",border:"1px solid #fdba74",borderRadius:12,padding:"11px 14px",marginBottom:14,fontSize:12.5,color:"#9a3412",fontWeight:600,display:"flex",gap:8,alignItems:"center"}}>
+      <Icon n="alert" s={15}/> نظام الشرائح والحدّ الأدنى المضمون يُطبَّق اعتباراً من شهر الخدمة <b>أغسطس 2026</b> (ملحق التسعير الموقّع 30/07/2026). أمّا الأشهر السابقة (يناير–يوليو) فبسعر ثابت <b>20﷼/طلب</b> دون شرائح. هذه الحاسبة تعرض نظام الشرائح الجديد.
+    </div>
+
     <div className="sp-kpis">
       <div className="sp-kpi"><span className="sp-kl">الحد الأدنى المضمون / بايكر</span><b>{int(MIN_GUARANTEE_ORDERS)} طلب</b><small>Golden Guarantee</small></div>
       <div className="sp-kpi"><span className="sp-kl">سعر الطلب (العقد)</span><b>{money(SSP_CONTRACT.per_order)}</b><small>+{money(SSP_CONTRACT.incentive)} حافز = {money(SSP_CONTRACT.incentive_total)}</small></div>

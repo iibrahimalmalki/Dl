@@ -1,7 +1,7 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
-import{settlementLine,MIN_GUARANTEE_ORDERS,SSP_CONTRACT}from"./sweaterContract";
+import{settlementLine,MIN_GUARANTEE_ORDERS,SSP_CONTRACT,tiersActive}from"./sweaterContract";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" ﷼";
 const int=n=>Number(n||0).toLocaleString("en-US");
@@ -41,7 +41,7 @@ export default function Settlement({opId}){
   const setLineEmp=(i,id)=>{const e=emps.find(x=>x.id===id);setLines(lines.map((l,j)=>j===i?{...l,employee_id:id,biker_name:e?e.full_name+(e.employee_id?" ("+e.employee_id+")":""):l.biker_name}:l));};
   const rmLine=i=>setLines(lines.filter((_,j)=>j!==i));
 
-  const calc=useMemo(()=>lines.map(l=>({l,c:settlementLine({orders:l.orders,rating:l.rating,complaintsPct:l.complaints_pct,ticketsPct:l.tickets_pct})})),[lines]);
+  const calc=useMemo(()=>lines.map(l=>({l,c:settlementLine({orders:l.orders,rating:l.rating,complaintsPct:l.complaints_pct,ticketsPct:l.tickets_pct,period})})),[lines,period]);
   const tot=useMemo(()=>calc.reduce((a,{c})=>({base:a.base+c.base,incentive:a.incentive+c.incentive,deduction:a.deduction+c.deduction,net:a.net+c.net}),{base:0,incentive:0,deduction:0,net:0}),[calc]);
   const invoice=Number(head.invoice_amount||0);
   const variance=+(tot.net-invoice).toFixed(2);
@@ -87,7 +87,7 @@ export default function Settlement({opId}){
 
     {loading?<div className="dw-skel" style={{height:160}}/>:
     <div className="se-panel">
-      <div className="se-ph"><b>سطور التسوية — {periodAr(period)}</b><span className="se-hint">{lines.length} بايكر · الحد الأدنى المضمون {int(MIN_GUARANTEE_ORDERS)} طلب</span></div>
+      <div className="se-ph"><b>سطور التسوية — {periodAr(period)}</b><span className="se-hint">{lines.length} بايكر · {tiersActive(period)?`نظام الشرائح · حدّ أدنى ${int(MIN_GUARANTEE_ORDERS)} طلب`:"سعر ثابت 20﷼/طلب (قبل أغسطس 2026)"}</span></div>
       <div className="se-tblwrap">
       <table className="se-tbl">
         <thead><tr><th>البايكر</th><th>الطلبات</th><th>الشريحة</th><th>السعر</th><th>الأساس</th><th>تقييم</th><th>شكاوى%</th><th>تذاكر%</th><th>حافز</th><th>خصم</th><th>الصافي</th><th></th></tr></thead>

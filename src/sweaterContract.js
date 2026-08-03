@@ -30,9 +30,14 @@ export const SSP_CONTRACT={
   jurisdiction:"محاكم مدينة الرياض",
 };
 
-// ملحق التسعير حسب متوسط عدد الغسلات — سارٍ من 30/07/2026
-export const PRICING_APPENDIX={ effective:"2026-07-30", envelope:"BAE65B0B-E7A1-81BC-8111-1B1031064201" };
-export const MIN_GUARANTEE_ORDERS=196; // الحد الأدنى المضمون لكل بايكر شهرياً (Golden Guarantee)
+// ملحق التسعير حسب متوسط عدد الغسلات — وُقّع 30/07/2026 ويُطبَّق نظام الشرائح اعتباراً من شهر الخدمة أغسطس 2026.
+// ما قبل أغسطس 2026: سعر ثابت 20﷼/طلب دون شرائح ودون حدّ أدنى مضمون ودون حافز البند التاسع.
+export const PRICING_APPENDIX={ effective:"2026-07-30", tiers_start:"2026-08", envelope:"BAE65B0B-E7A1-81BC-8111-1B1031064201" };
+export const TIERS_START="2026-08";
+export const FLAT_PRICE=20, FLAT_PRICE_VAT=23;
+// هل نظام الشرائح فعّال لهذه الفترة؟ (بلا فترة → افتراض الشرائح، لأجل حاسبة التسعير الاسترشادية)
+export const tiersActive=(period)=> !period || String(period)>=TIERS_START;
+export const MIN_GUARANTEE_ORDERS=196; // الحد الأدنى المضمون لكل بايكر شهرياً (Golden Guarantee) — من أغسطس 2026
 
 // Tier | متوسط غسلات/بايكر/يوم | السعر | السعر شامل الضريبة | الطلبات الشهرية
 export const PRICING_TIERS=[
@@ -55,23 +60,34 @@ export function tierForMonthlyOrders(orders){
   for(const t of PRICING_TIERS){ if(Number(orders||0)>=t.monthlyOrders) sel=t; }
   return sel;
 }
-// المقابل المالي التقديري لبايكر (مع تطبيق الحد الأدنى المضمون)
-export function payoutForBiker(orders){
-  const t=tierForMonthlyOrders(orders);
-  const billable=Math.max(Number(orders||0),MIN_GUARANTEE_ORDERS);
+// المقابل المالي التقديري لبايكر — مرتبط بالفترة:
+// قبل أغسطس 2026 → سعر ثابت 20﷼ × الطلبات الفعلية (بلا شرائح/حدّ أدنى).
+// من أغسطس 2026 → نظام الشرائح مع الحدّ الأدنى المضمون.
+export function payoutForBiker(orders, period){
+  const o=Number(orders||0);
+  if(!tiersActive(period)){
+    return { tier:"ثابت 20﷼", unit:FLAT_PRICE, unitVat:FLAT_PRICE_VAT,
+      orders:o, billableOrders:o, flat:true,
+      total:+(o*FLAT_PRICE).toFixed(2), totalVat:+(o*FLAT_PRICE_VAT).toFixed(2) };
+  }
+  const t=tierForMonthlyOrders(o);
+  const billable=Math.max(o,MIN_GUARANTEE_ORDERS);
   return { tier:t.tier, unit:t.price, unitVat:t.priceVat,
-    orders:Number(orders||0), billableOrders:billable,
+    orders:o, billableOrders:billable, flat:false,
     total:+(billable*t.price).toFixed(2), totalVat:+(billable*t.priceVat).toFixed(2) };
 }
 
-// سطر تسوية بايكر: الأساس (الملحق) + الحافز (البند التاسع) − خصم التذاكر
-export function settlementLine({orders,rating,complaintsPct,ticketsPct}){
-  const base=payoutForBiker(orders);
-  const qualifies=Number(rating||0)>=SSP_CONTRACT.incentive_conditions.min_rating
+// سطر تسوية بايكر: الأساس (الملحق) + الحافز (البند التاسع) − خصم التذاكر.
+// الحافز والحدّ الأدنى والشرائح لا تُطبَّق قبل أغسطس 2026 (سعر ثابت فقط).
+export function settlementLine({orders,rating,complaintsPct,ticketsPct,period}){
+  const base=payoutForBiker(orders,period);
+  const tiers=tiersActive(period);
+  const qualifies=tiers
+                 && Number(rating||0)>=SSP_CONTRACT.incentive_conditions.min_rating
                  && Number(complaintsPct||0)<=SSP_CONTRACT.incentive_conditions.max_complaints_pct;
   const incentive=qualifies?+(base.billableOrders*SSP_CONTRACT.incentive).toFixed(2):0;
-  const deduction=(Number(ticketsPct||0)>SSP_CONTRACT.incentive_conditions.max_complaints_pct)
+  const deduction=(tiers && Number(ticketsPct||0)>SSP_CONTRACT.incentive_conditions.max_complaints_pct)
                  ?+(base.billableOrders*SSP_CONTRACT.ticket_penalty_per_order).toFixed(2):0;
   return { tier:base.tier, unit:base.unit, billableOrders:base.billableOrders, base:base.total,
-    qualifies, incentive, deduction, net:+(base.total+incentive-deduction).toFixed(2) };
+    flat:base.flat, qualifies, incentive, deduction, net:+(base.total+incentive-deduction).toFixed(2) };
 }

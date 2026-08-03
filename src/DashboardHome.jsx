@@ -16,7 +16,7 @@ export default function DashboardHome({onNav}){
 
   useEffect(()=>{(async()=>{
     const q=(t,c)=>supabase.from(t).select(c).then(({data})=>data||[]).then(x=>x,()=>[]);
-    const[apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems]=await Promise.all([
+    const[apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts]=await Promise.all([
       q("applicants","full_name,application_number,status,ai_classification,ai_score_total,location,saudi_city,bangladesh_district,submitted_at"),
       supabase.from("page_visits").select("step,session_id").eq("page","ad_page").then(({data})=>data||[],()=>[]),
       q("employees","full_name,employee_id,team_id,staff_role,profession_ok"),
@@ -36,8 +36,9 @@ export default function DashboardHome({onNav}){
       q("housing_violations","category,status,active"),
       q("sc_requests","status,title"),
       q("sc_items","name,qty_on_hand,reorder_level,active"),
+      q("sweater_settlements","period,net_total,status"),
     ]);
-    setD({apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems});
+    setD({apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts});
   })();},[]);
 
   const s=useMemo(()=>{
@@ -92,8 +93,9 @@ export default function DashboardHome({onNav}){
     const scPending=d.screq.filter(r=>r.status==="submitted").length;
     const scLow=d.scitems.filter(i=>i.active!==false&&Number(i.reorder_level||0)>0&&Number(i.qty_on_hand||0)<=Number(i.reorder_level||0)).length;
 
-    // ── الإيراد والهامش ──
-    const revenue=opsL.reduce((a,o)=>a+payoutForBiker(Number(o.net_washes||0)).total,0);
+    // ── الإيراد والهامش ── (يفضّل صافي تسوية سويتر المعتمدة، وإلا تقدير مرتبط بالفترة)
+    const settRow=(d.setts||[]).find(x=>x.period===opP&&x.status==="confirmed"&&x.net_total!=null);
+    const revenue=settRow?Number(settRow.net_total):opsL.reduce((a,o)=>a+payoutForBiker(Number(o.net_washes||0),opP).total,0);
     const costs=(payrollTotal||0)+(vendMonth||0)+houseMonthly+(finesTotal||0);
     const margin=revenue-costs;
 

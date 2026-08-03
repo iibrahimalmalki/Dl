@@ -15,7 +15,7 @@ const monthsBack=(p,n)=>{const[y,m]=String(p).split("-").map(Number);const out=[
 const shortMonth=p=>{const[y,m]=String(p).split("-");return`${["ينا","فبر","مار","أبر","ماي","يون","يول","أغس","سبت","أكت","نوف","ديس"][(+m||1)-1]} ${String(y).slice(2)}`;};
 // إيراد الفترة: يفضّل صافي تسوية سويتر المعتمدة إن وُجد، وإلا التقدير من غسلات العمليات
 const settledNet=(setts,p)=>{const r=(setts||[]).find(x=>x.period===p&&x.status==="confirmed"&&x.net_total!=null);return r?Number(r.net_total):null;};
-const revForPeriod=(setts,ops,p)=>{const sn=settledNet(setts,p);if(sn!=null)return sn;return (ops||[]).filter(o=>o.period===p).reduce((a,o)=>a+payoutForBiker(Number(o.net_washes||0)).total,0);};
+const revForPeriod=(setts,ops,p)=>{const sn=settledNet(setts,p);if(sn!=null)return sn;return (ops||[]).filter(o=>o.period===p).reduce((a,o)=>a+payoutForBiker(Number(o.net_washes||0),p).total,0);};
 function downloadCsv(name,header,rows){
   const esc=v=>{const s=String(v??"");return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
   const csv="﻿"+[header,...rows].map(r=>r.map(esc).join(",")).join("\n");
