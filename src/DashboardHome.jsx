@@ -235,7 +235,7 @@ export default function DashboardHome({onNav}){
     return{
       allP,maxP,P,from,to,nMonths,rangeLabel,prevLabel,bikerOpts,catOpts,
       washes,avgRating,revenue,payrollTotal,tApproved,cash,avgComp,coverPct,margin,
-      deltas:{wash:delta(washes,washesPrev),rev:delta(revenue,revenuePrev),cash:delta(cash.net,cashPrev.net),pay:delta(payrollTotal,payrollPrev),appr:delta(tApproved,tApprovedPrev),rating:avgRatingPrev?delta(avgRating,avgRatingPrev):null},
+      deltas:{wash:delta(washes,washesPrev),rev:delta(revenue,revenuePrev),cash:delta(cash.net,cashPrev.net),out:delta(cash.o,cashPrev.o),pay:delta(payrollTotal,payrollPrev),appr:delta(tApproved,tApprovedPrev),rating:avgRatingPrev?delta(avgRating,avgRatingPrev):null},
       series,finChart,daily,dailyWashTot,catList,catTotal,selCatVal,selCatTrend,
       topBikers,maxW,nBikers,targets,insTop,
       A,accepted,rejected,pending,funnel,total0,bikers,teams:d.teams,
@@ -305,7 +305,7 @@ export default function DashboardHome({onNav}){
       <div className="dh-sm-grid">
         <SM t="الغسلات" v={washes.toLocaleString("en-US")} dl={deltas.wash}/>
         <SM t="إيراد سويتر" v={money(revenue)} dl={deltas.rev}/>
-        <SM t="النقد الخارج" v={money(cash.o)} dl={deltas.cash} inv/>
+        <SM t="النقد الخارج" v={money(cash.o)} dl={deltas.out} inv/>
         <SM t="الصافي النقدي" v={money(cash.net)} dl={deltas.cash} col={cash.net>=0?"#087443":"#b42318"}/>
         <SM t="الرواتب" v={payrollTotal?money(payrollTotal):"—"} dl={deltas.pay} inv/>
         <SM t="شكاوى معتمدة" v={tApproved} dl={deltas.appr} inv/>
