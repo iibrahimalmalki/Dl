@@ -1,5 +1,5 @@
-import{useState,useEffect,useMemo,useCallback}from"react";
-import{supabase,SUPA_URL,SUPA_ANON}from"./supabase";
+import{useState,useEffect,useMemo,useCallback,useRef}from"react";
+import{supabase,SUPA_URL,SUPA_ANON,compressImage,uploadTicketImage}from"./supabase";
 import Icon from"./Icon";
 
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
@@ -27,6 +27,7 @@ export default function SweaterTickets({opId,me,owner}){
   const[busy,setBusy]=useState({});   // id -> true
   const[draft,setDraft]=useState({}); // id -> {rec, notes}
   const[lightbox,setLightbox]=useState(null);
+  const fileRef=useRef(null);const upTarget=useRef(null);
 
   const load=useCallback(async()=>{
     setLoading(true);setMsg(null);
@@ -67,6 +68,32 @@ export default function SweaterTickets({opId,me,owner}){
       setRows(p=>p.map(r=>r.id===t.id?{...r,stored_pic_path:out.path,has_image:true}:r));
       setMsg({ok:true,t:"تم سحب الصورة وتخزينها في نظامنا"});
     }catch(e){setMsg({ok:false,t:"تعذّر سحب الصورة: "+(e.message||e)});}
+    setB(t.id,false);
+  };
+
+  // رفع يدوي: مسؤول الجودة ينزّل الصورة من سويتر ويرفعها هنا
+  const pickImage=(t)=>{upTarget.current=t;if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
+  const onFile=async(e)=>{
+    const f=e.target.files&&e.target.files[0];const t=upTarget.current;upTarget.current=null;
+    if(!f||!t)return;
+    setB(t.id,true);setMsg(null);
+    try{
+      const c=await compressImage(f);
+      const path=`${t.period}/${t.booking_ref||t.id}-m.jpg`;
+      const out=await uploadTicketImage(path,c,t.id);
+      setRows(p=>p.map(r=>r.id===t.id?{...r,stored_pic_path:out.path,has_image:true,no_customer_image:false}:r));
+      setMsg({ok:true,t:"تم رفع الصورة وربطها بالشكوى"});
+    }catch(err){setMsg({ok:false,t:"تعذّر رفع الصورة: "+(err.message||err)});}
+    setB(t.id,false);
+  };
+  // وسم: العميل لم يرفع صورة (نقطة جودة موثّقة)
+  const toggleNoImage=async(t)=>{
+    setB(t.id,true);setMsg(null);
+    try{
+      const{data,error}=await supabase.from("ops_tickets").update({no_customer_image:!t.no_customer_image}).eq("id",t.id).select().single();
+      if(error)throw error;
+      setRows(p=>p.map(r=>r.id===t.id?data:r));
+    }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
     setB(t.id,false);
   };
 
@@ -144,12 +171,20 @@ export default function SweaterTickets({opId,me,owner}){
             {t.stored_pic_path&&<span className="st-saved" title="مخزّنة في نظامنا"><Icon n="check" s={10}/></span>}
           </div>
           <div style={{flex:1,minWidth:0}}>
-            <div className="st-h"><b>{t.sub_category||t.description||"شكوى عميل"}</b>{t.compensation&&<span className="st-comp">تعويض العميل: {t.compensation}</span>}</div>
+            <div className="st-h"><b>{t.sub_category||t.description||"شكوى عميل"}</b>{t.compensation&&<span className="st-comp">تعويض العميل: {t.compensation}</span>}{!img&&t.no_customer_image&&<span className="st-noimgtag"><Icon n="image" s={11}/> لا توجد صورة من العميل</span>}</div>
             <div className="st-sub"><span>{t.biker_name||"—"}{t.sweater_id?` · #${t.sweater_id}`:""}</span><span className="st-dot">·</span><span>{t.ticket_date||""}</span>{t.booking_ref&&<><span className="st-dot">·</span><span>حجز {t.booking_ref}</span></>}</div>
             {t.description&&t.sub_category&&<div className="st-desc">{t.description}</div>}
           </div>
           <span className="st-stage" style={{background:(dec||stg).bg,color:(dec||stg).color}}>{dec?dec.ar:stg.ar}</span>
         </div>
+
+        {/* إدارة صورة الشكوى — سحب من سويتر أو رفع يدوي أو توثيق عدم وجود صورة */}
+        {canEdit&&<div className="st-imgrow">
+          <span className="st-imglbl">صورة الشكوى:</span>
+          {t.sweater_pic_url&&!t.stored_pic_path&&<button className="st-pull" onClick={()=>pullImage(t)} disabled={b}><Icon n="download" s={13}/> {b?"…":"سحب من سويتر"}</button>}
+          <button className="st-upl" onClick={()=>pickImage(t)} disabled={b}><Icon n="image" s={13}/> {t.stored_pic_path?"استبدال الصورة":"رفع صورة يدوياً"}</button>
+          {!t.stored_pic_path&&<button className={"st-noimgbtn"+(t.no_customer_image?" on":"")} onClick={()=>toggleNoImage(t)} disabled={b}><Icon n={t.no_customer_image?"check":"x"} s={13}/> {t.no_customer_image?"موثّق: لا صورة":"لا توجد صورة"}</button>}
+        </div>}
 
         {/* توصية الجودة (إن وُجدت) */}
         {t.qc_recommendation&&<div className="st-qc">
@@ -161,7 +196,6 @@ export default function SweaterTickets({opId,me,owner}){
         {/* أدوات مسؤول الجودة — قبل المراجعة */}
         {canEdit&&t.status==="pending_review"&&<div className="st-panel">
           <div className="st-prow">
-            {t.sweater_pic_url&&!t.stored_pic_path&&<button className="st-pull" onClick={()=>pullImage(t)} disabled={b}><Icon n="download" s={14}/> {b?"جارٍ السحب…":"سحب الصورة من سويتر"}</button>}
             <div className="st-rec">
               <button className={"st-recb accept"+(d.rec==="accept"?" on":"")} onClick={()=>setDraft(p=>({...p,[t.id]:{...d,rec:"accept"}}))}><Icon n="check" s={13}/> قبول</button>
               <button className={"st-recb reject"+(d.rec==="reject"?" on":"")} onClick={()=>setDraft(p=>({...p,[t.id]:{...d,rec:"reject"}}))}><Icon n="x" s={13}/> رفض</button>
@@ -183,6 +217,7 @@ export default function SweaterTickets({opId,me,owner}){
       </div>);})}
 
     {lightbox&&<div className="st-lb" onClick={()=>setLightbox(null)}><img src={lightbox} alt="صورة الشكوى"/><button className="st-lbx"><Icon n="x" s={20}/></button></div>}
+    <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={onFile}/>
   </div>);
 }
 
@@ -210,6 +245,14 @@ const CSS=`
 .st-thumb{position:relative;width:56px;height:56px;border-radius:11px;overflow:hidden;flex:none;background:#f2f4f7;border:1px solid #eceef1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .st-thumb img{width:100%;height:100%;object-fit:cover}
 .st-noimg{color:#b0b7c3}
+.st-noimgtag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;color:#64748b;background:#f4f5f7;border:1px solid #e6e9ee;border-radius:6px;padding:2px 8px}
+.st-imgrow{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed #f1f3f5}
+.st-imglbl{font-size:11px;font-weight:700;color:#94a3b8}
+.st-upl{display:inline-flex;align-items:center;gap:5px;padding:7px 11px;border-radius:9px;border:1px solid #cdb4f0;background:#f6f0ff;color:#6941c6;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+.st-upl:disabled{opacity:.55}
+.st-noimgbtn{display:inline-flex;align-items:center;gap:5px;padding:7px 11px;border-radius:9px;border:1px solid #e6e9ee;background:#fff;color:#64748b;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+.st-noimgbtn.on{background:#eef2f6;color:#475467;border-color:#cbd5e1}
+.st-noimgbtn:disabled{opacity:.55}
 .st-saved{position:absolute;inset-block-end:2px;inset-inline-end:2px;width:15px;height:15px;border-radius:50%;background:#12b76a;color:#fff;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff}
 .st-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
 .st-h b{font-size:13.5px;font-weight:800;color:#0f172a}
