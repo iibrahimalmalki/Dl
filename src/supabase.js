@@ -23,6 +23,20 @@ export async function uploadAuthed(bucket,path,file,contentType="image/jpeg"){
   return out.url;
 }
 
+// رفع صورة شكوى سويتر يدوياً (مسؤول الجودة ينزّلها من سويتر ويرفعها هنا).
+// يُرجع {url, path} ويحدّث ops_tickets.stored_pic_path إذا مُرّر ticketId.
+export async function uploadTicketImage(path,file,ticketId,contentType="image/jpeg"){
+  const{data}=await supabase.auth.getSession();
+  const s=data&&data.session;
+  if(!s||!s.access_token){const e=new Error("انتهت الجلسة — سجّل الدخول من جديد");e.code="NO_SESSION";throw e;}
+  const h={Authorization:`Bearer ${s.access_token}`,apikey:SUPA_ANON,"x-object-path":path,"x-content-type":contentType,"Content-Type":"application/octet-stream"};
+  if(ticketId)h["x-ticket-id"]=String(ticketId);
+  const res=await fetch(`${SUPA_URL}/functions/v1/sweater-ticket-upload`,{method:"POST",headers:h,body:file});
+  let out=null;try{out=await res.json();}catch(_){}
+  if(!res.ok||!out||!out.url)throw new Error((out&&out.message)||("HTTP "+res.status));
+  return out;
+}
+
 // يضمن توكن دخول صالح قبل عمليات التخزين (الرفع).
 // على الجوال، فتح الكاميرا يُخلّي الصفحة في الخلفية فيتوقّف تجديد التوكن التلقائي،
 // فيعود التوكن منتهياً ويُعامَل الرفع كزائر مجهول → يرفضه أمان الصفوف.
