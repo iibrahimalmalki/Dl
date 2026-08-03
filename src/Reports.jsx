@@ -388,30 +388,48 @@ function FunnelReport(){
 function CashflowReport({period}){
   const[d,setD]=useState(null);
   useEffect(()=>{(async()=>{
-    const[ops,pay,vexp,units,setts]=await Promise.all([
+    const[fin,ops,pay,vexp,units,setts]=await Promise.all([
+      q("finance_monthly","period,direction,category,amount,txn_count,is_capital"),
       q("ops_biker_month","period,net_washes"),q("payroll_lines","period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),
       q("sweater_settlements","period,net_total,status"),
-    ]);setD({ops,pay,vexp,units,setts});
+    ]);setD({fin:fin||[],ops,pay,vexp,units,setts});
   })();},[]);
   const s=useMemo(()=>{if(!d)return null;
     const months=monthsBack(period,6);
+    const finBy=p=>d.fin.filter(x=>x.period===p);
     const housM=d.units.filter(u=>u.active!==false).reduce((a,u)=>a+Number(u.annual_rent||0),0)/12;
     let cum=0;
     const rows=months.map(p=>{
-      const inflow=revForPeriod(d.setts,d.ops,p);
-      const payroll=d.pay.filter(x=>x.period===p).reduce((a,x)=>a+Number(x.total||0),0);
-      const vendors=d.vexp.filter(e=>String(e.exp_date||"").slice(0,7)===p).reduce((a,e)=>a+Number(e.amount||0),0);
-      const outflow=payroll+vendors+housM;
+      const f=finBy(p);const actual=f.length>0;
+      let inflow,outflow,capital=0,sweater=0,funding=0;
+      if(actual){
+        inflow=f.filter(x=>x.direction==="in").reduce((a,x)=>a+Number(x.amount||0),0);
+        outflow=f.filter(x=>x.direction==="out"&&!x.is_capital).reduce((a,x)=>a+Number(x.amount||0),0);
+        capital=f.filter(x=>x.direction==="out"&&x.is_capital).reduce((a,x)=>a+Number(x.amount||0),0);
+        sweater=f.filter(x=>x.direction==="in"&&x.category==="إيراد سويتر").reduce((a,x)=>a+Number(x.amount||0),0);
+        funding=inflow-sweater;
+      }else{
+        inflow=revForPeriod(d.setts,d.ops,p);sweater=inflow;
+        const payroll=d.pay.filter(x=>x.period===p).reduce((a,x)=>a+Number(x.total||0),0);
+        const vendors=d.vexp.filter(e=>String(e.exp_date||"").slice(0,7)===p).reduce((a,e)=>a+Number(e.amount||0),0);
+        outflow=payroll+vendors+housM;
+      }
       const net=inflow-outflow;cum+=net;
-      return{p,inflow,outflow,net,cum};
+      return{p,inflow,outflow,capital,net,cum,actual,sweater,funding};
     });
+    const catMap={};
+    months.forEach(p=>finBy(p).filter(x=>x.direction==="out"&&!x.is_capital).forEach(x=>{catMap[x.category]=(catMap[x.category]||0)+Number(x.amount||0);}));
+    const cats=Object.entries(catMap).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v);
     const tin=rows.reduce((a,r)=>a+r.inflow,0),tout=rows.reduce((a,r)=>a+r.outflow,0);
-    return{rows,tin,tout,tnet:tin-tout,housM};
+    const tsweater=rows.reduce((a,r)=>a+r.sweater,0),tfund=rows.reduce((a,r)=>a+r.funding,0);
+    const tcap=rows.reduce((a,r)=>a+r.capital,0);
+    return{rows,tin,tout,tnet:tin-tout,cats,tsweater,tfund,tcap,housM,anyActual:rows.some(r=>r.actual)};
   },[d,period]);
   if(!s)return<div className="dw-skel" style={{height:200}}/>;
   const maxAbs=Math.max(...s.rows.map(r=>Math.abs(r.net)),1);
-  const wa=`تدفّق النقد — 6 أشهر حتى ${periodAr(period)}\nداخل: ${money(s.tin)}\nخارج: ${money(s.tout)}\nصافي: ${money(s.tnet)}`;
+  const maxCat=Math.max(...s.cats.map(c=>c.v),1);
+  const wa=`تدفّق النقد — 6 أشهر حتى ${periodAr(period)}\nداخل: ${money(s.tin)} (سويتر ${money(s.tsweater)} · تمويل ${money(s.tfund)})\nخارج: ${money(s.tout)}\nصافي: ${money(s.tnet)}`;
   return(<div className="rp-body">
     <div className="rp-kpis">
       <Kpi l="النقد الداخل (6 أشهر)" n={money(s.tin)} c="#087443"/>
@@ -419,21 +437,38 @@ function CashflowReport({period}){
       <Kpi l="صافي التدفّق" n={money(s.tnet)} c={s.tnet>=0?"#087443":"#b42318"}/>
       <Kpi l="متوسط شهري" n={money(Math.round(s.tnet/6))}/>
     </div>
+    {s.anyActual&&<div className="rp-panel" style={{background:"linear-gradient(135deg,#fffbeb,#fff)",borderColor:"#fde9c8"}}>
+      <div className="rp-ph" style={{color:"#92600e"}}>مصدر النقد الداخل — إيراد فعلي مقابل تمويل</div>
+      <div className="rp-tblwrap"><table className="rp-tbl">
+        <tbody>
+          <tr><td>إيراد سويتر الفعلي</td><td style={{fontWeight:800,color:"#087443"}}>{money(s.tsweater)}</td><td>{s.tin>0?Math.round(s.tsweater/s.tin*100):0}%</td></tr>
+          <tr><td>تمويل / تحويلات داخلية</td><td style={{fontWeight:800,color:"#b54708"}}>{money(s.tfund)}</td><td>{s.tin>0?Math.round(s.tfund/s.tin*100):0}%</td></tr>
+        </tbody>
+      </table></div>
+      <p className="rp-note" style={{margin:"8px 0 0"}}>إيراد سويتر يغطّي {s.tout>0?Math.round(s.tsweater/s.tout*100):0}% فقط من المصروف؛ الباقي يُموَّل داخلياً — مؤشّر عجز نقدي هيكلي.</p>
+    </div>}
     <div className="rp-panel"><div className="rp-ph">صافي التدفّق الشهري</div>
       <div className="rp-bars">{s.rows.map((r,i)=>(<div className="rp-brow" key={i}>
-        <span className="rp-bl">{shortMonth(r.p)}</span>
+        <span className="rp-bl">{shortMonth(r.p)}{r.actual?"":" ~"}</span>
         <div className="rp-bt"><div style={{width:Math.max(2,Math.round(Math.abs(r.net)/maxAbs*100))+"%",background:r.net>=0?"linear-gradient(90deg,#087443,#32d583)":"linear-gradient(90deg,#b42318,#f97066)"}}/></div>
         <span className="rp-bv" style={{color:r.net>=0?"#087443":"#b42318"}}>{money(r.net)}</span>
       </div>))}</div>
     </div>
+    {s.cats.length>0&&<div className="rp-panel"><div className="rp-ph">المصروف حسب الفئة (فعلي — 6 أشهر)</div>
+      <div className="rp-bars">{s.cats.slice(0,10).map((c,i)=>(<div className="rp-brow" key={i}>
+        <span className="rp-bl" style={{minWidth:120,textAlign:"start"}}>{c.k}</span>
+        <div className="rp-bt"><div style={{width:Math.max(2,Math.round(c.v/maxCat*100))+"%",background:"linear-gradient(90deg,#b54708,#f79009)"}}/></div>
+        <span className="rp-bv">{money(c.v)}</span>
+      </div>))}</div>
+    </div>}
     <div className="rp-panel"><div className="rp-ph">التفصيل الشهري</div>
       <div className="rp-tblwrap"><table className="rp-tbl">
         <thead><tr><th>الشهر</th><th>داخل</th><th>خارج</th><th>صافي</th><th>تراكمي</th></tr></thead>
-        <tbody>{s.rows.map((r,i)=>(<tr key={i}><td>{periodAr(r.p)}</td><td style={{color:"#087443"}}>{money(r.inflow)}</td><td style={{color:"#b42318"}}>{money(r.outflow)}</td><td style={{fontWeight:800,color:r.net>=0?"#087443":"#b42318"}}>{money(r.net)}</td><td style={{fontWeight:700}}>{money(r.cum)}</td></tr>))}</tbody>
+        <tbody>{s.rows.map((r,i)=>(<tr key={i}><td>{periodAr(r.p)}{r.actual&&<span style={{fontSize:9,color:"#087443",marginInlineStart:4}}>●فعلي</span>}</td><td style={{color:"#087443"}}>{money(r.inflow)}</td><td style={{color:"#b42318"}}>{money(r.outflow)}</td><td style={{fontWeight:800,color:r.net>=0?"#087443":"#b42318"}}>{money(r.net)}</td><td style={{fontWeight:700}}>{money(r.cum)}</td></tr>))}</tbody>
       </table></div>
     </div>
-    <p className="rp-note">النقد الداخل تقديري من غسلات العمليات وفق ملحق التسعير · الخارج = رواتب + موردون + حصّة إيجار السكن الشهرية ({money(Math.round(s.housM))}). الأشهر بلا بيانات عمليات تظهر داخلاً صفرياً.</p>
-    <ExportBar waText={wa} onCsv={()=>downloadCsv("cashflow",["الشهر","داخل","خارج","صافي","تراكمي"],s.rows.map(r=>[periodAr(r.p),r.inflow,r.outflow.toFixed(0),r.net.toFixed(0),r.cum.toFixed(0)]))}/>
+    <p className="rp-note">الأشهر المعلّمة «●فعلي» مبنية على كشف الحساب البنكي المصنّف (داخل/خارج فعلي)؛ غيرها تقديري من العمليات (مُعلّم بـ«~»). شراء الأصول (دراجات) مستبعد من المصروف التشغيلي{s.tcap>0?` (${money(s.tcap)} رأسمالي)`:""}.</p>
+    <ExportBar waText={wa} onCsv={()=>downloadCsv("cashflow",["الشهر","داخل","خارج","صافي","تراكمي","فعلي"],s.rows.map(r=>[periodAr(r.p),r.inflow.toFixed(0),r.outflow.toFixed(0),r.net.toFixed(0),r.cum.toFixed(0),r.actual?"نعم":"تقديري"]))}/>
   </div>);
 }
 
@@ -495,38 +530,44 @@ function CompareReport({period}){
 function ExecReport({period}){
   const[d,setD]=useState(null);
   useEffect(()=>{(async()=>{
-    const[ops,pay,vexp,units,viol,rounds,apps,emps,setts]=await Promise.all([
+    const[fin,ops,pay,vexp,units,viol,rounds,apps,emps,setts]=await Promise.all([
+      q("finance_monthly","period,direction,category,amount,is_capital"),
       q("ops_biker_month","period,net_washes,rating,approved_complaints,complaint_pct"),q("payroll_lines","period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),q("violations","fine_applied,status"),
       q("field_rounds","period,compliance_pct"),q("applicants","status,submitted_at"),q("employees","id,profession_ok"),
       q("sweater_settlements","period,net_total,status"),
-    ]);setD({ops,pay,vexp,units,viol,rounds,apps,emps,setts});
+    ]);setD({fin:fin||[],ops,pay,vexp,units,viol,rounds,apps,emps,setts});
   })();},[]);
   const s=useMemo(()=>{if(!d)return null;
     const o=d.ops.filter(x=>x.period===period);
     const washes=o.reduce((a,x)=>a+Number(x.net_washes||0),0);
     const revenue=revForPeriod(d.setts,d.ops,period);
+    const fin=d.fin.filter(x=>x.period===period);const costActual=fin.length>0;
     const payroll=d.pay.filter(x=>x.period===period).reduce((a,x)=>a+Number(x.total||0),0);
     const vendors=d.vexp.filter(e=>String(e.exp_date||"").slice(0,7)===period).reduce((a,e)=>a+Number(e.amount||0),0);
     const housM=d.units.filter(u=>u.active!==false).reduce((a,u)=>a+Number(u.annual_rent||0),0)/12;
-    const costs=payroll+vendors+housM;
+    const finOut=fin.filter(x=>x.direction==="out"&&!x.is_capital).reduce((a,x)=>a+Number(x.amount||0),0);
+    const finSweater=fin.filter(x=>x.direction==="in"&&x.category==="إيراد سويتر").reduce((a,x)=>a+Number(x.amount||0),0);
+    const finFund=fin.filter(x=>x.direction==="in").reduce((a,x)=>a+Number(x.amount||0),0)-finSweater;
+    const costs=costActual?finOut:(payroll+vendors+housM);
     const rated=o.filter(x=>x.rating!=null);const rating=rated.length?rated.reduce((a,x)=>a+Number(x.rating),0)/rated.length:null;
     const rd=d.rounds.filter(x=>x.period===period&&x.compliance_pct!=null);const comp=rd.length?Math.round(rd.reduce((a,x)=>a+Number(x.compliance_pct),0)/rd.length):null;
     const appsN=d.apps.filter(a=>String(a.submitted_at||"").slice(0,7)===period).length;
     const accepted=d.apps.filter(a=>a.status==="accepted"&&String(a.submitted_at||"").slice(0,7)===period).length;
     const mism=d.emps.filter(e=>e.profession_ok===false).length;
-    return{washes,revenue,payroll,vendors,housM,costs,margin:revenue-costs,rating,comp,appsN,accepted,bikers:o.length,mism};
+    return{washes,revenue,payroll,vendors,housM,costs,costActual,finFund,margin:revenue-costs,rating,comp,appsN,accepted,bikers:o.length,mism};
   },[d,period]);
   if(!s)return<div className="dw-skel" style={{height:200}}/>;
   const marginPct=s.revenue?Math.round(s.margin/s.revenue*100):null;
   return(<div className="rp-body">
-    <div className="rp-sec-t">المالية</div>
+    <div className="rp-sec-t">المالية{s.costActual&&<span style={{fontSize:10,color:"#087443",fontWeight:700,marginInlineStart:6}}>● تكاليف فعلية من البنك</span>}</div>
     <div className="rp-kpis">
-      <Kpi l="الإيراد التقديري" n={money(s.revenue)} c="#087443"/>
-      <Kpi l="التكاليف" n={money(s.costs)} c="#b42318"/>
+      <Kpi l="الإيراد (سويتر)" n={money(s.revenue)} c="#087443"/>
+      <Kpi l={s.costActual?"التكاليف الفعلية":"التكاليف التقديرية"} n={money(s.costs)} c="#b42318"/>
       <Kpi l="الهامش" n={money(s.margin)} c={s.margin>=0?"#087443":"#b42318"}/>
       <Kpi l="نسبة الهامش" n={marginPct!=null?marginPct+"%":"—"}/>
     </div>
+    {s.costActual&&s.finFund>0&&<p className="rp-note" style={{marginTop:0}}>تنبيه: مُوِّل هذا الشهر بـ{money(s.finFund)} من تحويلات داخلية لتغطية العجز التشغيلي.</p>}
     <div className="rp-sec-t">التشغيل</div>
     <div className="rp-kpis">
       <Kpi l="عدد البايكرز" n={int(s.bikers)}/>

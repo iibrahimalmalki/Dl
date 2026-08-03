@@ -121,7 +121,7 @@ export default function Shell({onLogout,me}){
         {view==="pricing"&&<Suspense fallback={<Sk/>}><SweaterPricing/></Suspense>}
         {view==="settlement"&&<Suspense fallback={<Sk/>}><Settlement opId={op}/></Suspense>}
         {view==="operations"&&<Suspense fallback={<Sk/>}><Operations opId={op}/></Suspense>}
-        {view==="complaints"&&<Suspense fallback={<Sk/>}><Complaints opId={op}/></Suspense>}
+        {view==="complaints"&&<Suspense fallback={<Sk/>}><Complaints opId={op} me={me} owner={owner}/></Suspense>}
         {view==="performance"&&<Suspense fallback={<Sk/>}><Performance opId={op}/></Suspense>}
         {view==="field_rounds"&&<Suspense fallback={<Sk/>}><FieldRounds opId={op}/></Suspense>}
         {view==="myteam"&&<Suspense fallback={<Sk/>}><MyTeam/></Suspense>}
