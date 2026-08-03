@@ -16,7 +16,7 @@ export default function DashboardHome({onNav}){
 
   useEffect(()=>{(async()=>{
     const q=(t,c)=>supabase.from(t).select(c).then(({data})=>data||[]).then(x=>x,()=>[]);
-    const[apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts]=await Promise.all([
+    const[apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix]=await Promise.all([
       q("applicants","full_name,application_number,status,ai_classification,ai_score_total,location,saudi_city,bangladesh_district,submitted_at"),
       supabase.from("page_visits").select("step,session_id").eq("page","ad_page").then(({data})=>data||[],()=>[]),
       q("employees","full_name,employee_id,team_id,staff_role,profession_ok"),
@@ -37,8 +37,10 @@ export default function DashboardHome({onNav}){
       q("sc_requests","status,title"),
       q("sc_items","name,qty_on_hand,reorder_level,active"),
       q("sweater_settlements","period,net_total,status"),
+      q("finance_monthly","period,direction,category,amount,is_capital"),
+      q("ops_tickets","period,status,decision"),
     ]);
-    setD({apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts});
+    setD({apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix});
   })();},[]);
 
   const s=useMemo(()=>{
@@ -99,8 +101,31 @@ export default function DashboardHome({onNav}){
     const costs=(payrollTotal||0)+(vendMonth||0)+houseMonthly+(finesTotal||0);
     const margin=revenue-costs;
 
+    // ── التدفّق النقدي الفعلي (كشف الحساب البنكي المصنّف) ──
+    const fin=d.fin||[];
+    const finP=maxPeriod(fin);
+    const finRows=fin.filter(x=>x.period===finP);
+    const hasFin=finRows.length>0;
+    const cashIn=finRows.filter(x=>x.direction==="in").reduce((a,x)=>a+Number(x.amount||0),0);
+    const cashOut=finRows.filter(x=>x.direction==="out"&&!x.is_capital).reduce((a,x)=>a+Number(x.amount||0),0);
+    const cashSweater=finRows.filter(x=>x.direction==="in"&&x.category==="إيراد سويتر").reduce((a,x)=>a+Number(x.amount||0),0);
+    const cashFund=cashIn-cashSweater;
+    const cashNet=cashIn-cashOut;
+    const coverPct=cashOut>0?Math.round(cashSweater/cashOut*100):null;
+
+    // ── شكاوى سويتر (مسار الجودة والاعتماد) ──
+    const tix=d.tix||[];
+    const tixP=maxPeriod(tix)||opP;
+    const tPending=tix.filter(t=>t.status==="pending_review").length;
+    const tReviewed=tix.filter(t=>t.status==="reviewed").length;
+    const tApproved=tix.filter(t=>t.period===tixP&&t.decision==="approved").length;
+    const tTotal=tix.length;
+
     // ── مركز التنبيهات ──
     const alerts=[];
+    if(tReviewed)alerts.push({sev:"warn",ic:"complaints",t:`${tReviewed} شكوى سويتر بانتظار اعتمادك`,k:"complaints"});
+    if(hasFin&&cashNet<0)alerts.push({sev:"warn",ic:"cash",t:`عجز نقدي ${money(Math.abs(cashNet))} في ${periodAr(finP)} — مُغطّى بتمويل داخلي`,k:"reports"});
+    if(tPending)alerts.push({sev:"info",ic:"clock",t:`${tPending} شكوى بانتظار مراجعة الجودة`,k:"complaints"});
     if(stolen)alerts.push({sev:"crit",ic:"bike",t:`${stolen} دراجة مسروقة — البلاغ قائم`,k:"fleet"});
     if(docExpired.length)alerts.push({sev:"crit",ic:"doc",t:`${docExpired.length} وثيقة منتهية الصلاحية`,k:"renewals"});
     if(hpOverdue.length)alerts.push({sev:"crit",ic:"cash",t:`${hpOverdue.length} دفعة سكن متأخّرة`,k:"housing"});
@@ -120,13 +145,16 @@ export default function DashboardHome({onNav}){
     return{A,accepted,rejected,pending,funnel,total0,bikers,teams:d.teams,opP,opsL,washes,avgRating,topBikers,maxW,payP,payrollTotal,
       openViol,finesTotal,avgComp,rounds:d.rounds,vendMonth,expTotal,ivPending,onbAvg,
       docExpired:docExpired.length,docSoon:docSoon.length,nVeh:fveh.length,stolen,fMaint,fIncOpen,gpsCov,
-      hpNext,hpNextDl,hvOpen,houseMonthly,scPending,scLow,revenue,costs,margin,alerts};
+      hpNext,hpNextDl,hvOpen,houseMonthly,scPending,scLow,revenue,costs,margin,alerts,
+      finP,hasFin,cashIn,cashOut,cashSweater,cashFund,cashNet,coverPct,
+      tixP,tPending,tReviewed,tApproved,tTotal};
   },[d]);
 
   if(!s)return(<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>{[...Array(6)].map((_,i)=><div key={i} className="dw-skel" style={{height:92}}/>)}</div>);
 
   const {A,accepted,rejected,pending,funnel,total0,bikers,teams,opP,washes,avgRating,topBikers,maxW,payP,payrollTotal,openViol,finesTotal,avgComp,vendMonth,expTotal,ivPending,onbAvg,
-    docExpired,docSoon,nVeh,stolen,fMaint,fIncOpen,gpsCov,hpNext,hpNextDl,hvOpen,houseMonthly,scPending,scLow,revenue,costs,margin,alerts}=s;
+    docExpired,docSoon,nVeh,stolen,fMaint,fIncOpen,gpsCov,hpNext,hpNextDl,hvOpen,houseMonthly,scPending,scLow,revenue,costs,margin,alerts,
+    finP,hasFin,cashIn,cashOut,cashSweater,cashFund,cashNet,coverPct,tixP,tPending,tReviewed,tApproved,tTotal}=s;
   const recent=A.slice(0,4);
   const scoreCol=v=>v==null?["#eef1f4","#94a3b8"]:v>=6.5?["#e7f7ef","#087443"]:v>=5?["#fef3e2","#b54708"]:["#feecea","#b42318"];
   const stName=x=>x==="accepted"?"مقبول":x==="rejected"?"مرفوض":"معلّق";
@@ -159,7 +187,7 @@ export default function DashboardHome({onNav}){
       <Kpi label={"غسلات · "+(opP?periodAr(opP):"—")} ic="operations" ib="#e7f7ef" c="#087443" n={washes.toLocaleString("en-US")} sub={avgRating?`تقييم ${avgRating.toFixed(2)}`:"لا بيانات بعد"} onClick={()=>nav("operations")}/>
       <Kpi label={"رواتب · "+(payP?periodAr(payP):"—")} ic="payroll" ib="#f6f2ff" c="#6d4bcb" n={payrollTotal?money(payrollTotal):"—"} sub={payP?"آخر مسير":"لم يُشغّل بعد"} onClick={()=>nav("payroll")}/>
       <Kpi label="الامتثال الميداني" ic="rounds" ib="#eefaf3" c="#087443" n={avgComp!=null?avgComp+"%":"—"} sub={s.rounds.length?`${s.rounds.length} جولة`:"لا جولات بعد"} onClick={()=>nav("field_rounds")}/>
-      <Kpi label="مخالفات مفتوحة" ic="complaints" ib="#feecea" c="#b42318" n={openViol} sub={finesTotal?money(finesTotal)+" غرامات":"لا مخالفات"} tone="red" onClick={()=>nav("complaints")}/>
+      <Kpi label="شكاوى سويتر" ic="complaints" ib="#feecea" c="#b42318" n={tPending+tReviewed} sub={tReviewed?`${tReviewed} بانتظار اعتمادك`:(tTotal?`${tApproved} معتمدة · ${tTotal} إجمالاً`:"لا شكاوى")} tone={tReviewed?"red":""} onClick={()=>nav("complaints")}/>
     </div>
 
     {/* شريط تشغيلي — الوحدات الجديدة */}
@@ -203,15 +231,20 @@ export default function DashboardHome({onNav}){
         </div>
       </div>
       <div className="dw-panel">
-        <div className="dw-ph"><b>لمحة مالية · {periodAr(payP||curMonth())}</b><span className="dw-a" onClick={()=>nav("pricing")} role="button">التسعير <Icon n="fwd" s={12} style={{verticalAlign:"-2px"}}/></span></div>
+        <div className="dw-ph"><b>{hasFin?`التدفّق النقدي الفعلي · ${periodAr(finP)}`:`لمحة مالية · ${periodAr(payP||curMonth())}`}</b><span className="dw-a" onClick={()=>nav("reports")} role="button">التقارير <Icon n="fwd" s={12} style={{verticalAlign:"-2px"}}/></span></div>
         <div className="dw-pb dh-fin">
-          <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"#e7f7ef",color:"#087443"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إيراد سويتر التقديري</div></div><b>{revenue?money(revenue):"—"}</b></div>
-          <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#f6f2ff",color:"#6d4bcb"}}><Icon n="payroll" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">رواتب الفريق</div></div><b>{payrollTotal?money(payrollTotal):"—"}</b></div>
-          <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#fff2e8",color:"#b54708"}}><Icon n="vendors" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">مصروفات موردين (الشهر)</div></div><b>{vendMonth?money(vendMonth):"—"}</b></div>
-          <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef4ff",color:"#1d5bbf"}}><Icon n="home" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إيجار السكن (شهرياً)</div></div><b>{houseMonthly?money(houseMonthly):"—"}</b></div>
-          <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#feecea",color:"#b42318"}}><Icon n="alert" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">غرامات مخالفات</div></div><b>{finesTotal?money(finesTotal):"—"}</b></div>
-          <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef1f4",color:"#334155"}}><Icon n="reports" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إجمالي المصروفات المسجّلة (تأسيس+تشغيل)</div></div><b>{expTotal?money(expTotal):"—"}</b></div>
-          <div className="dh-fin-tot"><span>الهامش التقديري (إيراد − تكاليف الشهر)</span><b style={{color:margin>=0?"#087443":"#b42318"}}>{revenue?money(margin):"—"}</b></div>
+          {hasFin?<>
+            <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"#e7f7ef",color:"#087443"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الداخل</div><div style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>سويتر {money(cashSweater)} · تمويل {money(cashFund)}</div></div><b>{money(cashIn)}</b></div>
+            <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#feecea",color:"#b42318"}}><Icon n="payroll" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الخارج (تشغيلي)</div></div><b>{money(cashOut)}</b></div>
+            <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef4ff",color:"#1d5bbf"}}><Icon n="chart" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">تغطية إيراد سويتر للمصروف</div></div><b style={{color:coverPct!=null&&coverPct>=100?"#087443":"#b54708"}}>{coverPct!=null?coverPct+"%":"—"}</b></div>
+            <div className="dh-fin-tot"><span>الصافي النقدي (داخل − خارج)</span><b style={{color:cashNet>=0?"#087443":"#b42318"}}>{money(cashNet)}</b></div>
+            {cashNet<0&&<div style={{fontSize:11,color:"#b54708",fontWeight:700,marginTop:-2}}>عجز تشغيلي مُغطّى بتمويل داخلي — الإيراد أقل من المصروف.</div>}
+          </>:<>
+            <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"#e7f7ef",color:"#087443"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إيراد سويتر التقديري</div></div><b>{revenue?money(revenue):"—"}</b></div>
+            <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#f6f2ff",color:"#6d4bcb"}}><Icon n="payroll" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">رواتب الفريق</div></div><b>{payrollTotal?money(payrollTotal):"—"}</b></div>
+            <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef4ff",color:"#1d5bbf"}}><Icon n="home" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إيجار السكن (شهرياً)</div></div><b>{houseMonthly?money(houseMonthly):"—"}</b></div>
+            <div className="dh-fin-tot"><span>الهامش التقديري (إيراد − تكاليف الشهر)</span><b style={{color:margin>=0?"#087443":"#b42318"}}>{revenue?money(margin):"—"}</b></div>
+          </>}
         </div>
       </div>
     </div>
