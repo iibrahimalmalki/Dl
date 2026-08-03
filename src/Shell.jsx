@@ -2,6 +2,7 @@ import{useState,useEffect,lazy,Suspense}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import DashboardHome from"./DashboardHome";
+import Notifications from"./Notifications";
 const AdminDashboard=lazy(()=>import("./AdminDashboard"));
 const UserManagement=lazy(()=>import("./UserManagement"));
 const Payroll=lazy(()=>import("./Payroll"));
@@ -104,7 +105,7 @@ export default function Shell({onLogout,me}){
             {ops.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
         </div>
-        <button className="sh-ib sh-hm"><Icon n="bell" s={18}/><span className="sh-dot"/></button>
+        <Notifications me={me} onNav={go}/>
         <div style={{position:"relative"}}>
           <button className="sh-ib" onClick={()=>setMenu(!menu)}><div className="sh-av2">{nm.trim().charAt(0)}</div></button>
           {menu&&<div className="sh-menu">{owner&&<div className="sh-mi" onClick={()=>{setMenu(false);go("users");}}><Icon n="users" s={16}/> المستخدمون</div>}<div className="sh-mi" onClick={onLogout}><Icon n="logout" s={16}/> تسجيل الخروج</div></div>}

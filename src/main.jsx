@@ -53,8 +53,8 @@ function App(){
   // تحميل هوية المستخدم (مالك/صلاحيات) عند وجود جلسة
   useEffect(()=>{
     if(!session){setMe(null);return;}
-    supabase.from("app_users").select("is_owner,display_name,active,biker_employee_id,position").eq("id",session.user.id).maybeSingle()
-      .then(({data})=>setMe(data||{is_owner:false,active:true}));
+    supabase.from("app_users").select("id,is_owner,display_name,active,biker_employee_id,position").eq("id",session.user.id).maybeSingle()
+      .then(({data})=>setMe(data||{id:session.user.id,is_owner:false,active:true}));
   },[session]);
   const logout=async()=>{await supabase.auth.signOut();setPage("landing");window.location.hash="";};
 
