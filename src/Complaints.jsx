@@ -1,7 +1,22 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
+import SweaterTickets from"./SweaterTickets";
 import{VIOLATIONS,SEVERITY,byCode,objectionState,internalDeadline,seriousRepeat}from"./violations";
+
+export default function Complaints({opId,me,owner}){
+  const[tab,setTab]=useState("tickets");
+  return(<div className="cmw">
+    <style>{`.cmw-tabs{display:flex;gap:6px;background:#f1f3f5;border-radius:12px;padding:4px;margin-bottom:14px;max-width:520px}
+.cmw-tab{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 10px;border:none;border-radius:9px;background:none;font-family:inherit;font-size:12.5px;font-weight:800;color:#64748b;cursor:pointer}
+.cmw-tab.on{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(16,24,40,.08)}`}</style>
+    <div className="cmw-tabs">
+      <button className={"cmw-tab"+(tab==="tickets"?" on":"")} onClick={()=>setTab("tickets")}><Icon n="complaints" s={15}/> شكاوى سويتر (العملاء)</button>
+      <button className={"cmw-tab"+(tab==="internal"?" on":"")} onClick={()=>setTab("internal")}><Icon n="alert" s={15}/> المخالفات الداخلية</button>
+    </div>
+    {tab==="tickets"?<SweaterTickets opId={opId} me={me} owner={owner}/>:<InternalViolations opId={opId}/>}
+  </div>);
+}
 
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const periodLabel=p=>{const[y,m]=p.split("-");return`${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m} ${y}`;};
@@ -10,7 +25,7 @@ const todayStr=()=>{const d=new Date();return d.toISOString().slice(0,10);};
 const fmtRemain=ms=>{if(ms<=0)return"منتهية";const h=Math.floor(ms/3600000);const m=Math.floor((ms%3600000)/60000);if(h>=24)return`${Math.floor(h/24)} يوم ${h%24} س`;return`${h} س ${m} د`;};
 const STATUS={registered:{ar:"مسجّلة",color:"#b54708",bg:"#fef3e2"},objected:{ar:"معترَض عليها",color:"#175cd3",bg:"#eff6ff"},confirmed:{ar:"مؤكّدة (غرامة)",color:"#b42318",bg:"#feecea"},dismissed:{ar:"مُلغاة",color:"#087443",bg:"#e7f7ef"}};
 
-export default function Complaints({opId}){
+function InternalViolations({opId}){
   const[period,setPeriod]=useState(nowPeriod());
   const[loading,setLoading]=useState(true);
   const[emps,setEmps]=useState([]);

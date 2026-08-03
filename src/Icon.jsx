@@ -65,6 +65,8 @@ const P={
   fuel:'M14 22V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v16 M4 13h10 M14 8l3 2v6a2 2 0 0 0 3 0V9l-3-3',
   shirt:'M8 3l4 3 4-3 4 4-3 3v10H7V10L4 7z',
   cash:'M2 6h20v12H2z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M5 9v6 M19 9v6',
+  image:'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z M8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 16l-5-5L6 21',
+  send:'M22 2 11 13 M22 2l-7 20-4-9-9-4z',
 };
 export default function Icon({n,s=20,sw=1.8,style,className,fill}){
   const d=P[n];if(!d)return null;
