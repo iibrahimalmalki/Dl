@@ -17,9 +17,15 @@ const STATUS={
 };
 const STATUS_ORDER=["investigating","proven","agreed","deducting","settled","waived","dismissed"];
 const CLOSED=["settled","waived","dismissed"];
+const METHOD={
+  cash:{ar:"تعويض نقدي مباشر",ic:"cash",c:"#1d5bbf"},
+  center:{ar:"إصلاح عبر مركز معتمد (بسعر مخفّض — دون نقد مباشر)",ic:"wrench",c:"#087443"},
+  amicable:{ar:"تسوية ودية على مستويات",ic:"compare",c:"#b54708"},
+};
+const METHOD_ORDER=["cash","center","amicable"];
 const blank=()=>({sweater_id:"",biker_name:"",incident_date:new Date().toISOString().slice(0,10),description:"",
   total_cost:"",company_share:"",biker_share:"",monthly_base:"1000",installment_months:"10",recovered_amount:"0",
-  status:"investigating",evidence:"",investigation_notes:"",agreement_notes:""});
+  status:"investigating",resolution_method:"cash",approved_center:"",booking_ref:"",complaint_ref:"",evidence:"",investigation_notes:"",agreement_notes:""});
 
 export default function DamageClaims({owner,opId}){
   const[rows,setRows]=useState([]);
@@ -69,6 +75,8 @@ export default function DamageClaims({owner,opId}){
       operator_id:(opId&&opId!=="all")?opId:null,
       employee_id:form.employee_id||null,sweater_id:form.sweater_id||null,biker_name:form.biker_name||null,
       incident_date:form.incident_date||null,description:form.description||null,
+      resolution_method:form.resolution_method||"cash",approved_center:form.approved_center||null,
+      booking_ref:form.booking_ref||null,complaint_ref:form.complaint_ref||null,
       total_cost:num(form.total_cost),company_share:num(form.company_share),biker_share:num(form.biker_share),
       monthly_base:num(form.monthly_base),installment_months:form.installment_months===""?null:Number(form.installment_months),
       monthly_deduction:c?c.monthly:null,recovered_amount:num(form.recovered_amount),
@@ -85,7 +93,8 @@ export default function DamageClaims({owner,opId}){
   };
   const edit=r=>setForm({...r,
     incident_date:r.incident_date||"",total_cost:r.total_cost??"",company_share:r.company_share??"",biker_share:r.biker_share??"",
-    monthly_base:r.monthly_base??"1000",installment_months:r.installment_months??"",recovered_amount:r.recovered_amount??"0"});
+    monthly_base:r.monthly_base??"1000",installment_months:r.installment_months??"",recovered_amount:r.recovered_amount??"0",
+    resolution_method:r.resolution_method||"cash",approved_center:r.approved_center||"",booking_ref:r.booking_ref||"",complaint_ref:r.complaint_ref||""});
   const del=async(r)=>{if(!owner)return;if(!confirm("حذف دعوى الضرر؟"))return;await supabase.from("damage_claims").delete().eq("id",r.id);await load();};
 
   if(loading)return(<div className="dw-skel" style={{height:200}}/>);
@@ -102,7 +111,7 @@ export default function DamageClaims({owner,opId}){
     </div>
 
     <div className="dc-bar">
-      <div className="dc-hint"><Icon n="alert" s={15}/> كل حالة تُدخَل يدوياً: تحقيق وإثبات ← تحميل بقيمة متفق عليها ← خصم شهري لا يتجاوز <b>50%</b> من الراتب الأساسي.</div>
+      <div className="dc-hint"><Icon n="alert" s={15}/> كل حالة تُدخَل يدوياً: تحقيق وإثبات ← اختيار طريقة المعالجة (نقد مباشر / مركز معتمد بسعر مخفّض دون نقد للعميل / تسوية ودية) ← أي تحميل على البايكر يُخصم شهرياً بما لا يتجاوز <b>50%</b> من الراتب الأساسي.</div>
       {owner&&<button className="dc-b brand" onClick={()=>setForm(blank())}><Icon n="plus" s={15}/> دعوى ضرر جديدة</button>}
     </div>
 
@@ -118,6 +127,10 @@ export default function DamageClaims({owner,opId}){
         </label>
         <label><span>تاريخ الحادثة</span><input type="date" value={form.incident_date} onChange={e=>setForm({...form,incident_date:e.target.value})}/></label>
         <label><span>الحالة</span><select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}>{STATUS_ORDER.map(k=><option key={k} value={k}>{STATUS[k].ar}</option>)}</select></label>
+        <label><span>رقم الطلب</span><input value={form.booking_ref} onChange={e=>setForm({...form,booking_ref:e.target.value})} placeholder="رقم حجز سويتر"/></label>
+        <label><span>مرجع الشكوى/الإفادة</span><input value={form.complaint_ref} onChange={e=>setForm({...form,complaint_ref:e.target.value})} placeholder="DW-CMP-…"/></label>
+        <label><span>طريقة المعالجة</span><select value={form.resolution_method} onChange={e=>setForm({...form,resolution_method:e.target.value})}>{METHOD_ORDER.map(k=><option key={k} value={k}>{METHOD[k].ar}</option>)}</select></label>
+        {form.resolution_method==="center"&&<label><span>المركز المعتمد</span><input value={form.approved_center} onChange={e=>setForm({...form,approved_center:e.target.value})} placeholder="اسم مركز الصيانة"/></label>}
         <label className="dc-wide"><span>وصف الحادثة/الضرر</span><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="ماذا حدث، والمركبة، وطبيعة الضرر…"/></label>
         <label><span>إجمالي التكلفة (﷼)</span><input type="number" value={form.total_cost} onChange={e=>setForm({...form,total_cost:e.target.value})}/></label>
         <label><span>تحمّل المؤسسة (﷼)</span><input type="number" value={form.company_share} onChange={e=>setForm({...form,company_share:e.target.value})}/></label>
@@ -152,9 +165,11 @@ export default function DamageClaims({owner,opId}){
         return(
         <div className="dc-card" key={r.id}>
           <div className="dc-ch">
-            <div className="dc-who"><span className="dc-av"><Icon n="alert" s={15}/></span><div><b>{r.biker_name||"—"}</b><small>{fmtD(r.incident_date)}{r.sweater_id?` · #${r.sweater_id}`:""}</small></div></div>
+            <div className="dc-who"><span className="dc-av"><Icon n="alert" s={15}/></span><div><b>{r.biker_name||"—"}</b><small>{fmtD(r.incident_date)}{r.sweater_id?` · #${r.sweater_id}`:""}{r.booking_ref?` · طلب ${r.booking_ref}`:""}</small></div></div>
             <span className="dc-badge" style={{background:s.bg,color:s.c}}>{s.ar}</span>
           </div>
+          {(()=>{const m=METHOD[r.resolution_method]||METHOD.cash;return(
+            <div className="dc-method" style={{color:m.c}}><Icon n={m.ic} s={13}/> {m.ar}{r.approved_center?` — ${r.approved_center}`:""}{r.complaint_ref?` · ${r.complaint_ref}`:""}</div>);})()}
           {r.description&&<p className="dc-desc">{r.description}</p>}
           <div className="dc-figs">
             <F l="إجمالي" v={money(r.total_cost)}/>
@@ -232,6 +247,7 @@ const CSS=`
 .dc-av{width:32px;height:32px;border-radius:10px;background:#feecea;color:#b42318;display:flex;align-items:center;justify-content:center;flex:none}
 .dc-who b{font-size:13.5px;font-weight:800;display:block}.dc-who small{font-size:11px;color:var(--mut)}
 .dc-badge{font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.dc-method{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;margin:0 0 8px;line-height:1.4}
 .dc-desc{font-size:12px;color:#475569;line-height:1.55;margin:0 0 10px}
 .dc-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .dc-f{background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:7px 9px}
