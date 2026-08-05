@@ -3,7 +3,7 @@ import{supabase,ensureFreshToken,compressImage,uploadAuthed}from"./supabase";
 import Icon from"./Icon";
 import{AXES,ITEMS,bikerItems,mgmtItems,compliance,complianceByAxis,effect,RESP_AR}from"./fieldChecklist";
 import{analyzeRound}from"./fieldAnalysis";
-import{openReport}from"./fieldReport";
+import{openReport,buildWhatsApp}from"./fieldReport";
 import FieldChecklistForm,{FCF_CSS}from"./FieldChecklistForm";
 
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
@@ -134,6 +134,12 @@ export default function FieldRounds({opId}){
     setRounds(p=>[data,...p]);setShowReq(false);setReqSid("");setMsg({ok:true,t:"تم طلب التوثيق الذاتي — سيظهر للبايكر في بوابته"});
   };
   const markReviewed=async(r)=>{const{error}=await supabase.from("field_rounds").update({status:"reviewed"}).eq("id",r.id);if(!error)setRounds(p=>p.map(x=>x.id===r.id?{...x,status:"reviewed"}:x));};
+  // رسالة واتساب ثنائية اللغة: تُنسخ للحافظة وتُفتح في واتساب لاختيار المستلم
+  const waSend=async(r)=>{
+    const text=buildWhatsApp(r,"دلو ورغوة");
+    try{await navigator.clipboard?.writeText(text);setMsg({ok:true,t:"تم تجهيز رسالة الواتساب ونسخها — اختر المستلم في واتساب"});}catch(_){}
+    try{window.open("https://wa.me/?text="+encodeURIComponent(text),"_blank");}catch(_){}
+  };
 
   const kpis=useMemo(()=>{
     const done=rounds.length;const rated=rounds.filter(r=>r.compliance_pct!=null);
@@ -227,6 +233,7 @@ export default function FieldRounds({opId}){
         <div className="fr-c-actions">
           {r.status!=="requested"&&<button className="fr-report" onClick={()=>openReport(r,r.ai_analysis,"دلو ورغوة")}><Icon n="print" s={14}/> تقرير الجولة</button>}
           {r.status!=="requested"&&<button className="fr-edit" onClick={()=>startEdit(r)}><Icon n="edit" s={13}/> تعديل</button>}
+          {r.status!=="requested"&&<button className="fr-wa" onClick={()=>waSend(r)}><Icon n="send" s={13}/> واتساب</button>}
           {self&&r.status==="submitted"&&<button className="fr-review" onClick={()=>markReviewed(r)}><Icon n="check" s={14}/> مراجعة واعتماد</button>}
           <div style={{flex:1}}/>
           <button className="fr-del" onClick={()=>del(r)}><Icon n="trash" s={13}/> حذف</button>
@@ -338,6 +345,8 @@ const CSS=`
 .fr-c-actions{display:flex;flex-wrap:wrap;align-items:center;gap:7px;justify-content:flex-end;margin-top:10px}
 .fr-edit{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;border:1px solid #cfe0f7;background:#f5f9ff;color:#1d5bbf;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
 .fr-edit:hover{background:#e9f2ff}
+.fr-wa{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;border:1px solid #b7e4cd;background:#effaf3;color:#087443;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+.fr-wa:hover{background:#e2f6ea}
 .fr-editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f5f9ff;border:1px solid #cfe0f7;border-radius:11px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:#1d5bbf}
 .fr-editbar b{font-weight:800}
 .fr-cancel{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid #d7dde5;background:#fff;color:#475569;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
