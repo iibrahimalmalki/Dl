@@ -19,6 +19,7 @@ export default function FieldRounds({opId}){
   const[emps,setEmps]=useState([]);
   const[rounds,setRounds]=useState([]);
   const[showNew,setShowNew]=useState(false);const[showReq,setShowReq]=useState(false);const[reqSid,setReqSid]=useState("");
+  const[editId,setEditId]=useState(null);   // معرّف الجولة الجاري تعديلها (null = جولة جديدة)
   const[hd,setHd]=useState({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:""});
   const[me,setMe]=useState("");            // اسم المستخدم المسجّل — يملأ منفّذ الجولة تلقائياً
   const[geo,setGeo]=useState("");          // حالة تحديد الموقع: ""/"loading"/"done"/"err"
@@ -81,6 +82,18 @@ export default function FieldRounds({opId}){
   const eff=effect(comp.pct);
   const empBySid=useMemo(()=>{const m={};emps.forEach(e=>{if(e.employee_id)m[String(e.employee_id).trim()]=e;});return m;},[emps]);
 
+  // تفريغ النموذج للحالة الابتدائية
+  const resetForm=()=>{setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setPhotos({});setNotes("");setEditId(null);};
+  // فتح نموذج تعديل جولة محفوظة — يحمّل بياناتها بالكامل
+  const startEdit=(r)=>{
+    setEditId(r.id);
+    setHd({sweater_id:r.sweater_id||"",date:r.round_date||todayStr(),time:r.round_time||"",location:r.location||"",location_url:r.location_url||"",gps_lat:r.gps_lat??null,gps_lng:r.gps_lng??null,inspector:r.inspector||me||""});
+    setRes(r.results||{});setItemNotes(r.item_notes||{});setPhotos(r.photos||{});setNotes(r.notes||"");
+    setGeo(r.gps_lat?"done":"");setShowReq(false);setShowNew(true);setMsg(null);
+    if(typeof window!=="undefined")window.scrollTo({top:0,behavior:"smooth"});
+  };
+  const editingRound=editId?rounds.find(x=>x.id===editId):null;
+
   const save=async()=>{
     if(!hd.sweater_id){setMsg({ok:false,t:"اختر البايكر"});return;}
     setSaving(true);setMsg(null);
@@ -88,16 +101,26 @@ export default function FieldRounds({opId}){
       const emp=empBySid[String(hd.sweater_id).trim()];
       const cleanPhotos={};Object.entries(photos).forEach(([k,arr])=>{const f=(arr||[]).filter(Boolean);if(f.length)cleanPhotos[k]=f;});
       const cleanNotes={};Object.entries(itemNotes).forEach(([k,v])=>{if(v&&String(v).trim())cleanNotes[k]=v.trim();});
-      // تاريخ جولات البايكر للتحليل
-      const{data:hist}=await supabase.from("field_rounds").select("results,compliance_pct,round_date").eq("sweater_id",hd.sweater_id).order("round_date",{ascending:false}).limit(12);
+      // تاريخ جولات البايكر للتحليل (نستبعد الجولة الجاري تعديلها كي لا تُقارن بنفسها)
+      let histQ=supabase.from("field_rounds").select("results,compliance_pct,round_date").eq("sweater_id",hd.sweater_id).order("round_date",{ascending:false}).limit(13);
+      if(editId)histQ=histQ.neq("id",editId);
+      const{data:hist}=await histQ;
       const roundObj={results:res,item_notes:cleanNotes,compliance_pct:comp.pct,round_date:hd.date,biker_name:emp?.full_name||"",sweater_id:hd.sweater_id,action_items:comp.actions};
-      const analysis=analyzeRound(roundObj,hist||[]);
+      const analysis=analyzeRound(roundObj,(hist||[]).slice(0,12));
       const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,round_time:hd.time||null,location:hd.location||null,location_url:hd.location_url||null,gps_lat:hd.gps_lat,gps_lng:hd.gps_lng,inspector:hd.inspector||me||null,results:res,item_notes:cleanNotes,photos:cleanPhotos,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,by_axis:cAxis,ai_analysis:analysis,notes:notes||null};
-      const{data,error}=await supabase.from("field_rounds").insert(row).select().single();
-      if(error)throw error;
-      if(row.period===period)setRounds(p=>[data,...p]);
-      setShowNew(false);setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setPhotos({});setNotes("");
-      setMsg({ok:true,t:"تم حفظ الجولة"});
+      if(editId){
+        const{data,error}=await supabase.from("field_rounds").update(row).eq("id",editId).select().single();
+        if(error)throw error;
+        // إن تغيّر الشهر خارج الفلتر الحالي نُزيل السطر، وإلا نُحدّثه في مكانه
+        setRounds(p=>row.period===period?p.map(x=>x.id===editId?data:x):p.filter(x=>x.id!==editId));
+        setMsg({ok:true,t:"تم حفظ التعديلات على الجولة"});
+      }else{
+        const{data,error}=await supabase.from("field_rounds").insert(row).select().single();
+        if(error)throw error;
+        if(row.period===period)setRounds(p=>[data,...p]);
+        setMsg({ok:true,t:"تم حفظ الجولة"});
+      }
+      setShowNew(false);resetForm();
     }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
     setSaving(false);
   };
@@ -128,7 +151,7 @@ export default function FieldRounds({opId}){
       <div className="fr-month"><Icon n="calendar" s={16}/><input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/></div>
       <div style={{flex:1}}/>
       <button className="fr-btn ghost" onClick={()=>{setShowReq(!showReq);setMsg(null);}}><Icon n="camera" s={15}/> طلب توثيق ذاتي</button>
-      <button className="fr-btn" onClick={()=>{setShowNew(!showNew);setMsg(null);}}><Icon n={showNew?"x":"plus"} s={15}/> {showNew?"إغلاق":"جولة جديدة"}</button>
+      <button className="fr-btn" onClick={()=>{if(showNew){setShowNew(false);resetForm();}else{resetForm();setShowNew(true);setShowReq(false);}setMsg(null);}}><Icon n={showNew?"x":"plus"} s={15}/> {showNew?"إغلاق":"جولة جديدة"}</button>
     </div>
     {msg&&<div className={"fr-msg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
     {showReq&&<div className="fr-req">
@@ -141,6 +164,7 @@ export default function FieldRounds({opId}){
     </div>}
 
     {showNew&&<div className="fr-new">
+      {editId&&<div className="fr-editbar"><div><Icon n="edit" s={14}/> <b>تعديل جولة محفوظة</b> — {editingRound?.biker_name||hd.sweater_id} · {editingRound?.round_date||hd.date}</div><button className="fr-cancel" onClick={()=>{setShowNew(false);resetForm();}}><Icon n="x" s={13}/> إلغاء التعديل</button></div>}
       {/* رأس الجولة */}
       <div className="fr-hd">
         <label className="fr-fld"><span>البايكر</span>
@@ -175,7 +199,7 @@ export default function FieldRounds({opId}){
         <div className="fr-eff" style={{background:eff.bg,color:eff.color}}>{eff.ar}</div>
         {comp.actions.length>0&&<div className="fr-act"><Icon n="alert" s={12}/> {comp.actions.length} بند إدارة → طلب دعم سويتر</div>}
       </div>
-      <button className="fr-btn ok" style={{width:"100%",marginTop:12}} onClick={save} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":"حفظ الجولة"}</button>
+      <button className="fr-btn ok" style={{width:"100%",marginTop:12}} onClick={save} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":editId?"حفظ التعديلات":"حفظ الجولة"}</button>
     </div>}
 
     {/* ملخص */}
@@ -202,6 +226,7 @@ export default function FieldRounds({opId}){
         {(()=>{const all=Object.values(r.photos||{}).flat().filter(Boolean);return all.length>0&&<div className="fr-c-gal"><div className="fr-c-gal-h"><Icon n="camera" s={12}/> {all.length} صورة توثيق</div><div className="fr-c-thumbs">{all.slice(0,8).map((u,i)=><img key={i} src={u} onClick={()=>setViewer(u)}/>)}{all.length>8&&<span className="fr-more">+{all.length-8}</span>}</div></div>;})()}
         <div className="fr-c-actions">
           {r.status!=="requested"&&<button className="fr-report" onClick={()=>openReport(r,r.ai_analysis,"دلو ورغوة")}><Icon n="print" s={14}/> تقرير الجولة</button>}
+          {r.status!=="requested"&&<button className="fr-edit" onClick={()=>startEdit(r)}><Icon n="edit" s={13}/> تعديل</button>}
           {self&&r.status==="submitted"&&<button className="fr-review" onClick={()=>markReviewed(r)}><Icon n="check" s={14}/> مراجعة واعتماد</button>}
           <div style={{flex:1}}/>
           <button className="fr-del" onClick={()=>del(r)}><Icon n="trash" s={13}/> حذف</button>
@@ -310,7 +335,12 @@ const CSS=`
 .fr-c-eff{display:inline-block;margin-top:10px;font-size:11px;font-weight:800;padding:4px 11px;border-radius:20px}
 .fr-c-act{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11.5px;color:#175cd3;font-weight:700;background:#eff6ff;border-radius:8px;padding:6px 10px}
 .fr-c-notes{margin-top:9px;font-size:12px;color:#475569;background:#fafbfc;border:1px solid #f1f3f5;border-radius:8px;padding:8px 10px}
-.fr-c-actions{display:flex;justify-content:flex-end;margin-top:10px}
+.fr-c-actions{display:flex;flex-wrap:wrap;align-items:center;gap:7px;justify-content:flex-end;margin-top:10px}
+.fr-edit{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;border:1px solid #cfe0f7;background:#f5f9ff;color:#1d5bbf;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+.fr-edit:hover{background:#e9f2ff}
+.fr-editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f5f9ff;border:1px solid #cfe0f7;border-radius:11px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:#1d5bbf}
+.fr-editbar b{font-weight:800}
+.fr-cancel{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid #d7dde5;background:#fff;color:#475569;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
 .fr-del{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px;border:1px solid #f7bfba;background:#fff;color:#b42318;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
 .fr-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:16px;padding:40px 24px;text-align:center}
 .fr-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff2e8,#ffe2cc);color:var(--b)}

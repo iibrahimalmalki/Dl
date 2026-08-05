@@ -2,7 +2,16 @@ import Icon from"./Icon";
 import{AXES,ITEMS,RESP_AR}from"./fieldChecklist";
 
 const RES=[["pass","✓","مطابق","g"],["half","≈","جزئي","a"],["fail","✕","غير مطابق","r"],["excused","∅","معفى (إمداد)","m"]];
-const MRES=[["pass","✓","متوفّر","g"],["fail","✕","ناقص","r"]];
+// بنود الإدارة/الإمداد = التي تتطلب توفير بديل — نفس الحالات الأربع بمسمّيات الإمداد
+const MRES=[["pass","✓","متوفّر","g"],["half","≈","بديل جزئي","a"],["fail","✕","ناقص","r"],["excused","∅","معفى (إمداد)","m"]];
+
+// نص إرشادي لخانة الملاحظة حسب حالة البند
+function notePH(it,r){
+  if(r==="excused")return it.resp==="mgmt"?"توثيق الإعفاء: المادة/المعدة غير المُستلمة والبديل المُوفَّر":"توثيق الإعفاء: ما الذي لم يُستلم من الإدارة؟";
+  if(r==="fail")return it.resp==="mgmt"?"الناقص + البديل/الإجراء لتوفيره":"سبب عدم المطابقة والإجراء التصحيحي";
+  if(r==="half")return it.resp==="mgmt"?"ما البديل الجزئي المُوفَّر؟":"ما الناقص؟ والملاحظة";
+  return it.resp==="mgmt"?"ملاحظة الإدارة / البديل (اختياري)":"ملاحظة (اختياري)";
+}
 
 // نموذج قائمة التحقق المشترك (جولة المشرف + الجولة الذاتية)
 // props: items, res, onRes(n,v), notes, onNote(n,t), photos, onUpload(n,idx,file), uploading, onView(url), allowExtra, compact
@@ -19,7 +28,7 @@ export default function FieldChecklistForm({items=ITEMS,res={},onRes,notes={},on
     {axes.map(ax=>(
       <div className="fcf-axis" key={ax}>
         <div className="fcf-axis-h"><Icon n={AXES[ax].ic} s={15}/> {AXES[ax].ar}</div>
-        {items.filter(i=>i.axis===ax).map(it=>{const mgmt=it.resp==="mgmt";const opts=mgmt?MRES:RES;const ph=it.photos||[];const arr=photos[it.n]||[];const slots=Math.max(ph.length,arr.length);const got=arr.filter(Boolean).length;return(
+        {items.filter(i=>i.axis===ax).map(it=>{const mgmt=it.resp==="mgmt";const opts=mgmt?MRES:RES;const r=res[it.n];const ph=it.photos||[];const arr=photos[it.n]||[];const slots=Math.max(ph.length,arr.length);const got=arr.filter(Boolean).length;return(
           <div className={"fcf-item"+(mgmt?" mg":"")} key={it.n}>
             <div className="fcf-row">
               <div className="fcf-txt"><span className="fcf-n">{it.n}</span><div><div className="fcf-ar">{it.ar}</div><div className="fcf-resp">{RESP_AR[it.resp]}{mgmt&&" ⚠"}{ph.length>0&&<span className={"fcf-cam"+(got>=ph.length?" ok":"")}> · <Icon n="camera" s={10}/> {got}/{ph.length}</span>}</div></div></div>
@@ -33,7 +42,10 @@ export default function FieldChecklistForm({items=ITEMS,res={},onRes,notes={},on
                 </label>);})}
               {allowExtra&&<label className="fcf-ph add"><input type="file" accept="image/*" capture="environment" hidden onChange={e=>onUpload(it.n,slots,e.target.files[0])}/><Icon n="plus" s={16}/><span>إضافية</span></label>}
             </div>}
-            {res[it.n]==="excused"&&<div className="fcf-exnote"><Icon n="alert" s={13}/><input value={notes[it.n]||""} onChange={e=>onNote(it.n,e.target.value)} placeholder="توثيق الإعفاء: ما المادة/المعدة التي لم تُستلم؟"/></div>}
+            <div className={"fcf-note"+(r==="excused"||r==="fail"?" hot":"")}>
+              <Icon n={r==="excused"||r==="fail"?"alert":"edit"} s={13}/>
+              <input value={notes[it.n]||""} onChange={e=>onNote(it.n,e.target.value)} placeholder={notePH(it,r)}/>
+            </div>
           </div>);})}
       </div>
     ))}
@@ -69,8 +81,11 @@ export const FCF_CSS=`
 .fcf-ph.add{border-color:#cbd5e1;background:#fff}
 .fcf-ph img{width:100%;height:100%;object-fit:cover}
 .fcf-up{font-size:18px;color:#E8712B;font-weight:800}
-.fcf-exnote{display:flex;align-items:center;gap:7px;margin-top:2px;padding-inline-start:31px}
-.fcf-exnote input{flex:1;border:1px solid #d7dde5;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;outline:none;background:#fffdf7}
-.fcf-exnote input:focus{border-color:#b54708;box-shadow:0 0 0 3px rgba(181,71,8,.1)}
-.fcf-exnote>svg{color:#b54708;flex:none}
+.fcf-note{display:flex;align-items:center;gap:7px;margin-top:2px;padding-inline-start:31px}
+.fcf-note input{flex:1;border:1px solid #e6e9ee;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;outline:none;background:#fafbfc;color:#0f172a}
+.fcf-note input:focus{border-color:#E8712B;box-shadow:0 0 0 3px rgba(232,113,43,.1);background:#fff}
+.fcf-note>svg{color:#cbd5e1;flex:none}
+.fcf-note.hot input{background:#fffdf7;border-color:#f0d9b5}
+.fcf-note.hot input:focus{border-color:#b54708;box-shadow:0 0 0 3px rgba(181,71,8,.1)}
+.fcf-note.hot>svg{color:#b54708}
 `;

@@ -2,7 +2,7 @@
 import{ITEMS,AXES,RESP_AR,complianceByAxis,effect,bikerItems}from"./fieldChecklist";
 
 const RES_LBL={pass:["مطابق","#087443","#e7f7ef"],half:["جزئي","#b54708","#fef3e2"],fail:["غير مطابق","#b42318","#feecea"],excused:["معفى (إمداد)","#475569","#eef0f3"]};
-const MRES_LBL={pass:["متوفّر","#087443","#e7f7ef"],fail:["ناقص","#b42318","#feecea"]};
+const MRES_LBL={pass:["متوفّر","#087443","#e7f7ef"],half:["بديل جزئي","#b54708","#fef3e2"],fail:["ناقص","#b42318","#feecea"],excused:["معفى (إمداد)","#475569","#eef0f3"]};
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const LOGO=`<img src="${(typeof location!=="undefined"?location.origin:"")}/brand-mark.png" alt="دلو ورغوة" style="width:34px;height:34px;object-fit:contain"/>`;
 
@@ -16,7 +16,8 @@ export function buildReportHTML(round,analysis,opName){
     const rows=ITEMS.filter(i=>i.axis===ax).map(it=>{
       const mgmt=it.resp==="mgmt";const r=results[it.n];const lbl=(mgmt?MRES_LBL:RES_LBL)[r]||["—","#94a3b8","#f4f5f7"];
       const imgs=(photos[it.n]||[]).filter(Boolean);
-      const note=r==="excused"&&notes[it.n]?`<div class="inote">ملاحظة الإعفاء: ${esc(notes[it.n])}</div>`:"";
+      const nprefix=r==="excused"?"ملاحظة الإعفاء: ":r==="fail"?"سبب/إجراء: ":"ملاحظة: ";
+      const note=notes[it.n]?`<div class="inote">${nprefix}${esc(notes[it.n])}</div>`:"";
       return`<tr>
         <td class="c-n">${it.n}</td>
         <td class="c-ar">${esc(it.ar)}<div class="c-resp">${RESP_AR[it.resp]}${mgmt?" ⚠":""}</div>${note}
