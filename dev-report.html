@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تقرير تطوير منصّة دلو ورغوة</title>
+<style>
+:root{--o:#E8712B;--nv:#0f2a43;--nv2:#1a3f5f;--ink:#0f172a;--mut:#64748b;--ln:#eceef1;--gd:#087443;--gdb:#e7f7ef;--wn:#b54708;--wnb:#fef3e2;--bd:#b42318;--bdb:#feecea}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;background:#f4f6f8;color:var(--ink);line-height:1.6;padding:16px;max-width:900px;margin:0 auto}
+.hd{background:linear-gradient(135deg,var(--nv),var(--nv2));color:#fff;border-radius:18px;padding:22px 20px;margin-bottom:16px;box-shadow:0 4px 14px rgba(15,42,67,.18)}
+.hd .lg{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:800;background:rgba(255,255,255,.14);padding:5px 12px;border-radius:20px;margin-bottom:12px}
+.hd h1{font-size:22px;font-weight:800;letter-spacing:-.4px;margin-bottom:6px}
+.hd p{font-size:13px;color:#cfe0f0;font-weight:600}
+.hd .meta{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:12px;color:#9fb8cf;font-weight:600}
+.hd .meta b{color:#fff}
+.sec{background:#fff;border:1px solid var(--ln);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.sec h2{font-size:16px;font-weight:800;color:var(--ink);margin-bottom:4px;display:flex;align-items:center;gap:9px}
+.sec h2 .n{width:26px;height:26px;border-radius:9px;background:#fff2e8;color:var(--o);display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+.sec .sub{font-size:12px;color:var(--mut);font-weight:600;margin:0 35px 14px}
+.new{background:linear-gradient(135deg,#fff7f1,#fff);border-color:#f7d7bf}
+.badge{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:20px;background:var(--gdb);color:var(--gd);vertical-align:3px;margin-inline-start:8px}
+.feat{display:flex;gap:11px;padding:11px 0;border-top:1px dashed var(--ln)}
+.feat:first-of-type{border-top:none}
+.feat .ic{width:30px;height:30px;border-radius:9px;background:#eef4ff;color:#1d5bbf;display:flex;align-items:center;justify-content:center;flex:none;font-size:15px}
+.feat .tx b{font-size:13.5px;font-weight:800;display:block;margin-bottom:2px}
+.feat .tx span{font-size:12.5px;color:var(--mut);font-weight:500}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:4px}
+.stat{background:#f8fafc;border:1px solid var(--ln);border-radius:12px;padding:12px}
+.stat .v{font-size:22px;font-weight:800;letter-spacing:-.5px;color:var(--nv)}
+.stat .l{font-size:11px;color:var(--mut);font-weight:700;margin-top:2px}
+.mods{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:4px}
+.mod{display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid var(--ln);border-radius:11px;padding:9px 11px;font-size:12.5px;font-weight:700}
+.mod .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.dot.ok{background:var(--gd)}.dot.wip{background:var(--wn)}.dot.plan{background:#94a3b8}
+.fin{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.fcard{border-radius:12px;padding:13px;border:1px solid}
+.fcard.g{background:var(--gdb);border-color:#c9ecd9}
+.fcard.r{background:var(--bdb);border-color:#f5cfca}
+.fcard.n{background:#eef4ff;border-color:#d3e2fb}
+.fcard .fv{font-size:19px;font-weight:800;letter-spacing:-.4px}
+.fcard .fl{font-size:11.5px;font-weight:700;margin-top:3px;opacity:.85}
+.note{background:var(--wnb);border:1px solid #f6dcae;border-radius:11px;padding:12px 14px;font-size:12.5px;font-weight:600;color:var(--wn);line-height:1.6;margin-top:6px}
+.note a{color:#9a3412;font-weight:800}
+.todo{list-style:none}
+.todo li{display:flex;gap:9px;padding:9px 0;border-top:1px dashed var(--ln);font-size:13px;font-weight:600}
+.todo li:first-child{border-top:none}
+.todo .tag{font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;flex:none;height:fit-content;margin-top:1px}
+.tag.next{background:#eef4ff;color:#1d5bbf}.tag.soon{background:var(--wnb);color:var(--wn)}.tag.later{background:#f1f3f5;color:#64748b}
+.ft{text-align:center;font-size:11.5px;color:#94a3b8;font-weight:600;padding:10px}
+@media(max-width:600px){.grid{grid-template-columns:repeat(2,1fr)}.mods{grid-template-columns:1fr}.fin{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="hd">
+  <div class="lg">🚗 دلو ورغوة · شريك سويتر 47</div>
+  <h1>تقرير تطوير المنصّة</h1>
+  <p>منصّة العمليات والموارد البشرية والمالية</p>
+  <div class="meta"><span>التاريخ: <b>٣ أغسطس ٢٠٢٦</b></span><span>الفرع: <b>phase0-auth-permissions</b></span><span>الإصدار: <b>e496c89</b></span></div>
+</div>
+
+<div class="sec new">
+  <h2><span class="n">★</span> آخر تحديث<span class="badge">مكتمل — بانتظار النشر</span></h2>
+  <div class="sub">لوحة قيادة زمنية ذكية: نطاق زمني عام + مقارنة + فلاتر + عرض يومي</div>
+  <div class="feat"><div class="ic">🗓️</div><div class="tx"><b>شريط الفترة العام</b><span>هذا الشهر · الشهر الماضي · آخر ٣ أشهر · آخر ٦ أشهر · السنة · من البداية · مخصّص — يتحكّم بكل المؤشرات والألواح دفعة واحدة.</span></div></div>
+  <div class="feat"><div class="ic">📊</div><div class="tx"><b>وضع المقارنة وملخّص الفترة</b><span>كل رقم (غسلات، إيراد، نقد، رواتب، شكاوى معتمدة) مع فرق % تلقائي مقابل الفترة السابقة المكافئة.</span></div></div>
+  <div class="feat"><div class="ic">🔎</div><div class="tx"><b>فلاتر</b><span>فلترة حسب البايكر وحسب الفئة المالية، مع لوحة «المصروفات حسب الفئة» القابلة للضغط.</span></div></div>
+  <div class="feat"><div class="ic">📅</div><div class="tx"><b>العرض اليومي للتدفّق النقدي</b><span>إنتاج وإيراد مُكتسب يوماً بيوم من الحجوزات. رُفع لهذا الغرض ٣٬٥١٠ غسلة على ١٩٨ يوم عمل (جدول ops_daily)، وطابقت المجاميع الشهرية تماماً.</span></div></div>
+</div>
+
+<div class="sec">
+  <h2><span class="n">▦</span> لقطة البيانات في النظام</h2>
+  <div class="sub">بيانات حيّة مرفوعة ومصنّفة</div>
+  <div class="grid">
+    <div class="stat"><div class="v">١٩٨</div><div class="l">يوم عمل مُفصّل</div></div>
+    <div class="stat"><div class="v">٣٬٥١٠</div><div class="l">غسلة (collect_payment)</div></div>
+    <div class="stat"><div class="v">١٣٦</div><div class="l">شكوى سويتر</div></div>
+    <div class="stat"><div class="v">١١</div><div class="l">شهراً مالياً مصنّفاً</div></div>
+    <div class="stat"><div class="v">٧</div><div class="l">أشهر عمليات (بايكر/شهر)</div></div>
+    <div class="stat"><div class="v">٢٣٤</div><div class="l">تسوية وتعويض جودة</div></div>
+    <div class="stat"><div class="v">٤</div><div class="l">بايكرز نشطون</div></div>
+    <div class="stat"><div class="v">١٣+</div><div class="l">وحدة تشغيلية</div></div>
+  </div>
+</div>
+
+<div class="sec">
+  <h2><span class="n">﷼</span> لقطة مالية (منذ سبتمبر ٢٠٢٥)</h2>
+  <div class="sub">من كشف الحساب البنكي المصنّف — ١١ شهراً</div>
+  <div class="fin">
+    <div class="fcard g"><div class="fv">٥٠٬٠٤٧ ﷼</div><div class="fl">إيراد سويتر المُحصّل</div></div>
+    <div class="fcard r"><div class="fv">٢٣٦٬٢٦٢ ﷼</div><div class="fl">إجمالي المصروفات التشغيلية</div></div>
+    <div class="fcard n"><div class="fv">٢٠٦٬٨٠٤ ﷼</div><div class="fl">تمويل داخلي وارد</div></div>
+  </div>
+  <div class="note">⚠️ الهيكل الحالي يعتمد على تمويل داخلي: إيراد سويتر يغطّي نحو ٢١٪ فقط من المصروف التشغيلي. أكبر البنود: التكاليف الحكومية/العمالة والرواتب، تليها الرسوم البنكية القابلة للخفض (~٦٬٤٠٠ ﷼).</div>
+</div>
+
+<div class="sec">
+  <h2><span class="n">✔</span> حالة الوحدات</h2>
+  <div class="sub">🟢 مكتمل · 🟠 قيد التطوير · ⚪ مخطّط</div>
+  <div class="mods">
+    <div class="mod"><span class="dot ok"></span>لوحة القيادة الذكية</div>
+    <div class="mod"><span class="dot ok"></span>التوظيف والمتقدّمون</div>
+    <div class="mod"><span class="dot ok"></span>المقابلات والتعاقد</div>
+    <div class="mod"><span class="dot ok"></span>العمليات والبايكرز</div>
+    <div class="mod"><span class="dot ok"></span>شكاوى سويتر + الصور</div>
+    <div class="mod"><span class="dot ok"></span>التدفّق النقدي الفعلي</div>
+    <div class="mod"><span class="dot ok"></span>التقارير التنفيذية</div>
+    <div class="mod"><span class="dot ok"></span>الأسطول</div>
+    <div class="mod"><span class="dot ok"></span>السكن</div>
+    <div class="mod"><span class="dot ok"></span>الوثائق والتجديدات</div>
+    <div class="mod"><span class="dot ok"></span>الإمداد والمخزون</div>
+    <div class="mod"><span class="dot ok"></span>الموردون</div>
+    <div class="mod"><span class="dot wip"></span>الرواتب (مسير يونيو)</div>
+    <div class="mod"><span class="dot wip"></span>مطابقة/مطالبة سويتر</div>
+    <div class="mod"><span class="dot plan"></span>الحضور والإجازات</div>
+    <div class="mod"><span class="dot plan"></span>الفوترة والإيصالات</div>
+  </div>
+</div>
+
+<div class="sec">
+  <h2><span class="n">→</span> الخطوات القادمة</h2>
+  <ul class="todo">
+    <li><span class="tag next">فوري</span><span>دمج <b>phase0 → main</b> لنشر لوحة القيادة الجديدة على Vercel.</span></li>
+    <li><span class="tag soon">قريب</span><span>تشغيل مسار مراجعة الجودة على الشكاوى الـ١٣٦ (كلها بانتظار المراجعة) → توصية الجودة → اعتماد المالك.</span></li>
+    <li><span class="tag soon">قريب</span><span>إعداد مسير رواتب يونيو ٢٠٢٦ عبر SKL-RPT-001، وتسويات يونيو/يوليو.</span></li>
+    <li><span class="tag soon">قريب</span><span>إرسال ملف المطابقة والمطالبة إلى سويتر (٥١ طلباً / ١٬٠٢٠ ﷼ تقديري متحفّظ).</span></li>
+    <li><span class="tag later">لاحقاً</span><span>وحدة الحضور والإجازات (وثيقة تصميم جاهزة — بانتظار ٣ قرارات).</span></li>
+    <li><span class="tag later">لاحقاً</span><span>وحدتا الفوترة والإيصالات (خطة معتمدة مبدئياً).</span></li>
+    <li><span class="tag later">لاحقاً</span><span>كشوف بطاقات فبراير/مايو ٢٠٢٦ لاستكمال التفصيل المالي.</span></li>
+  </ul>
+</div>
+
+<div class="ft">تقرير آلي — منصّة دلو ورغوة · ٣ أغسطس ٢٠٢٦</div>
+
+</body>
+</html>

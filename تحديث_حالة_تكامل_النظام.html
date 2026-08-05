@@ -1,0 +1,100 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تحديث حالة تكامل النظام — دلو ورغوة</title>
+<style>
+:root{--brand:#E8712B;--ink:#0f172a;--mut:#64748b;--line:#e6e9ee;--bg:#f4f5f7;--ok:#087443;--okbg:#e7f7ef;--warn:#b54708;--warnbg:#fef3e2;--crit:#b42318;--critbg:#feecea}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Segoe UI',Tahoma,system-ui,sans-serif;font-size:14px;line-height:1.7}
+.wrap{max-width:1000px;margin:0 auto;padding:26px 18px 60px}
+.hero{background:linear-gradient(135deg,#0e1622,#1a2a3f);color:#fff;border-radius:20px;padding:26px 28px;margin-bottom:18px}
+.hero h1{margin:0 0 6px;font-size:23px;font-weight:800}
+.hero p{margin:0;color:#c7d0dc;font-size:13.5px}
+.hero .tag{display:inline-block;background:rgba(232,113,43,.22);color:#f5a35f;font-weight:700;font-size:12px;padding:3px 12px;border-radius:20px;margin-top:12px}
+.prog{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.pc{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 15px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.pc b{display:block;font-size:24px;font-weight:800;letter-spacing:-.5px}
+.pc span{font-size:11.5px;color:var(--mut);font-weight:700}
+.bar{height:10px;background:#eef1f4;border-radius:6px;overflow:hidden;margin:14px 0 22px}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),#32d583);border-radius:6px}
+h2{font-size:17px;font-weight:800;margin:24px 0 12px;display:flex;align-items:center;gap:9px}
+h2 .n{width:26px;height:26px;border-radius:8px;background:var(--brand);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:6px 4px;box-shadow:0 1px 2px rgba(16,24,40,.05);margin-bottom:14px}
+table{width:100%;border-collapse:collapse}
+th{font-size:11.5px;color:var(--mut);text-align:right;padding:11px 14px;border-bottom:2px solid var(--line);background:#fafbfc}
+td{padding:11px 14px;border-bottom:1px solid #f1f3f5;font-size:12.5px;vertical-align:top}
+tr:last-child td{border-bottom:none}
+.pill{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:20px;white-space:nowrap}
+.p-ok{background:var(--okbg);color:var(--ok)}.p-warn{background:var(--warnbg);color:var(--warn)}.p-crit{background:var(--critbg);color:var(--crit)}.p-info{background:#eef4ff;color:#1d5bbf}
+.kbd{background:#f1f3f5;border-radius:6px;padding:1px 6px;font-size:11.5px;font-weight:700;color:#334155;font-family:ui-monospace,monospace}
+.live{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.live-g{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
+.lg{background:#f8fafc;border:1px solid #eef1f4;border-radius:11px;padding:10px 12px}
+.lg b{font-size:18px;font-weight:800;display:block}.lg span{font-size:11px;color:var(--mut);font-weight:600}
+.alert{display:flex;align-items:center;gap:9px;border-radius:11px;padding:10px 12px;margin-top:8px;font-size:12.5px;font-weight:700}
+.foot{text-align:center;color:#94a3b8;font-size:11.5px;margin-top:22px}
+</style></head><body><div class="wrap">
+
+<div class="hero">
+  <h1>تحديث حالة تكامل النظام</h1>
+  <p>الإصدار الثاني — ما أُنجز من توصيات المراجعة، وما تبقّى، ولقطة حيّة للنظام</p>
+  <span class="tag">v2.0 · 2 أغسطس 2026 · SSP Partner 47</span>
+</div>
+
+<div class="prog">
+  <div class="pc"><b style="color:var(--ok)">5 / 10</b><span>توصيات منفّذة</span></div>
+  <div class="pc"><b style="color:var(--ok)">2 / 5</b><span>تعارضات مُغلقة كلياً</span></div>
+  <div class="pc"><b>29</b><span>وثيقة مُتابَعة (16 فرد)</span></div>
+  <div class="pc"><b style="color:var(--crit)">1</b><span>تنبيه حرج (إقامة عارف)</span></div>
+</div>
+<div class="bar"><i style="width:50%"></i></div>
+
+<h2><span class="n">١</span> ما أُنجز منذ المراجعة</h2>
+<div class="card"><table>
+  <thead><tr><th>البند</th><th>ما نُفِّذ</th><th>الحالة</th></tr></thead>
+  <tbody>
+    <tr><td><b>إصلاح فلترة المشغّل</b></td><td>الوحدات على مستوى المؤسسة (الأسطول/السكن/الوثائق/الموردون/الإمداد) لم تعد تختفي عند اختيار مشغّل محدّد</td><td><span class="pill p-ok">✅ مُغلق</span></td></tr>
+    <tr><td><b>توحيد هوية البايكر</b></td><td>ربط الأسطول والحوادث ومخالفات السكن بجدول الموظفين (FK) + قوائم اختيار + توحيد الصيغة — انتهى تعارض الصيغ الأربع</td><td><span class="pill p-ok">✅ مُغلق</span></td></tr>
+    <tr><td><b>وثائق الأفراد + بيانات HR</b></td><td>16 وثيقة فرد (إقامة/جواز/تأمين صحي/رخصة) بأرقام وتواريخ فعلية + إثراء الموظفين (هوية/فصيلة دم/مهنة) + تعبئة هوية الساكن</td><td><span class="pill p-ok">✅ مُغلق</span></td></tr>
+    <tr><td><b>وصل التسعير بالتسوية</b></td><td>وحدة «تسوية سويتر»: احتساب لكل بايكر (شريحة/حافز/خصم/صافي) ومطابقة الفاتورة — أُغلقت الحلقة المالية</td><td><span class="pill p-ok">✅ مُغلق</span></td></tr>
+    <tr><td><b>لوحة قيادة شاملة + تنبيهات</b></td><td>مركز تنبيهات (وثائق/دفعات/حوادث/مخالفات/إمداد) + مؤشرات تشغيلية + إيراد وهامش + تنبيه المهن غير المطابقة</td><td><span class="pill p-ok">✅ مُغلق</span></td></tr>
+  </tbody>
+</table></div>
+
+<h2><span class="n">٢</span> المتبقّي من التوصيات</h2>
+<div class="card"><table>
+  <thead><tr><th>البند</th><th>الوصف</th><th>الأولوية</th></tr></thead>
+  <tbody>
+    <tr><td><b>التنبيهات الاستباقية المجدولة</b></td><td>مهمة يومية + واتساب (45/30/14/7 يوماً) للوثائق والدفعات — التنبيهات حالياً سلبية على اللوحة فقط (توصية التقرير §7)</td><td><span class="pill p-crit">أولوية ١</span></td></tr>
+    <tr><td><b>عملية إنهاء الخدمة (Offboarding)</b></td><td>مسار إعادة العُهد وإخلاء السكن وتسليم الوثائق عند مغادرة موظف</td><td><span class="pill p-warn">أولوية ٢</span></td></tr>
+    <tr><td><b>تعميم ربط الوثيقة بالكيان</b></td><td>استمارة/تأمين ← مركبة عبر مرجع كيان في الوثيقة (كما رُبطت وثائق الأفراد بالموظف)</td><td><span class="pill p-warn">أولوية ٢</span></td></tr>
+    <tr><td><b>توحيد عُهدة الدراجة + التقاط تكاليف الأسطول</b></td><td>ربط عُهدة الإعداد بالأسطول وتسجيل تكاليف الصيانة في المصروفات لتنعكس في الهامش</td><td><span class="pill p-warn">أولوية ٢</span></td></tr>
+    <tr><td><b>عرض موحّد «الحوادث والجزاءات» + سجل تدقيق + مواءمة الصلاحيات</b></td><td>تحسينات تكامل ورقابة إضافية</td><td><span class="pill p-info">أولوية ٣</span></td></tr>
+  </tbody>
+</table></div>
+
+<h2><span class="n">٣</span> تعارضات باقية (موثّقة)</h2>
+<div class="card"><table>
+  <thead><tr><th>التعارض</th><th>الحالة</th></tr></thead>
+  <tbody>
+    <tr><td><b>التعيين في منصب يمسح المنح اليدوية</b> (مثل صلاحية «الوثائق»)</td><td><span class="pill p-warn">مفتوح — امنح اليدوي بعد التعيين</span></td></tr>
+    <tr><td><b>الحد الأدنى المضمون غير مشروط</b> في الاحتساب بينما العقد يشترط SLA</td><td><span class="pill p-info">مُعالَج جزئياً — الحوافز صارت مشروطة في التسوية</span></td></tr>
+    <tr><td><b>تعريف «الطلب» مقابل «الغسلة»</b></td><td><span class="pill p-info">موثّق — منخفض الأثر</span></td></tr>
+  </tbody>
+</table></div>
+
+<h2><span class="n">٤</span> لقطة حيّة للنظام الآن</h2>
+<div class="live">
+  <div class="live-g">
+    <div class="lg"><b>29</b><span>وثيقة مُتابَعة</span></div>
+    <div class="lg"><b>16</b><span>وثيقة فرد (4 موظفين)</span></div>
+    <div class="lg"><b>4 / 4</b><span>مركبات مربوطة بالموظف</span></div>
+    <div class="lg"><b>4</b><span>إقامات ضمن 90 يوماً</span></div>
+    <div class="lg"><b>2</b><span>مهنة غير مطابقة</span></div>
+    <div class="lg"><b>جاهزة</b><span>تسوية سويتر (بانتظار أول فترة)</span></div>
+  </div>
+  <div class="alert" style="background:var(--critbg);color:var(--crit)">🔴 إقامة عارف الإسلام (1624) تنتهي 11/08/2026 — 9 أيام · الأعلى إيراداً</div>
+  <div class="alert" style="background:var(--warnbg);color:var(--warn)">🟠 مهنتا ميدول حسن وعابد ميا غير مطابقتين — تغيير مطلوب (2,000﷼ إجمالاً) · بند مفتوح</div>
+  <div class="alert" style="background:var(--warnbg);color:var(--warn)">🟠 3 إقامات إضافية تنتهي بين 11 و24 أكتوبر — رصد سيولة سبتمبر</div>
+</div>
+
+<div class="foot">تحديث حالة داخلي — مؤسسة دلو ورغوة التجارية · مبنيّ على الحالة الفعلية لقاعدة البيانات في 2 أغسطس 2026</div>
+</div></body></html>
