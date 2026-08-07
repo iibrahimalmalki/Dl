@@ -35,7 +35,7 @@ export default function DashboardHome({onNav}){
 
   useEffect(()=>{(async()=>{
     const q=(t,c)=>supabase.from(t).select(c).then(({data})=>data||[]).then(x=>x,()=>[]);
-    const[apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix,daily]=await Promise.all([
+    const[apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix,daily,ins]=await Promise.all([
       q("applicants","full_name,application_number,status,ai_classification,ai_score_total,location,saudi_city,bangladesh_district,submitted_at"),
       supabase.from("page_visits").select("step,session_id").eq("page","ad_page").then(({data})=>data||[],()=>[]),
       q("employees","full_name,employee_id,team_id,staff_role,profession_ok"),
@@ -59,8 +59,9 @@ export default function DashboardHome({onNav}){
       q("finance_monthly","period,direction,category,amount,is_capital"),
       q("ops_tickets","period,status,decision"),
       q("ops_daily","day,period,total_bookings,washes,cancel_client,cancel_admin,avg_quality"),
+      supabase.from("insights").select("scope_ar,tone,icon,title,body,recommendation,severity,sort").eq("active",true).order("sort").then(({data})=>data||[],()=>[]),
     ]);
-    setD({apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix,daily});
+    setD({apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix,daily,ins});
   })();},[]);
 
   const s=useMemo(()=>{
@@ -336,6 +337,19 @@ export default function DashboardHome({onNav}){
       </div>
     </div>}
 
+    {/* تحليلات ذكية شاملة — مخزّنة في القاعدة */}
+    {d.ins&&d.ins.length>0&&<div className="dh-ai">
+      <div className="dh-ai-head"><span className="dh-ai-hl"><Icon n="robot" s={16}/> تحليلات ذكية · شاملة</span><span className="dh-ai-cnt">{d.ins.length} رؤية</span></div>
+      <div className="dh-ai-list">
+        {d.ins.map((x,i)=>{const cc=x.tone==="good"?"#087443":x.tone==="bad"?"#b42318":x.tone==="warn"?"#b54708":"#334155";const bg=x.tone==="good"?"#e7f7ef":x.tone==="bad"?"#feecea":x.tone==="warn"?"#fef3e2":"#eef1f4";return(
+          <div className="dh-ai-i" key={i} style={{borderInlineStartColor:cc}}>
+            <div className="dh-ai-t"><span className="dh-ins-ic" style={{background:bg,color:cc}}><Icon n={x.icon||"robot"} s={14}/></span><b>{x.title}</b>{x.scope_ar&&<span className="dh-ai-tag">{x.scope_ar}</span>}</div>
+            <div className="dh-ai-b">{x.body}</div>
+            {x.recommendation&&<div className="dh-ai-r">↪ {x.recommendation}</div>}
+          </div>);})}
+      </div>
+    </div>}
+
     {/* شريط المؤشرات الأساسي */}
     <div className="dh-kpis">
       <Kpi label="البايكرز" ic="bike" ib="#fff2e8" c="#E8712B" n={bikers.length} sub={`${teams.length} فرق`} onClick={()=>nav("employees")}/>
@@ -571,6 +585,18 @@ const CSS=`
 .dh-ins-list{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
 .dh-ins-i{display:flex;align-items:flex-start;gap:9px;background:rgba(255,255,255,.96);border-inline-start:3px solid #ccc;border-radius:11px;padding:10px 12px;font-size:12px;font-weight:600;color:#1d2939;line-height:1.55}
 .dh-ins-ic{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:none}
+.dh-ai{background:#fff;border:1px solid #eceef1;border-radius:15px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.dh-ai-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+.dh-ai-hl{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:800;color:#0f172a}
+.dh-ai-cnt{font-size:11px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:20px;padding:3px 10px}
+.dh-ai-list{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.dh-ai-i{border:1px solid #f0f2f4;border-inline-start:3px solid #ccc;border-radius:12px;padding:11px 13px;background:#fdfdfe}
+.dh-ai-t{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#0f172a}
+.dh-ai-t b{font-weight:800;line-height:1.4}
+.dh-ai-tag{margin-inline-start:auto;font-size:10px;font-weight:700;color:#475569;background:#eef1f4;border-radius:20px;padding:2px 8px;flex:none}
+.dh-ai-b{font-size:11.5px;color:#475569;font-weight:600;line-height:1.65;margin-top:7px}
+.dh-ai-r{font-size:11px;color:#175cd3;font-weight:700;line-height:1.55;margin-top:6px;background:#eff6ff;border-radius:8px;padding:6px 9px}
+@media(max-width:1100px){.dh-ai-list{grid-template-columns:1fr}}
 .dh-targets{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
 .dh-tg{display:flex;flex-direction:column;gap:6px}
 .dh-tg-top{display:flex;flex-direction:column;gap:2px}
