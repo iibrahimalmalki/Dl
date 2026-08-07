@@ -18,6 +18,7 @@ export default function SupplyRequests({opId,owner}){
   const[rows,setRows]=useState([]);const[loading,setLoading]=useState(true);
   const[filter,setFilter]=useState("all");const[msg,setMsg]=useState(null);
   const[now,setNow]=useState(()=>Date.now());
+  const[share,setShare]=useState(null);const[copied,setCopied]=useState(false);
   const focusRef=useRef(typeof window!=="undefined"?window.__lastSupplyRef:null);
 
   useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(t);},[]);
@@ -40,23 +41,22 @@ export default function SupplyRequests({opId,owner}){
   const isOverdue=r=>r.status==="open"&&(now-new Date(r.created_at).getTime())>=(r.sla_hours||24)*3600e3;
   const remainMs=r=>((r.sla_hours||24)*3600e3)-(now-new Date(r.created_at).getTime());
 
-  const copyOpen=async(text,openWa)=>{
-    try{await navigator.clipboard?.writeText(text);}catch(_){}
-    if(openWa){try{window.open(SUPPORT_WA,"_blank");}catch(_){}}
+  const openShare=(ref,text,kind)=>{setCopied(false);setShare({ref,text,kind});};
+  const doCopy=async()=>{
+    const text=share?.text||"";let ok=false;
+    try{await navigator.clipboard.writeText(text);ok=true;}catch(_){
+      try{const ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.top="0";ta.style.opacity="0";document.body.appendChild(ta);ta.focus();ta.select();ok=document.execCommand("copy");document.body.removeChild(ta);}catch(e){}
+    }
+    setCopied(ok);
   };
-  const sendRequest=async(r)=>{
-    await copyOpen(buildSupplyRequestMsg(r),true);
-    setMsg({ok:true,t:`تم نسخ رسالة الطلب ${r.ref} — الصقها في قروب مركز الدعم`});
-  };
+  const sendRequest=(r)=>{openShare(r.ref,buildSupplyRequestMsg(r),"send");};
   const escalate=async(r)=>{
-    const text=buildEscalationMsg(r);
-    try{await navigator.clipboard?.writeText(text);}catch(_){}
+    let row=r;
     if(r.status!=="escalated"){
       const{data}=await supabase.from("supply_requests").update({status:"escalated",escalated_at:new Date().toISOString()}).eq("id",r.id).select().single();
-      if(data)setRows(p=>p.map(x=>x.id===r.id?data:x));
+      if(data){setRows(p=>p.map(x=>x.id===r.id?data:x));row=data;}
     }
-    try{window.open(SUPPORT_WA,"_blank");}catch(_){}
-    setMsg({ok:true,t:`تم تجهيز رسالة التصعيد للطلب ${r.ref} ونسخها`});
+    openShare(row.ref,buildEscalationMsg(row),"esc");
   };
   const escalateEmail=(r)=>{
     const subject=`تصعيد طلب إمداد ${r.ref} — Supply Request Escalation`;
@@ -128,6 +128,18 @@ export default function SupplyRequests({opId,owner}){
           {owner&&<button className="sq-b del" onClick={()=>del(r)}><Icon n="trash" s={12}/></button>}
         </div>
       </div>);})}
+
+    {share&&<div className="sq-ov" onClick={()=>setShare(null)}>
+      <div className="sq-modal" onClick={e=>e.stopPropagation()}>
+        <div className="sq-mh"><b>{share.kind==="esc"?"رسالة تصعيد":"رسالة الطلب"} · {share.ref}</b><button className="sq-x" onClick={()=>setShare(null)}><Icon n="x" s={15}/></button></div>
+        <div className="sq-mnote"><Icon n="alert" s={13}/> واتساب لا يسمح بتعبئة النص تلقائياً داخل المجموعة. الخطوات: <b>١) انسخ الرسالة</b> ← <b>٢) افتح المجموعة</b> ← <b>٣) الصقها وأرسل</b>.</div>
+        <textarea className="sq-ta" readOnly value={share.text} onFocus={e=>e.target.select()} dir="rtl"/>
+        <div className="sq-mact">
+          <button className={"sq-b wa"+(copied?" ok2":"")} onClick={doCopy}><Icon n={copied?"check":"doc"} s={14}/> {copied?"تم النسخ ✓":"نسخ الرسالة"}</button>
+          <button className="sq-b open" onClick={()=>{try{window.open(SUPPORT_WA,"_blank");}catch(_){}}}><Icon n="send" s={14}/> فتح المجموعة</button>
+        </div>
+      </div>
+    </div>}
   </div>);
 }
 function fmtRemain(ms){if(ms<=0)return"انتهت";const h=Math.floor(ms/3600e3),m=Math.floor(ms%3600e3/6e4);return h>0?`${h} ساعة و${m} دقيقة`:`${m} دقيقة`;}
@@ -173,5 +185,15 @@ const CSS=`
 .sq-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:16px;padding:40px 24px;text-align:center}
 .sq-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff2e8,#ffe2cc);color:var(--b)}
 .sq-empty h3{font-size:16px;margin:0 0 8px}.sq-empty p{color:#64748b;font-size:12.5px;max-width:440px;margin:0 auto;line-height:1.7}
+.sq-b.open{border-color:#b7e4cd;background:#effaf3;color:#087443}
+.sq-b.wa.ok2{background:#087443;color:#fff;border-color:#087443}
+.sq-ov{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px}
+.sq-modal{background:#fff;border-radius:18px;width:min(520px,100%);max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(16,24,40,.35);padding:16px}
+.sq-mh{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;color:#0f172a;margin-bottom:10px}
+.sq-x{width:28px;height:28px;border-radius:8px;border:1px solid #e6e9ee;background:#fff;color:#475569;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.sq-mnote{display:flex;align-items:flex-start;gap:7px;background:#fffbeb;border:1px solid #fde9c8;color:#92600e;font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-bottom:11px;line-height:1.7}
+.sq-ta{width:100%;min-height:230px;border:1px solid #e6e9ee;border-radius:12px;padding:11px;font-family:inherit;font-size:12px;line-height:1.7;color:#0f172a;background:#fafbfc;resize:vertical;white-space:pre-wrap}
+.sq-mact{display:flex;gap:9px;margin-top:12px}
+.sq-mact .sq-b{flex:1;justify-content:center;padding:11px;font-size:13px}
 @media(max-width:720px){.sq-kpis{grid-template-columns:1fr 1fr}}
 `;

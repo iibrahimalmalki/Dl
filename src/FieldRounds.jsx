@@ -145,11 +145,8 @@ export default function FieldRounds({opId,onGo}){
     const row={operator_id:(opId&&opId!=="all")?opId:null,ref,round_id:r.id,biker_name:r.biker_name||"",sweater_id:r.sweater_id||"",items,requesting_dept:"التشغيل — دلو ورغوة"};
     const{data,error}=await supabase.from("supply_requests").insert(row).select().single();
     if(error){setMsg({ok:false,t:"تعذّر إنشاء الطلب: "+(error.message||error)});return;}
-    const reqObj={...row,created_at:data.created_at,round_date:r.round_date,round_time:r.round_time,sla_hours:data.sla_hours};
-    try{await navigator.clipboard?.writeText(buildSupplyRequestMsg(reqObj));}catch(_){}
     if(typeof window!=="undefined")window.__lastSupplyRef=ref;
-    try{window.open(SUPPORT_WA,"_blank");}catch(_){}
-    setMsg({ok:true,t:`تم إنشاء طلب الإمداد ${ref} ونسخ رسالته — فتح السجل…`});
+    setMsg({ok:true,t:`تم إنشاء طلب الإمداد ${ref} — فتح السجل… اضغط «رسالة الطلب» لنسخها وإرسالها في المجموعة`});
     if(onGo)setTimeout(()=>onGo("supply_requests"),400);
   };
 
