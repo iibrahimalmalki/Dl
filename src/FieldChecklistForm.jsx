@@ -15,7 +15,7 @@ function notePH(it,r){
 
 // نموذج قائمة التحقق المشترك (جولة المشرف + الجولة الذاتية)
 // props: items, res, onRes(n,v), notes, onNote(n,t), photos, onUpload(n,idx,file), uploading, onView(url), allowExtra, compact
-export default function FieldChecklistForm({items=ITEMS,res={},onRes,notes={},onNote,photos={},onUpload,uploading,onView,allowExtra=true,compact}){
+export default function FieldChecklistForm({items=ITEMS,res={},onRes,notes={},onNote,photos={},onUpload,uploading,onView,parts={},onPart,allowExtra=true,compact}){
   const axes=[...new Set(items.map(i=>i.axis))];
   return(<div className="fcf">
     <div className="fcf-legend">
@@ -41,6 +41,11 @@ export default function FieldChecklistForm({items=ITEMS,res={},onRes,notes={},on
                   {up?<span className="fcf-up">…</span>:url?<img src={url} alt={lbl} onClick={e=>{e.preventDefault();onView&&onView(url);}}/>:<><Icon n="camera" s={15}/><span>{lbl}</span></>}
                 </label>);})}
               {allowExtra&&<label className="fcf-ph add"><input type="file" accept="image/*" capture="environment" hidden onChange={e=>onUpload(it.n,slots,e.target.files[0])}/><Icon n="plus" s={16}/><span>إضافية</span></label>}
+            </div>}
+            {it.parts&&["half","fail","excused"].includes(r)&&<div className="fcf-parts">
+              <span className="fcf-parts-l">الجزء المتأثر · Affected part:</span>
+              {it.parts.map(p=>{const on=(parts[it.n]||[]).includes(p.ar);return(
+                <button key={p.ar} type="button" className={"fcf-chip"+(on?" on":"")} onClick={()=>onPart&&onPart(it.n,p.ar)}>{p.ar}</button>);})}
             </div>}
             <div className={"fcf-note"+(r==="excused"||r==="fail"?" hot":"")}>
               <Icon n={r==="excused"||r==="fail"?"alert":"edit"} s={13}/>
@@ -88,4 +93,8 @@ export const FCF_CSS=`
 .fcf-note.hot input{background:#fffdf7;border-color:#f0d9b5}
 .fcf-note.hot input:focus{border-color:#b54708;box-shadow:0 0 0 3px rgba(181,71,8,.1)}
 .fcf-note.hot>svg{color:#b54708}
+.fcf-parts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px;padding-inline-start:31px}
+.fcf-parts-l{font-size:10.5px;color:#94a3b8;font-weight:700}
+.fcf-chip{padding:4px 11px;border-radius:20px;border:1px solid #e6e9ee;background:#fff;color:#475569;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.fcf-chip.on{background:#fef3e2;border-color:#fbdba7;color:#b54708}
 `;
