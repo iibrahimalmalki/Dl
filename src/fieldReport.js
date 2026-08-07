@@ -324,34 +324,21 @@ export function buildSupplyRequestMsg(req){
   const ct=fmtBoth(created);
   const items=req.items||[];
   const L=[];
-  L.push("🫧 دلو ورغوة × سويتر | Delo & Raghwa × Sweater");
-  L.push("📋 طلب إمداد — نواقص جولة ميدانية | Supply Request — Field Round Shortages");
+  L.push("🫧 دلو ورغوة × سويتر — طلب إمداد | Supply Request");
+  L.push(`🔖 ${req.ref||"—"}`);
+  L.push(`👤 ${req.biker_name||"—"} (#${req.sweater_id||"—"})`);
+  L.push(`🕒 ${ct.ar}`);
+  L.push(`🏷️ ${req.requesting_dept||"التشغيل — دلو ورغوة"} · Partner 47`);
   L.push("");
-  L.push(`🔖 مرجع الطلب | Ref: ${req.ref||"—"}`);
-  L.push(`👤 البايكر | Biker: ${req.biker_name||"—"} (#${req.sweater_id||"—"})`);
-  L.push(`🗓️ وقت الجولة | Round: ${req.round_date||"—"}${req.round_time?" "+req.round_time:""}`);
-  L.push(`🕒 وقت رفع الطلب | Submitted: ${ct.ar} — ${ct.en}`);
-  L.push(`🏷️ الإدارة الطالبة | Requesting dept: ${req.requesting_dept||"التشغيل — دلو ورغوة"} · Partner 47`);
-  L.push("");
-  L.push("أثناء الجولة الميدانية وُجدت النواقص التالية والمطلوب توفيرها:");
-  L.push("During the field round, the following shortages were found and are requested:");
+  L.push("المطلوب توفيره | Requested:");
   items.forEach((it,i)=>{
-    L.push(`${i+1}) #${it.n} ${it.ar} | ${it.en}`);
-    if(it.parts_ar)L.push(`   • الجزء المطلوب | Part needed: ${it.parts_ar} / ${it.parts_en}`);
-    L.push(`   • النوع/الفئة | Type/Category: ${it.type} — ${it.category}${it.category_en?` (${it.category_en})`:""}`);
-    L.push(`   • الحالة | Status: ${it.status_ar} / ${it.status_en}${it.note?` — ${it.note}`:""}`);
+    const mat=it.parts_ar||it.category||it.ar;
+    const matEn=it.parts_en||it.category_en||it.en;
+    L.push(`${i+1}) ${mat}${matEn?` · ${matEn}`:""} — ${it.status_ar}`);
   });
   if(!items.length)L.push("• لا نواقص | none");
   L.push("");
-  L.push("— آلية التصعيد | Escalation —");
-  L.push("1) القناة الأساسية: هذا القروب (مركز الدعم) | Primary: this support group.");
-  L.push("2) بعد 24 ساعة بلا حل/رد → البريد | After 24h → email:");
-  L.push("   support@jibalalsahil.com, operations@jibalalsahil.com, syed.ali@jibalalsahil.com, ssp@sweater.sa");
-  L.push("3) التصعيد إلى سويتر | Escalate to Sweater:");
-  L.push("   abd.khrashy@sweater.sa, reem@sweater.sa, m.qurashi@sweater.sa");
-  L.push("");
-  L.push("📎 مرفق: تقرير الجولة (PDF) وصور التوثيق | Attached: round report (PDF) & evidence photos.");
-  L.push("⚠ لا يُنظر في الطلبات خارج القنوات الرسمية (واتساب/إيميل) | Requests outside official channels are not considered.");
+  L.push("📎 مرفق: تقرير الجولة (PDF) وصور التوثيق.");
   return L.join("\n");
 }
 
