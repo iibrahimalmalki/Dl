@@ -3,7 +3,8 @@ import{supabase,ensureFreshToken,compressImage,uploadAuthed}from"./supabase";
 import Icon from"./Icon";
 import{AXES,ITEMS,bikerItems,mgmtItems,compliance,complianceByAxis,effect,RESP_AR}from"./fieldChecklist";
 import{analyzeRound}from"./fieldAnalysis";
-import{openReport,buildWhatsApp}from"./fieldReport";
+import{openReport,shortageItems,makeRef,buildSupplyRequestMsg}from"./fieldReport";
+const SUPPORT_WA="https://chat.whatsapp.com/K5ePnROKEcFD03UesTbeJV";
 import FieldChecklistForm,{FCF_CSS}from"./FieldChecklistForm";
 
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
@@ -13,7 +14,7 @@ const nowTime=()=>{const d=new Date();return`${String(d.getHours()).padStart(2,"
 const RES=[["pass","✓","مطابق","g"],["half","≈","جزئي","a"],["fail","✕","غير مطابق","r"],["excused","∅","معفى (إمداد)","m"]];
 const MRES=[["pass","✓","متوفّر","g"],["fail","✕","ناقص","r"]];
 
-export default function FieldRounds({opId}){
+export default function FieldRounds({opId,onGo}){
   const[period,setPeriod]=useState(nowPeriod());
   const[loading,setLoading]=useState(true);
   const[emps,setEmps]=useState([]);
@@ -25,6 +26,7 @@ export default function FieldRounds({opId}){
   const[geo,setGeo]=useState("");          // حالة تحديد الموقع: ""/"loading"/"done"/"err"
   const[res,setRes]=useState({});
   const[itemNotes,setItemNotes]=useState({});   // ملاحظات الإعفاء لكل بند
+  const[itemParts,setItemParts]=useState({});   // الأجزاء المتأثرة للبنود المركّبة (خوذة/صدرية…)
   const[photos,setPhotos]=useState({});   // {itemN:[url,...]} حسب ترتيب الزوايا
   const[uploading,setUploading]=useState("");
   const[notes,setNotes]=useState("");
@@ -83,12 +85,12 @@ export default function FieldRounds({opId}){
   const empBySid=useMemo(()=>{const m={};emps.forEach(e=>{if(e.employee_id)m[String(e.employee_id).trim()]=e;});return m;},[emps]);
 
   // تفريغ النموذج للحالة الابتدائية
-  const resetForm=()=>{setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setPhotos({});setNotes("");setEditId(null);};
+  const resetForm=()=>{setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setItemParts({});setPhotos({});setNotes("");setEditId(null);};
   // فتح نموذج تعديل جولة محفوظة — يحمّل بياناتها بالكامل
   const startEdit=(r)=>{
     setEditId(r.id);
     setHd({sweater_id:r.sweater_id||"",date:r.round_date||todayStr(),time:r.round_time||"",location:r.location||"",location_url:r.location_url||"",gps_lat:r.gps_lat??null,gps_lng:r.gps_lng??null,inspector:r.inspector||me||""});
-    setRes(r.results||{});setItemNotes(r.item_notes||{});setPhotos(r.photos||{});setNotes(r.notes||"");
+    setRes(r.results||{});setItemNotes(r.item_notes||{});setItemParts(r.item_parts||{});setPhotos(r.photos||{});setNotes(r.notes||"");
     setGeo(r.gps_lat?"done":"");setShowReq(false);setShowNew(true);setMsg(null);
     if(typeof window!=="undefined")window.scrollTo({top:0,behavior:"smooth"});
   };
@@ -101,13 +103,14 @@ export default function FieldRounds({opId}){
       const emp=empBySid[String(hd.sweater_id).trim()];
       const cleanPhotos={};Object.entries(photos).forEach(([k,arr])=>{const f=(arr||[]).filter(Boolean);if(f.length)cleanPhotos[k]=f;});
       const cleanNotes={};Object.entries(itemNotes).forEach(([k,v])=>{if(v&&String(v).trim())cleanNotes[k]=v.trim();});
+      const cleanParts={};Object.entries(itemParts).forEach(([k,v])=>{const a=(v||[]).filter(Boolean);if(a.length)cleanParts[k]=a;});
       // تاريخ جولات البايكر للتحليل (نستبعد الجولة الجاري تعديلها كي لا تُقارن بنفسها)
       let histQ=supabase.from("field_rounds").select("results,compliance_pct,round_date").eq("sweater_id",hd.sweater_id).order("round_date",{ascending:false}).limit(13);
       if(editId)histQ=histQ.neq("id",editId);
       const{data:hist}=await histQ;
       const roundObj={results:res,item_notes:cleanNotes,compliance_pct:comp.pct,round_date:hd.date,biker_name:emp?.full_name||"",sweater_id:hd.sweater_id,action_items:comp.actions};
       const analysis=analyzeRound(roundObj,(hist||[]).slice(0,12));
-      const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,round_time:hd.time||null,location:hd.location||null,location_url:hd.location_url||null,gps_lat:hd.gps_lat,gps_lng:hd.gps_lng,inspector:hd.inspector||me||null,results:res,item_notes:cleanNotes,photos:cleanPhotos,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,by_axis:cAxis,ai_analysis:analysis,notes:notes||null};
+      const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,round_time:hd.time||null,location:hd.location||null,location_url:hd.location_url||null,gps_lat:hd.gps_lat,gps_lng:hd.gps_lng,inspector:hd.inspector||me||null,results:res,item_notes:cleanNotes,item_parts:cleanParts,photos:cleanPhotos,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,by_axis:cAxis,ai_analysis:analysis,notes:notes||null};
       if(editId){
         const{data,error}=await supabase.from("field_rounds").update(row).eq("id",editId).select().single();
         if(error)throw error;
@@ -134,11 +137,20 @@ export default function FieldRounds({opId}){
     setRounds(p=>[data,...p]);setShowReq(false);setReqSid("");setMsg({ok:true,t:"تم طلب التوثيق الذاتي — سيظهر للبايكر في بوابته"});
   };
   const markReviewed=async(r)=>{const{error}=await supabase.from("field_rounds").update({status:"reviewed"}).eq("id",r.id);if(!error)setRounds(p=>p.map(x=>x.id===r.id?{...x,status:"reviewed"}:x));};
-  // رسالة واتساب ثنائية اللغة: تُنسخ للحافظة وتُفتح في واتساب لاختيار المستلم
-  const waSend=async(r)=>{
-    const text=buildWhatsApp(r,"دلو ورغوة");
-    try{await navigator.clipboard?.writeText(text);setMsg({ok:true,t:"تم تجهيز رسالة الواتساب ونسخها — اختر المستلم في واتساب"});}catch(_){}
-    try{window.open("https://wa.me/?text="+encodeURIComponent(text),"_blank");}catch(_){}
+  // إنشاء طلب إمداد من نواقص الجولة: يُصدر رقماً مرجعياً، يسجّله، ينسخ الرسالة، ويفتح السجل
+  const createTicket=async(r)=>{
+    const items=shortageItems(r);
+    if(!items.length){setMsg({ok:false,t:"لا نواقص إمداد في هذه الجولة — لا حاجة لطلب"});return;}
+    const ref=makeRef(r,new Date());
+    const row={operator_id:(opId&&opId!=="all")?opId:null,ref,round_id:r.id,biker_name:r.biker_name||"",sweater_id:r.sweater_id||"",items,requesting_dept:"التشغيل — دلو ورغوة"};
+    const{data,error}=await supabase.from("supply_requests").insert(row).select().single();
+    if(error){setMsg({ok:false,t:"تعذّر إنشاء الطلب: "+(error.message||error)});return;}
+    const reqObj={...row,created_at:data.created_at,round_date:r.round_date,round_time:r.round_time,sla_hours:data.sla_hours};
+    try{await navigator.clipboard?.writeText(buildSupplyRequestMsg(reqObj));}catch(_){}
+    if(typeof window!=="undefined")window.__lastSupplyRef=ref;
+    try{window.open(SUPPORT_WA,"_blank");}catch(_){}
+    setMsg({ok:true,t:`تم إنشاء طلب الإمداد ${ref} ونسخ رسالته — فتح السجل…`});
+    if(onGo)setTimeout(()=>onGo("supply_requests"),400);
   };
 
   const kpis=useMemo(()=>{
@@ -191,7 +203,7 @@ export default function FieldRounds({opId}){
         <label className="fr-fld"><span>منفّذ الجولة</span><input value={hd.inspector} onChange={e=>setHd({...hd,inspector:e.target.value})} placeholder="يُملأ تلقائياً حسب حسابك"/></label>
       </div>
 
-      <FieldChecklistForm items={ITEMS} res={res} onRes={(n,v)=>setRes(p=>({...p,[n]:v}))} notes={itemNotes} onNote={(n,t)=>setItemNotes(p=>({...p,[n]:t}))} photos={photos} onUpload={upload} uploading={uploading} onView={setViewer}/>
+      <FieldChecklistForm items={ITEMS} res={res} onRes={(n,v)=>setRes(p=>({...p,[n]:v}))} notes={itemNotes} onNote={(n,t)=>setItemNotes(p=>({...p,[n]:t}))} parts={itemParts} onPart={(n,pt)=>setItemParts(p=>{const cur=p[n]||[];const nx=cur.includes(pt)?cur.filter(x=>x!==pt):[...cur,pt];const o={...p};if(nx.length)o[n]=nx;else delete o[n];return o;})} photos={photos} onUpload={upload} uploading={uploading} onView={setViewer}/>
       <label className="fr-fld" style={{marginTop:4}}><span>ملاحظات / إجراءات تصحيحية</span><input value={notes} onChange={e=>setNotes(e.target.value)} placeholder="اختياري"/></label>
 
       {/* مؤشرات المحاور */}
@@ -233,7 +245,7 @@ export default function FieldRounds({opId}){
         <div className="fr-c-actions">
           {r.status!=="requested"&&<button className="fr-report" onClick={()=>openReport(r,r.ai_analysis,"دلو ورغوة")}><Icon n="print" s={14}/> تقرير الجولة</button>}
           {r.status!=="requested"&&<button className="fr-edit" onClick={()=>startEdit(r)}><Icon n="edit" s={13}/> تعديل</button>}
-          {r.status!=="requested"&&<button className="fr-wa" onClick={()=>waSend(r)}><Icon n="send" s={13}/> واتساب</button>}
+          {r.status!=="requested"&&<button className="fr-wa" onClick={()=>createTicket(r)}><Icon n="send" s={13}/> طلب إمداد</button>}
           {self&&r.status==="submitted"&&<button className="fr-review" onClick={()=>markReviewed(r)}><Icon n="check" s={14}/> مراجعة واعتماد</button>}
           <div style={{flex:1}}/>
           <button className="fr-del" onClick={()=>del(r)}><Icon n="trash" s={13}/> حذف</button>

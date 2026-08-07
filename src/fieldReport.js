@@ -109,7 +109,7 @@ function policyBlock(){
 }
 
 export function buildReportHTML(round,analysis,opName,imgMap){
-  const results=round.results||{};const notes=round.item_notes||{};const photos=round.photos||{};
+  const results=round.results||{};const notes=round.item_notes||{};const photos=round.photos||{};const iparts=round.item_parts||{};
   const pct=round.compliance_pct;const eff=effect(pct);const byAxis=complianceByAxis(results);
   const IMG=u=>(imgMap&&imgMap[u])||u;
   const now=new Date();const issued=fmtBoth(now);
@@ -123,10 +123,13 @@ export function buildReportHTML(round,analysis,opName,imgMap){
       const imgs=(photos[it.n]||[]).filter(Boolean);
       const npx=r==="excused"?["ملاحظة الإعفاء","Exemption note"]:r==="fail"?["سبب/إجراء","Reason/Action"]:["ملاحظة","Note"];
       const note=notes[it.n]?`<div class="inote"><b>${npx[0]} · ${npx[1]}:</b> ${esc(notes[it.n])}</div>`:"";
+      const psel=(iparts[it.n]||[]).filter(Boolean);
+      const pEn=psel.map(pa=>{const p=(it.parts||[]).find(x=>x.ar===pa);return p?p.en:pa;});
+      const pbadge=psel.length?`<div class="ipart">🔧 الجزء المتأثر · Affected part: <b>${esc(psel.join("، "))}</b> · ${esc(pEn.join(", "))}</div>`:"";
       return`<tr>
         <td class="c-n">${it.n}</td>
         <td class="c-ar"><div class="c-t">${esc(it.ar)}</div><div class="c-en">${esc(ITEM_EN[it.n]||"")}</div>
-          <div class="c-resp">${RESP_BI[it.resp][0]} · ${RESP_BI[it.resp][1]}${mgmt?" ⚠":""}</div>${note}
+          <div class="c-resp">${RESP_BI[it.resp][0]} · ${RESP_BI[it.resp][1]}${mgmt?" ⚠":""}</div>${pbadge}${note}
           ${imgs.length?`<div class="c-imgs">${imgs.map(u=>`<img src="${esc(IMG(u))}"/>`).join("")}</div>`:""}</td>
         <td class="c-res"><span class="badge" style="color:${lbl[2]};background:${lbl[3]}">${lbl[0]}</span><span class="badge-en">${lbl[1]}</span></td>
       </tr>`;}).join("");
@@ -193,6 +196,8 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;color:#0f172a;margin:0;background:
 .c-resp{font-size:9.5px;color:#94a3b8;font-weight:500;margin-top:3px}
 .inote{margin-top:6px;font-size:11px;color:#475569;background:#eef0f3;border-radius:7px;padding:6px 9px}
 .inote b{color:#334155}
+.ipart{margin-top:5px;font-size:11px;color:#b54708;background:#fff7ed;border:1px solid #f6dcb8;border-radius:7px;padding:5px 9px;font-weight:600}
+.ipart b{color:#92600e}
 .c-imgs{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
 .c-imgs img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid #e6e9ee;background:#f4f5f7}
 .c-res{width:96px;text-align:center}
@@ -277,6 +282,104 @@ export async function openReport(round,analysis,opName){
   const html=buildReportHTML(round,analysis,opName,imgMap);
   try{w.document.open();w.document.write(html);w.document.close();}catch(_){return false;}
   return true;
+}
+
+// ── تصنيف بنود الإمداد (نوع/فئة) لسلاسل الإمداد | Supply categorization by type/category ──
+export const SUPPLY_CAT={
+  4:{type:"مواد تشغيل/براندينج",cat:"ملصقات سويتر",en:"Branding / Stickers"},
+  7:{type:"زي رسمي",cat:"الزي المعتمد",en:"Official uniform"},
+  9:{type:"زي رسمي",cat:"إكسسوارات الزي (كاب/حذاء)",en:"Uniform accessories (cap/shoes)"},
+  10:{type:"معدات سلامة",cat:"معدات الحماية",en:"Safety / protective gear"},
+  12:{type:"مواد تنظيف",cat:"مواد ومستهلكات",en:"Cleaning materials"},
+};
+const CAT_FALLBACK={type:"إمداد عام",cat:"غير مصنّف",en:"General supply"};
+export function catOf(n){return SUPPLY_CAT[n]||CAT_FALLBACK;}
+
+// يبني قائمة النواقص المصنّفة من نتائج الجولة (بنود الإدارة: ناقص/بديل جزئي/معفى)
+// يحدّد الجزء المتأثر بدقّة للبنود المركّبة (مثل الخوذة ضمن معدات الحماية)
+export function shortageItems(round){
+  const results=round.results||{},notes=round.item_notes||{},iparts=round.item_parts||{};
+  return ITEMS.filter(i=>i.resp==="mgmt"&&["fail","half","excused"].includes(results[i.n])).map(i=>{
+    const c=catOf(i.n),st=MRES_LBL[results[i.n]]||["—","—"];
+    const sel=(iparts[i.n]||[]).filter(Boolean);
+    const partsEn=sel.map(pa=>{const p=(i.parts||[]).find(x=>x.ar===pa);return p?p.en:pa;});
+    return{n:i.n,ar:i.ar,en:ITEM_EN[i.n]||"",type:c.type,category:c.cat,category_en:c.en,
+      status:results[i.n],status_ar:st[0],status_en:st[1],note:notes[i.n]||"",
+      parts:sel,parts_ar:sel.join("، "),parts_en:partsEn.join(", ")};
+  });
+}
+
+// مرجع الطلب | Request reference: DW-<sid>-<YYYYMMDD>-<HHMM>
+export function makeRef(round,d){
+  const p=n=>String(n).padStart(2,"0");
+  const sid=round.sweater_id||"x";
+  const dt=round.round_date?round.round_date.replace(/-/g,""):"00000000";
+  const hm=d?`${p(d.getHours())}${p(d.getMinutes())}`:"0000";
+  return`DW-${sid}-${dt}-${hm}`;
+}
+
+// رسالة الطلب المبدئي لمركز الدعم (ثنائية) | Initial supply-request WhatsApp message
+export function buildSupplyRequestMsg(req){
+  const created=req.created_at?new Date(req.created_at):new Date();
+  const ct=fmtBoth(created);
+  const items=req.items||[];
+  const L=[];
+  L.push("🫧 دلو ورغوة × سويتر | Delo & Raghwa × Sweater");
+  L.push("📋 طلب إمداد — نواقص جولة ميدانية | Supply Request — Field Round Shortages");
+  L.push("");
+  L.push(`🔖 مرجع الطلب | Ref: ${req.ref||"—"}`);
+  L.push(`👤 البايكر | Biker: ${req.biker_name||"—"} (#${req.sweater_id||"—"})`);
+  L.push(`🗓️ وقت الجولة | Round: ${req.round_date||"—"}${req.round_time?" "+req.round_time:""}`);
+  L.push(`🕒 وقت رفع الطلب | Submitted: ${ct.ar} — ${ct.en}`);
+  L.push(`🏷️ الإدارة الطالبة | Requesting dept: ${req.requesting_dept||"التشغيل — دلو ورغوة"} · Partner 47`);
+  L.push("");
+  L.push("أثناء الجولة الميدانية وُجدت النواقص التالية والمطلوب توفيرها:");
+  L.push("During the field round, the following shortages were found and are requested:");
+  items.forEach((it,i)=>{
+    L.push(`${i+1}) #${it.n} ${it.ar} | ${it.en}`);
+    if(it.parts_ar)L.push(`   • الجزء المطلوب | Part needed: ${it.parts_ar} / ${it.parts_en}`);
+    L.push(`   • النوع/الفئة | Type/Category: ${it.type} — ${it.category}${it.category_en?` (${it.category_en})`:""}`);
+    L.push(`   • الحالة | Status: ${it.status_ar} / ${it.status_en}${it.note?` — ${it.note}`:""}`);
+  });
+  if(!items.length)L.push("• لا نواقص | none");
+  L.push("");
+  L.push("— آلية التصعيد | Escalation —");
+  L.push("1) القناة الأساسية: هذا القروب (مركز الدعم) | Primary: this support group.");
+  L.push("2) بعد 24 ساعة بلا حل/رد → البريد | After 24h → email:");
+  L.push("   support@jibalalsahil.com, operations@jibalalsahil.com, syed.ali@jibalalsahil.com, ssp@sweater.sa");
+  L.push("3) التصعيد إلى سويتر | Escalate to Sweater:");
+  L.push("   abd.khrashy@sweater.sa, reem@sweater.sa, m.qurashi@sweater.sa");
+  L.push("");
+  L.push("📎 مرفق: تقرير الجولة (PDF) وصور التوثيق | Attached: round report (PDF) & evidence photos.");
+  L.push("⚠ لا يُنظر في الطلبات خارج القنوات الرسمية (واتساب/إيميل) | Requests outside official channels are not considered.");
+  return L.join("\n");
+}
+
+// رسالة التصعيد بعد تجاوز المهلة (ثنائية) | Escalation message referencing the original request
+export function buildEscalationMsg(req){
+  const created=req.created_at?new Date(req.created_at):new Date();
+  const ct=fmtBoth(created);const el=elapsedBoth(req.created_at,new Date());
+  const items=req.items||[];
+  const L=[];
+  L.push("🔴 تصعيد طلب إمداد | Supply Request — ESCALATION");
+  L.push("");
+  L.push(`بالإشارة إلى طلبنا رقم ${req.ref||"—"} المُرسَل بتاريخ ${ct.ar}،`);
+  L.push(`With reference to our request ${req.ref||"—"} submitted on ${ct.en},`);
+  L.push(`لم يُستكمَل خلال المهلة (${req.sla_hours||24} ساعة — مضى ${el.ar}). نعيد رفع الطلب للمتابعة والتوفير العاجل.`);
+  L.push(`It has not been fulfilled within the SLA (${req.sla_hours||24}h — ${el.en} elapsed). We re-submit it for urgent follow-up.`);
+  L.push("");
+  L.push(`👤 البايكر | Biker: ${req.biker_name||"—"} (#${req.sweater_id||"—"}) · Partner 47`);
+  L.push("النواقص المطلوب توفيرها | Shortages requested:");
+  items.forEach((it,i)=>L.push(`${i+1}) #${it.n} ${it.ar}${it.parts_ar?` — ${it.parts_ar}`:""} | ${it.en} — ${it.type}/${it.category} (${it.status_ar})`));
+  if(!items.length)L.push("• —");
+  L.push("");
+  L.push("موجّه إلى | To (مركز الدعم / Jibal Al-Sahil):");
+  L.push("   support@jibalalsahil.com, operations@jibalalsahil.com, syed.ali@jibalalsahil.com, ssp@sweater.sa");
+  L.push("نسخة/تصعيد إلى سويتر | CC/Escalate to Sweater:");
+  L.push("   abd.khrashy@sweater.sa, reem@sweater.sa, m.qurashi@sweater.sa");
+  L.push("");
+  L.push("📎 مرفق: الطلب الأصلي وتقرير الجولة والإثباتات | Attached: original request, round report & evidence.");
+  return L.join("\n");
 }
 
 // ── مولّد رسالة الواتساب ثنائي اللغة | Bilingual WhatsApp message builder ──
