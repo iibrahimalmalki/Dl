@@ -71,7 +71,7 @@ export default function Operations({opId}){
       if(rows.length){const ins=rows.map(b=>({operator_id:opv,period,employee_id:b.employee_id,sweater_id:b.sweater_id,biker_name:b.biker_name,net_washes:b.net_washes,collect_payment:b.collect_payment,cancel_client:b.cancel_client,cancel_admin:b.cancel_admin,rating:b.rating,approved_complaints:b.approved_complaints,complaint_pct:b.complaint_pct,daily:b.daily||{},updated_at:new Date().toISOString()}));const{error}=await supabase.from("ops_biker_month").insert(ins);if(error)throw error;}
       // tickets
       let d2=supabase.from("ops_tickets").delete().eq("period",period);if(opv)d2=d2.eq("operator_id",opv);else d2=d2.is("operator_id",null);await d2;
-      if(tickets.length){const ins=tickets.map(t=>({operator_id:opv,period,booking_ref:t.booking_ref||"",sweater_id:t.sweater_id||"",biker_name:t.biker_name||"",ticket_date:t.ticket_date||"",description:t.description||"",has_image:!!t.has_image,decision:t.decision||"pending"}));const{error}=await supabase.from("ops_tickets").insert(ins);if(error)throw error;}
+      if(tickets.length){const ins=tickets.map(t=>({operator_id:opv,period,sweater_ticket_no:t.sweater_ticket_no||null,sweater_decision:t.sweater_decision||null,booking_ref:t.booking_ref||"",sweater_id:t.sweater_id||"",biker_name:t.biker_name||"",ticket_date:t.ticket_date||"",description:t.description||"",has_image:!!t.has_image,decision:t.decision||"pending"}));const{error}=await supabase.from("ops_tickets").insert(ins);if(error)throw error;}
       // audit
       const ups=Object.entries(files).map(([kind,f])=>({operator_id:opv,period,kind,filename:f.name,rows:f.rows,uploaded_at:new Date().toISOString()}));
       if(ups.length)await supabase.from("report_uploads").insert(ups);
@@ -129,7 +129,7 @@ export default function Operations({opId}){
       <div className="op-sh"><Icon n="complaints" s={16}/> اعتماد الشكاوى <span>({totals.approved} معتمدة · {totals.pending} معلّقة)</span></div>
       {tickets.map((t,i)=><div className="op-tk" key={i}>
         <div className="op-tk-main">
-          <div className="op-tk-h"><b>{t.biker_name||"—"}</b>{t.sweater_id&&<small>#{t.sweater_id}</small>}{t.booking_ref&&<span className="op-ref">حجز {t.booking_ref}</span>}{t.has_image&&<span className="op-img"><Icon n="eye" s={11}/> صورة</span>}{t.ticket_date&&<span className="op-date">{t.ticket_date}</span>}</div>
+          <div className="op-tk-h">{(t.sweater_ticket_no||t.ticket_no!=null)&&<span className="op-no">شكوى #{t.sweater_ticket_no||String(t.ticket_no).padStart(4,"0")}</span>}{t.sweater_decision&&<span className={"op-sw"+(t.sweater_decision==="report"?"":" hot")}>سويتر: {t.sweater_decision==="report"?"بلاغ":t.sweater_decision}</span>}<b>{t.biker_name||"—"}</b>{t.sweater_id&&<small>#{t.sweater_id}</small>}{t.booking_ref&&<span className="op-ref">حجز {t.booking_ref}</span>}{t.has_image&&<span className="op-img"><Icon n="eye" s={11}/> صورة</span>}{t.ticket_date&&<span className="op-date">{t.ticket_date}</span>}</div>
           <div className="op-desc">{t.description||"—"}</div>
         </div>
         <div className="op-dec">
@@ -196,6 +196,9 @@ const CSS=`
 .op-tk-h{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px}
 .op-tk-h b{font-size:13px}.op-tk-h small{color:#94a3b8}
 .op-ref{background:#f4f5f7;border-radius:6px;padding:1px 7px;font-size:10px;color:#64748b;font-weight:700}
+.op-no{background:#eef2f7;border:1px solid #dde3ec;border-radius:6px;padding:1px 7px;font-size:10px;color:#0f172a;font-weight:800;letter-spacing:.3px}
+.op-sw{background:#f2f4f7;border:1px solid #e4e7ec;border-radius:6px;padding:1px 7px;font-size:10px;color:#475467;font-weight:800}
+.op-sw.hot{color:#b54708;background:#fff4e8;border-color:#fddcb9}
 .op-img{display:inline-flex;align-items:center;gap:3px;background:#eff6ff;color:#175cd3;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700}
 .op-date{font-size:10.5px;color:#94a3b8}
 .op-desc{font-size:12px;color:#475569;line-height:1.5}
