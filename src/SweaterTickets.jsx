@@ -197,7 +197,7 @@ export default function SweaterTickets({opId,me,owner}){
             {gallery.length>1&&<span className="st-more">+{gallery.length-1}</span>}
           </div>
           <div style={{flex:1,minWidth:0}}>
-            <div className="st-h"><b>{t.sub_category||t.description||"شكوى عميل"}</b>{t.compensation&&<span className="st-comp">تعويض العميل: {t.compensation}</span>}{!img&&t.no_customer_image&&<span className="st-noimgtag"><Icon n="image" s={11}/> لا توجد صورة من العميل</span>}</div>
+            <div className="st-h">{(t.sweater_ticket_no||t.ticket_no!=null)&&<span className="st-no">شكوى #{t.sweater_ticket_no||String(t.ticket_no).padStart(4,"0")}</span>}{t.sweater_decision&&<span className={"st-sw"+(t.sweater_decision==="report"?"":" hot")}>سويتر: {t.sweater_decision==="report"?"بلاغ":t.sweater_decision}</span>}<b>{t.sub_category||t.description||"شكوى عميل"}</b>{t.compensation&&<span className="st-comp">تعويض العميل: {t.compensation}</span>}{!img&&t.no_customer_image&&<span className="st-noimgtag"><Icon n="image" s={11}/> لا توجد صورة من العميل</span>}</div>
             <div className="st-sub"><span>{t.biker_name||"—"}{t.sweater_id?` · #${t.sweater_id}`:""}</span><span className="st-dot">·</span><span>{t.ticket_date||""}</span>{t.booking_ref&&<><span className="st-dot">·</span><span>حجز {t.booking_ref}</span></>}</div>
             {t.description&&t.sub_category&&<div className="st-desc">{t.description}</div>}
           </div>
@@ -304,6 +304,9 @@ const CSS=`
 .st-lbcount{position:absolute;inset-block-end:20px;inset-inline-start:50%;transform:translateX(-50%);color:#fff;font-size:13px;font-weight:700;background:rgba(0,0,0,.4);padding:3px 12px;border-radius:20px}
 .st-saved{position:absolute;inset-block-end:2px;inset-inline-end:2px;width:15px;height:15px;border-radius:50%;background:#12b76a;color:#fff;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff}
 .st-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.st-no{font-size:10.5px;font-weight:800;color:#0f172a;background:#eef2f7;border:1px solid #dde3ec;border-radius:6px;padding:2px 8px;flex:none;letter-spacing:.3px}
+.st-sw{font-size:10px;font-weight:800;color:#475467;background:#f2f4f7;border:1px solid #e4e7ec;border-radius:6px;padding:2px 8px;flex:none}
+.st-sw.hot{color:#b54708;background:#fff4e8;border-color:#fddcb9}
 .st-h b{font-size:13.5px;font-weight:800;color:#0f172a}
 .st-comp{font-size:10.5px;font-weight:700;color:#7a3d00;background:#fff2e6;border:1px solid #fddcb9;border-radius:6px;padding:2px 7px}
 .st-sub{font-size:11.5px;color:#64748b;display:flex;align-items:center;gap:6px;flex-wrap:wrap}

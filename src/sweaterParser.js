@@ -66,6 +66,8 @@ export function parseQC(rows){
 export function parseTickets(rows){
   return(rows||[]).map((r,i)=>({
     idx:i,
+    sweater_ticket_no:String(pick(r,["الرقم","Ticket ID","Ticket Number","Ticket No","Ticket #","رقم التذكرة","رقم الشكوى"])??"").trim(),
+    sweater_decision:String(pick(r,["العنوان","Title","Type","Decision","القرار","النوع"])??"").trim(),
     booking_ref:String(pick(r,["Booking ID","Booking Number","Booking Ref","Order ID","رقم الحجز"])??"").trim(),
     biker_name:String(pick(r,["Biker Name","Biker","اسم البايكر"])??"").trim(),
     sweater_id:String(pick(r,["Biker ID","Biker Code","Sweater ID","رقم البايكر"])??"").trim(),
