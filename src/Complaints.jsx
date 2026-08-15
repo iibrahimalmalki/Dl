@@ -1,7 +1,7 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
-import SweaterTickets from"./SweaterTickets";
+import SweaterTickets from"./SweaterTickets2";
 import{VIOLATIONS,SEVERITY,byCode,objectionState,internalDeadline,seriousRepeat}from"./violations";
 
 export default function Complaints({opId,me,owner}){
