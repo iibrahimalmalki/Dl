@@ -342,6 +342,63 @@ export function buildSupplyRequestMsg(req){
   return L.join("\n");
 }
 
+// ── تجميع وتصنيف نواقص كل الطلبات المفتوحة في طلب واحد ──
+// يفرز المواد حسب النوع/الفئة، ويدمج المتطابقة مع ذكر البايكرز المحتاجين لكل مادة.
+export function classifyOpenRequests(reqs){
+  const map=new Map();
+  (reqs||[]).forEach(r=>{
+    const biker={name:r.biker_name||"—",id:r.sweater_id||"—"};
+    (r.items||[]).forEach(it=>{
+      const cat=it.category||"غير مصنّف", catEn=it.category_en||"", type=it.type||"إمداد";
+      const partsEn=(it.parts_en?String(it.parts_en).split(", "):[]);
+      const parts=(it.parts&&it.parts.length)
+        ? it.parts.map((p,i)=>({ar:p,en:partsEn[i]||""}))
+        : [{ar:it.category||it.ar||"—",en:it.category_en||it.en||""}];
+      parts.forEach(p=>{
+        const key=type+"|"+cat+"|"+p.ar;
+        if(!map.has(key))map.set(key,{type,cat,cat_en:catEn,ar:p.ar,en:p.en,bikers:[]});
+        const g=map.get(key);
+        if(!g.bikers.some(b=>b.id===biker.id&&b.name===biker.name))g.bikers.push(biker);
+      });
+    });
+  });
+  const groups=new Map();
+  for(const m of map.values()){
+    const gk=m.type+"|"+m.cat;
+    if(!groups.has(gk))groups.set(gk,{type:m.type,cat:m.cat,cat_en:m.cat_en,materials:[]});
+    groups.get(gk).materials.push({ar:m.ar,en:m.en,bikers:m.bikers});
+  }
+  return [...groups.values()];
+}
+
+// رسالة الطلب المجمّع — مصنّفة حسب الفئة، مادة واحدة لكل سطر مع البايكرز المحتاجين
+export function buildConsolidatedMsg(reqs,d){
+  const groups=classifyOpenRequests(reqs);
+  const nb=new Set((reqs||[]).map(r=>(r.sweater_id||"")+"|"+(r.biker_name||""))).size;
+  const p=n=>String(n).padStart(2,"0");
+  const ref=d?`DW-BULK-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`:"DW-BULK";
+  const L=[];
+  L.push("🫧 دلو ورغوة × سويتر — طلب إمداد مجمّع | Consolidated Supply Request");
+  L.push(`🔖 ${ref}`);
+  L.push(`🏷️ التشغيل — دلو ورغوة · Partner 47`);
+  L.push(`📊 يشمل ${(reqs||[]).length} طلب مفتوح · ${nb} بايكر`);
+  L.push("");
+  L.push("المطلوب توفيره — مصنّفاً حسب الفئة | Requested (classified):");
+  let idx=0;
+  groups.forEach(g=>{
+    L.push(`▪️ ${g.cat}${g.cat_en?` · ${g.cat_en}`:""}`);
+    g.materials.forEach(m=>{
+      idx++;
+      const who=m.bikers.map(b=>`${b.name} (#${b.id})`).join("، ");
+      L.push(`   ${idx}) ${m.ar}${m.en?` · ${m.en}`:""} — ${m.bikers.length} بايكر: ${who}`);
+    });
+  });
+  if(!idx)L.push("• لا نواقص مفتوحة | none");
+  L.push("");
+  L.push("📎 مرفق: تقارير الجولات وصور التوثيق.");
+  return L.join("\n");
+}
+
 // رسالة التصعيد بعد تجاوز المهلة (ثنائية) | Escalation message referencing the original request
 export function buildEscalationMsg(req){
   const created=req.created_at?new Date(req.created_at):new Date();
