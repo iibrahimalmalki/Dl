@@ -55,22 +55,36 @@ export default function SweaterTickets({opId,me,owner}){
 
   const setB=(id,v)=>setBusy(p=>({...p,[id]:v}));
 
-  const pullImage=async(t)=>{
-    if(!t.sweater_pic_url){setMsg({ok:false,t:"لا يوجد رابط صورة من سويتر لهذه الشكوى"});return;}
+  const pullImage=async(t,urlArg,uniq)=>{
+    const url=urlArg||t.sweater_pic_url;
+    if(!url){setMsg({ok:false,t:"لا يوجد رابط صورة من سويتر لهذه الشكوى"});return;}
     setB(t.id,true);setMsg(null);
     try{
       const{data}=await supabase.auth.getSession();const s=data&&data.session;
       if(!s||!s.access_token)throw new Error("انتهت الجلسة — سجّل الدخول من جديد");
-      const path=`${t.period}/${t.booking_ref||t.id}.jpg`;
-      const res=await fetch(`${SUPA_URL}/functions/v1/ticket-image-pull`,{method:"POST",headers:{Authorization:`Bearer ${s.access_token}`,apikey:SUPA_ANON,"Content-Type":"application/json"},body:JSON.stringify({url:t.sweater_pic_url,path,ticket_id:t.id})});
+      const path=`${t.period}/${t.booking_ref||t.id}${uniq?"-u"+Date.now():""}.jpg`;
+      const res=await fetch(`${SUPA_URL}/functions/v1/ticket-image-pull`,{method:"POST",headers:{Authorization:`Bearer ${s.access_token}`,apikey:SUPA_ANON,"Content-Type":"application/json"},body:JSON.stringify({url,path,ticket_id:t.id})});
       let out=null;try{out=await res.json();}catch(_){}
       if(!res.ok||!out||!out.url)throw new Error((out&&out.message)||("HTTP "+res.status));
       const pics=[...(t.stored_pics||[]),out.path];
-      await supabase.from("ops_tickets").update({stored_pics:pics}).eq("id",t.id);
-      setRows(p=>p.map(r=>r.id===t.id?{...r,stored_pic_path:out.path,stored_pics:pics,has_image:true}:r));
+      await supabase.from("ops_tickets").update({stored_pics:pics,has_image:true}).eq("id",t.id);
+      setRows(p=>p.map(r=>r.id===t.id?{...r,stored_pic_path:r.stored_pic_path||out.path,stored_pics:pics,has_image:true}:r));
       setMsg({ok:true,t:"تم سحب الصورة وتخزينها في نظامنا"});
-    }catch(e){setMsg({ok:false,t:"تعذّر سحب الصورة: "+(e.message||e)});}
-    setB(t.id,false);
+      return true;
+    }catch(e){setMsg({ok:false,t:"تعذّر سحب الصورة: "+(e.message||e)});return false;}
+    finally{setB(t.id,false);}
+  };
+
+  // إرفاق صورة عبر لصق رابطها (مثل رابط سويتر/CloudFront) — يُعرض فوراً ويُؤرشَف في تخزيننا
+  const addByUrl=async(t)=>{
+    const url=(prompt("الصق رابط صورة الشكوى (من سويتر):", t.sweater_pic_url||"")||"").trim();
+    if(!url)return;
+    if(!/^https?:\/\/\S+/i.test(url)){setMsg({ok:false,t:"رابط غير صالح — يجب أن يبدأ بـ http أو https"});return;}
+    // احفظ الرابط مرجعاً فورياً (يظهر حتى لو تعذّرت الأرشفة)
+    try{const{data}=await supabase.from("ops_tickets").update({sweater_pic_url:url}).eq("id",t.id).select().single();if(data)setRows(p=>p.map(r=>r.id===t.id?data:r));}catch(_){}
+    // حاول تنزيل الصورة وتخزينها في نظامنا (أرشفة دائمة)
+    const ok=await pullImage(t,url,true);
+    if(!ok)setMsg({ok:true,t:"تم ربط الرابط بالشكوى ويظهر مباشرةً؛ تعذّرت الأرشفة الآن — يمكنك «سحب من سويتر» لاحقاً"});
   };
 
   // رفع يدوي: مسؤول الجودة ينزّل الصورة من سويتر ويرفعها هنا
@@ -216,6 +230,7 @@ export default function SweaterTickets({opId,me,owner}){
         {canEdit&&<div className="st-imgrow">
           <span className="st-imglbl">صور الشكوى:</span>
           {t.sweater_pic_url&&!stored.length&&<button className="st-pull" onClick={()=>pullImage(t)} disabled={b}><Icon n="download" s={13}/> {b?"…":"سحب من سويتر"}</button>}
+          <button className="st-url" onClick={()=>addByUrl(t)} disabled={b}><Icon n="link" s={13}/> رابط الصورة</button>
           <button className="st-upl" onClick={()=>pickImage(t)} disabled={b}><Icon n="image" s={13}/> {stored.length?"إضافة صور":"رفع صور يدوياً"}</button>
           {stored.length===0&&<button className={"st-noimgbtn"+(t.no_customer_image?" on":"")} onClick={()=>toggleNoImage(t)} disabled={b}><Icon n={t.no_customer_image?"check":"x"} s={13}/> {t.no_customer_image?"موثّق: لا صورة":"لا توجد صورة"}</button>}
         </div>}
@@ -321,6 +336,8 @@ const CSS=`
 .st-panel{margin-top:11px;padding-top:11px;border-top:1px solid #f1f3f5}
 .st-prow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .st-pull{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid #bcd7fb;background:#eff6ff;color:#175cd3;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+.st-url{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid #cdbdf6;background:#f4f0ff;color:#6941c6;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+.st-url:disabled{opacity:.55}
 .st-pull:disabled{opacity:.55}
 .st-rec{display:flex;gap:6px;margin-inline-start:auto}
 .st-recb{display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:10px;border:1px solid #e6e9ee;background:#fff;font-family:inherit;font-size:12px;font-weight:800;color:#64748b;cursor:pointer}

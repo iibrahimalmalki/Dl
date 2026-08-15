@@ -1,5 +1,5 @@
 import{useState,useEffect}from"react";
-import{supabase,ensureFreshToken,compressImage,uploadAuthed}from"./supabase";
+import{supabase,SUPA_URL,ensureFreshToken,compressImage,uploadAuthed}from"./supabase";
 import Icon from"./Icon";
 import{SEVERITY,byCode,objectionState}from"./violations";
 import{AXES,bikerItems,compliance as frCompliance,complianceByAxis,effect as frEffect}from"./fieldChecklist";
@@ -10,6 +10,7 @@ const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.get
 const periodLabel=p=>{const[y,m]=p.split("-");return`${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m} ${y}`;};
 const AR=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const TARGET=200;
+const picUrl=p=>p?(/^https?:\/\//i.test(p)?p:`${SUPA_URL}/storage/v1/object/public/sweater-tickets/${encodeURI(p)}`):null;
 const fmtRemain=ms=>{if(ms<=0)return"منتهية";const h=Math.floor(ms/3600000);if(h>=24)return`${Math.floor(h/24)} يوم`;return`${h} ساعة`;};
 function standing(r,cpct,fines){
   if(r>=4.75&&cpct<1&&fines===0)return{ar:"متميز",bn:"অসাধারণ",color:"#087443",bg:"#e7f7ef",ic:"star"};
@@ -23,18 +24,19 @@ export default function BikerPortal({me,onLogout}){
   const sid=String(me?.biker_employee_id||"").trim();
   const[period,setPeriod]=useState(nowPeriod());
   const[loading,setLoading]=useState(true);
-  const[ops,setOps]=useState(null);const[line,setLine]=useState(null);const[viol,setViol]=useState([]);const[fround,setFround]=useState(null);const[selfR,setSelfR]=useState(null);
+  const[ops,setOps]=useState(null);const[line,setLine]=useState(null);const[viol,setViol]=useState([]);const[fround,setFround]=useState(null);const[selfR,setSelfR]=useState(null);const[tix,setTix]=useState([]);
   const[reload,setReload]=useState(0);
 
   useEffect(()=>{(async()=>{
     setLoading(true);
-    const[{data:o},{data:l},{data:v},{data:fr}]=await Promise.all([
+    const[{data:o},{data:l},{data:v},{data:fr},{data:tk}]=await Promise.all([
       supabase.from("ops_biker_month").select("*").eq("period",period).eq("sweater_id",sid).maybeSingle(),
       supabase.from("payroll_lines").select("*").eq("period",period).eq("biker_id",sid).eq("role","biker").maybeSingle(),
       supabase.from("violations").select("*").eq("period",period).eq("sweater_id",sid).order("logged_at",{ascending:false}),
       supabase.from("field_rounds").select("*").eq("period",period).eq("sweater_id",sid).order("round_date",{ascending:false}),
+      supabase.from("ops_tickets").select("sweater_ticket_no,booking_ref,ticket_date,sub_category,decision,qc_notes,stored_pics,stored_pic_path,sweater_pic_url,coach").eq("period",period).eq("sweater_id",sid).in("decision",["approved","rejected"]).order("ticket_date",{ascending:false}),
     ]);
-    setOps(o||null);setLine(l||null);setViol(v||[]);
+    setOps(o||null);setLine(l||null);setViol(v||[]);setTix(tk||[]);
     const rounds=fr||[];
     setFround(rounds.find(x=>x.compliance_pct!=null&&x.status!=="requested")||null);
     setSelfR(rounds.find(x=>x.source==="self"&&(x.status==="requested"||x.status==="submitted"))||null);
@@ -161,6 +163,27 @@ export default function BikerPortal({me,onLogout}){
           </>}
         </div>
 
+        {/* تطوير الأداء — دروس من الشكاوى (بعد القرار النهائي) */}
+        {tix.length>0&&<div className="bp-card bp-coach-card">
+          <div className="bp-c-h"><Icon n="robot" s={16}/> نطوّر أداءك معاً · আরও ভালো হই <span className="bp-count">{tix.length}</span></div>
+          <div className="bp-coach-intro">الهدف ليس الخصم، بل تقديم أفضل ما لدينا لترتفع تقييماتك وطلباتك ودخلك. · লক্ষ্য জরিমানা নয় — আরও ভালো সেবা ও বেশি আয়।</div>
+          {tix.map(t=>{const co=t.coach||{};const counted=t.decision==="approved";
+            const imgs=[...(t.stored_pics||[]).map(picUrl),...(!(t.stored_pics||[]).length&&t.sweater_pic_url?[t.sweater_pic_url]:[])].filter(Boolean);
+            return(
+            <div className={"bp-coach"+(counted?" c":" nc")} key={t.sweater_ticket_no||t.booking_ref}>
+              <div className="bp-coach-top">
+                <div className="bp-coach-cat">{co.cat||t.sub_category||"ملاحظة جودة"}</div>
+                <span className={"bp-coach-badge "+(counted?"c":"nc")}>{counted?"محتسبة — نتفاداها معاً":"غير محتسبة — أحسنت ✓"}</span>
+              </div>
+              <div className="bp-coach-meta">شكوى #{t.sweater_ticket_no||"—"}{t.ticket_date?" · "+t.ticket_date:""}</div>
+              {imgs.length>0&&<div className="bp-coach-imgs">{imgs.slice(0,4).map((u,i)=><a href={u} target="_blank" rel="noreferrer" key={i}><img src={u} loading="lazy" alt="صورة"/></a>)}</div>}
+              {t.qc_notes&&<div className="bp-coach-note"><b>ملاحظة الجودة:</b> {t.qc_notes}</div>}
+              {co.correct&&<div className="bp-coach-row correct"><span className="bp-coach-ic">🛠️</span><div><b>تصحيح · Correct</b><p>{co.correct}</p></div></div>}
+              {co.tip&&<div className="bp-coach-row tip"><span className="bp-coach-ic">💡</span><div><b>تنبيه لتفاديها · Tip</b><p>{co.tip}</p></div></div>}
+              {co.motivate&&<div className="bp-coach-row motivate"><span className="bp-coach-ic">🚀</span><div><b>تحفيز · Motivation</b><p>{co.motivate}</p></div></div>}
+            </div>);})}
+        </div>}
+
         {/* الالتزام الميداني */}
         {fround&&(()=>{const cp=fround.compliance_pct;const ef=frEffect(cp);const ax=fround.by_axis||complianceByAxis(fround.results||{});return(
         <div className="bp-card">
@@ -244,6 +267,26 @@ const CSS=`
 .bp-rate-note{margin-top:8px;font-size:11px;color:#94a3b8;text-align:center;background:#fafbfc;border-radius:8px;padding:6px}
 .bp-pending{color:#94a3b8;font-size:12.5px;text-align:center;padding:14px}
 .bp-clean{display:flex;align-items:center;justify-content:center;gap:7px;color:#087443;font-weight:700;font-size:13px;padding:14px;background:#f6fdf9;border-radius:11px}
+.bp-coach-card{background:linear-gradient(180deg,#fffdfa,#fff)}
+.bp-coach-intro{font-size:11.5px;color:#7a4b12;font-weight:700;background:#fff7ea;border:1px solid #fde9c8;border-radius:10px;padding:9px 11px;line-height:1.7;margin-bottom:11px}
+.bp-coach{border:1px solid #eef1f4;border-inline-start:3px solid #E8712B;border-radius:13px;padding:11px 12px;margin-bottom:10px;background:#fff}
+.bp-coach.nc{border-inline-start-color:#12b76a}
+.bp-coach-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.bp-coach-cat{font-size:13px;font-weight:800;color:#0f172a}
+.bp-coach-badge{font-size:10px;font-weight:800;padding:2px 9px;border-radius:20px;flex:none}
+.bp-coach-badge.c{background:#fef3e2;color:#b54708}
+.bp-coach-badge.nc{background:#e7f7ef;color:#087443}
+.bp-coach-meta{font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px}
+.bp-coach-imgs{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.bp-coach-imgs img{width:66px;height:66px;object-fit:cover;border-radius:9px;border:1px solid #eceef1}
+.bp-coach-note{font-size:11.5px;color:#334155;font-weight:600;background:#f7f9fc;border-radius:9px;padding:8px 10px;margin-top:9px;line-height:1.6}
+.bp-coach-row{display:flex;gap:9px;align-items:flex-start;margin-top:9px;border-radius:10px;padding:9px 10px}
+.bp-coach-row.correct{background:#eff6ff}
+.bp-coach-row.tip{background:#fff7ea}
+.bp-coach-row.motivate{background:#e7f7ef}
+.bp-coach-ic{font-size:16px;flex:none;line-height:1.4}
+.bp-coach-row b{font-size:11.5px;color:#0f172a;display:block;margin-bottom:2px}
+.bp-coach-row p{font-size:11.5px;color:#475569;font-weight:600;line-height:1.75;margin:0}
 .bp-v{background:#fff;border:1px solid #f1f3f5;border-inline-start:3px solid #ccc;border-radius:11px;padding:11px 12px;margin-bottom:8px}
 .bp-v-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .bp-v-t{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#0f172a}

@@ -236,6 +236,7 @@ export default function FieldRounds({opId,onGo}){
         </div>
         {stx&&<div className="fr-c-st" style={{background:stx[2],color:stx[1]}}><span className="fr-sdot" style={{background:stx[1]}}/>{stx[0]}</div>}
         {r.status!=="requested"&&<div className="fr-c-eff" style={{background:ef.bg,color:ef.color}}>{ef.ar}</div>}
+        {r.status!=="requested"&&r.ai_analysis&&<AiPanel a={r.ai_analysis}/>}
         {(r.action_items||[]).length>0&&<div className="fr-c-act"><Icon n="wrench" s={12}/> بنود إدارة معلّقة: {(r.action_items||[]).map(n=>"#"+n).join("، ")}</div>}
         {r.notes&&<div className="fr-c-notes">{r.notes}</div>}
         {(()=>{const all=Object.values(r.photos||{}).flat().filter(Boolean);return all.length>0&&<div className="fr-c-gal"><div className="fr-c-gal-h"><Icon n="camera" s={12}/> {all.length} صورة توثيق</div><div className="fr-c-thumbs">{all.slice(0,8).map((u,i)=><img key={i} src={u} onClick={()=>setViewer(u)}/>)}{all.length>8&&<span className="fr-more">+{all.length-8}</span>}</div></div>;})()}
@@ -253,6 +254,24 @@ export default function FieldRounds({opId,onGo}){
   </div>);
 }
 function K({ic,c,bg,t,v}){return(<div className="fr-kpi"><span className="fr-ki" style={{background:bg,color:c}}><Icon n={ic} s={17}/></span><div><div className="fr-kv">{v}</div><div className="fr-kl">{t}</div></div></div>);}
+
+// لوحة التحليل الذكي للجولة — تُعرض بعد حفظ/اعتماد الجولة
+function AiPanel({a}){
+  if(!a||typeof a!=="object")return null;
+  const pr=a.priorities||[], sg=a.supplyGaps||[], rec=a.recurring||[];
+  const dir=a.trend&&a.trend.dir;
+  return(<div className="fr-ai">
+    <div className="fr-ai-h"><Icon n="robot" s={13}/> تحليل ذكي للجولة</div>
+    {a.summary&&<div className="fr-ai-sum">{a.summary}</div>}
+    <div className="fr-ai-tags">
+      {a.trend&&a.trend.text&&<span className={"fr-ai-tag "+(dir==="up"?"g":dir==="down"?"r":"")}>{dir==="up"?"▲":dir==="down"?"▼":"■"} {a.trend.text}</span>}
+      {a.weakestAxis&&a.weakestAxis.pct!=null&&<span className="fr-ai-tag">أضعف محور: {a.weakestAxis.ar} ({a.weakestAxis.pct}%)</span>}
+      {rec.length>0&&<span className="fr-ai-tag r">تكرار: {rec.map(x=>"#"+x.n).join("، ")}</span>}
+    </div>
+    {pr.length>0&&<div className="fr-ai-row"><b>أولويات تصحيحية:</b> {pr.map(x=>`${x.ar} (${x.level})`).join(" · ")}</div>}
+    {sg.length>0&&<div className="fr-ai-sg"><Icon n="bucket" s={11}/> {sg.length} نقص إمداد على مسؤولية سويتر/الإدارة — يُدرج في الطلب المجمّع</div>}
+  </div>);
+}
 
 const CSS=`
 .fr{--b:#E8712B}
@@ -344,6 +363,16 @@ const CSS=`
 .fr-kv{font-size:19px;font-weight:800;letter-spacing:-.5px}.fr-kl{font-size:11px;color:#64748b;font-weight:600}
 .fr-hint{display:flex;align-items:flex-start;gap:7px;background:#fffbeb;border:1px solid #fde9c8;color:#92600e;font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-bottom:14px;line-height:1.6}
 .fr-card{background:#fff;border:1px solid #eceef1;border-inline-start:3px solid #ccc;border-radius:14px;padding:13px 15px;margin-bottom:10px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.fr-ai{margin-top:9px;background:#f7f9fc;border:1px solid #eaf0f6;border-radius:11px;padding:10px 12px}
+.fr-ai-h{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#0f2a43;margin-bottom:6px}
+.fr-ai-sum{font-size:11.5px;color:#334155;font-weight:600;line-height:1.7}
+.fr-ai-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fr-ai-tag{font-size:10.5px;font-weight:700;color:#475569;background:#fff;border:1px solid #e6edf5;border-radius:20px;padding:3px 9px}
+.fr-ai-tag.g{color:#087443;border-color:#b7e4cd;background:#effaf3}
+.fr-ai-tag.r{color:#b42318;border-color:#f7bfba;background:#fff5f4}
+.fr-ai-row{font-size:11px;color:#475569;font-weight:600;line-height:1.6;margin-top:7px}
+.fr-ai-row b{color:#0f172a}
+.fr-ai-sg{display:flex;align-items:center;gap:6px;font-size:11px;color:#b54708;font-weight:700;margin-top:7px;background:#fff7ed;border-radius:8px;padding:6px 9px}
 .fr-c-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .fr-c-name{font-size:14px;font-weight:800;color:#0f172a}.fr-c-name small{color:#94a3b8;font-weight:600;margin-inline-start:6px;font-size:11.5px}
 .fr-c-sub{font-size:11.5px;color:#64748b;margin-top:2px}

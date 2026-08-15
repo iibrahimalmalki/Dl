@@ -1,7 +1,7 @@
 import{useState,useEffect,useMemo,useRef}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
-import{buildSupplyRequestMsg,buildEscalationMsg,elapsedBoth}from"./fieldReport";
+import{buildSupplyRequestMsg,buildEscalationMsg,buildConsolidatedMsg,classifyOpenRequests,elapsedBoth}from"./fieldReport";
 
 const ESC_TO="support@jibalalsahil.com,operations@jibalalsahil.com,syed.ali@jibalalsahil.com,ssp@sweater.sa";
 const ESC_CC="abd.khrashy@sweater.sa,reem@sweater.sa,m.qurashi@sweater.sa";
@@ -73,6 +73,11 @@ export default function SupplyRequests({opId,owner}){
   };
   const del=async(r)=>{if(!confirm("حذف هذا الطلب؟"))return;const{error}=await supabase.from("supply_requests").delete().eq("id",r.id);if(!error)setRows(p=>p.filter(x=>x.id!==r.id));};
 
+  const openReqs=rows.filter(r=>r.status!=="completed"&&r.status!=="cancelled");
+  const bulkGroups=openReqs.length?classifyOpenRequests(openReqs):[];
+  const bulkMats=bulkGroups.reduce((a,g)=>a+g.materials.length,0);
+  const sendBulk=()=>openShare('مجمّع',buildConsolidatedMsg(openReqs,new Date()),'bulk');
+
   if(loading)return<div className="dw-skel" style={{height:280}}/>;
 
   return(<div className="sq">
@@ -85,6 +90,14 @@ export default function SupplyRequests({opId,owner}){
       <K ic="check" c="#087443" bg="#e7f7ef" t="مكتملة" v={kpis.done}/>
     </div>
     <div className="sq-hint"><Icon n="alert" s={13}/> تُنشأ الطلبات آلياً عند إرسال نواقص جولة ميدانية. القناة الأساسية واتساب مركز الدعم؛ بعد {`< 24 ساعة`} بلا حل يظهر «تصعيد» (واتساب/إيميل) يشير لرقم الطلب وتاريخه. اضغط «اكتمال» عند التوفير.</div>
+
+    {openReqs.length>0&&<div className="sq-bulk">
+      <div className="sq-bulk-l">
+        <div className="sq-bulk-t"><Icon n="bucket" s={15}/> طلب إمداد مجمّع</div>
+        <div className="sq-bulk-s">يفرز ويصنّف نواقص {openReqs.length} طلب مفتوح في <b>{bulkMats}</b> مادة عبر {bulkGroups.length} فئة، ويجمعها في رسالة واحدة تُرسل حسب الحاجة.</div>
+      </div>
+      <button className="sq-b wa sq-bulk-b" onClick={sendBulk}><Icon n="send" s={14}/> بناء الطلب المجمّع</button>
+    </div>}
 
     <div className="sq-tabs">
       {[["all","الكل"],["open","مفتوحة"],["escalated","مُصعّدة"],["completed","مكتملة"]].map(([k,l])=>(
@@ -131,7 +144,7 @@ export default function SupplyRequests({opId,owner}){
 
     {share&&<div className="sq-ov" onClick={()=>setShare(null)}>
       <div className="sq-modal" onClick={e=>e.stopPropagation()}>
-        <div className="sq-mh"><b>{share.kind==="esc"?"رسالة تصعيد":"رسالة الطلب"} · {share.ref}</b><button className="sq-x" onClick={()=>setShare(null)}><Icon n="x" s={15}/></button></div>
+        <div className="sq-mh"><b>{share.kind==="esc"?"رسالة تصعيد":share.kind==="bulk"?"طلب إمداد مجمّع":"رسالة الطلب"} · {share.ref}</b><button className="sq-x" onClick={()=>setShare(null)}><Icon n="x" s={15}/></button></div>
         <div className="sq-mnote"><Icon n="alert" s={13}/> واتساب لا يسمح بتعبئة النص تلقائياً داخل المجموعة. الخطوات: <b>١) انسخ الرسالة</b> ← <b>٢) افتح المجموعة</b> ← <b>٣) الصقها وأرسل</b>.</div>
         <textarea className="sq-ta" readOnly value={share.text} onFocus={e=>e.target.select()} dir="rtl"/>
         <div className="sq-mact">
@@ -154,6 +167,11 @@ const CSS=`
 .sq-ki{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
 .sq-kv{font-size:19px;font-weight:800;letter-spacing:-.5px}.sq-kl{font-size:11px;color:#64748b;font-weight:600}
 .sq-hint{display:flex;align-items:flex-start;gap:7px;background:#fffbeb;border:1px solid #fde9c8;color:#92600e;font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-bottom:12px;line-height:1.6}
+.sq-bulk{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;background:linear-gradient(135deg,#0f2a43,#1a3f5f);border-radius:13px;padding:12px 15px;margin-bottom:12px;box-shadow:0 1px 2px rgba(16,24,40,.08)}
+.sq-bulk-t{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:#fff}
+.sq-bulk-s{font-size:11.5px;color:#cbd8e6;font-weight:600;line-height:1.6;margin-top:4px;max-width:520px}
+.sq-bulk-s b{color:#fff}
+.sq-bulk-b{flex:none;background:#fff;border-color:#fff;color:#0f2a43}
 .sq-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
 .sq-tab{padding:7px 14px;border-radius:20px;border:1px solid #e6e9ee;background:#fff;color:#475569;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer}
 .sq-tab.on{background:#0f172a;color:#fff;border-color:#0f172a}
