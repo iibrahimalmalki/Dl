@@ -6,6 +6,9 @@ import{analyzeRound}from"./fieldAnalysis";
 import{openReport,shortageItems,makeRef,buildSupplyRequestMsg}from"./fieldReport";
 const SUPPORT_WA="https://chat.whatsapp.com/K5ePnROKEcFD03UesTbeJV";
 import FieldChecklistForm,{FCF_CSS}from"./FieldChecklistForm";
+import ActivityLog from"./ActivityLog";
+const FR_FL={biker_name:"البايكر",sweater_id:"رقم البايكر",round_date:"تاريخ الجولة",round_time:"الوقت",location:"الموقع",compliance_pct:"نسبة الالتزام %",status:"الحالة",effect:"الأثر",notes:"ملاحظات",inspector:"المفتّش"};
+const FR_DV={requested:"مطلوبة",submitted:"مُرسلة (ذاتي)",reviewed:"مُراجعة"};
 
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const periodLabel=p=>{const[y,m]=p.split("-");return`${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m} ${y}`;};
@@ -245,6 +248,7 @@ export default function FieldRounds({opId,onGo}){
           {r.status!=="requested"&&<button className="fr-edit" onClick={()=>startEdit(r)}><Icon n="edit" s={13}/> تعديل</button>}
           {r.status!=="requested"&&<button className="fr-wa" onClick={()=>createTicket(r)}><Icon n="send" s={13}/> طلب إمداد</button>}
           {self&&r.status==="submitted"&&<button className="fr-review" onClick={()=>markReviewed(r)}><Icon n="check" s={14}/> مراجعة واعتماد</button>}
+          <ActivityLog table="field_rounds" rowId={r.id} labels={FR_FL} valueMap={FR_DV} entityName="الجولة"/>
           <div style={{flex:1}}/>
           <button className="fr-del" onClick={()=>del(r)}><Icon n="trash" s={13}/> حذف</button>
         </div>

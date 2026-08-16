@@ -2,6 +2,9 @@ import{useState,useEffect,useMemo,useRef}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{buildSupplyRequestMsg,buildEscalationMsg,buildConsolidatedMsg,classifyOpenRequests,elapsedBoth}from"./fieldReport";
+import ActivityLog from"./ActivityLog";
+const SR_FL={status:"الحالة",requesting_dept:"الجهة الطالبة",biker_name:"البايكر",sweater_id:"رقم البايكر",ref:"المرجع",sla_hours:"مهلة (ساعة)"};
+const SR_DV={open:"مفتوح",escalated:"مُصعّد",completed:"مكتمل",cancelled:"ملغى"};
 
 const ESC_TO="support@jibalalsahil.com,operations@jibalalsahil.com,syed.ali@jibalalsahil.com,ssp@sweater.sa";
 const ESC_CC="abd.khrashy@sweater.sa,reem@sweater.sa,m.qurashi@sweater.sa";
@@ -137,6 +140,7 @@ export default function SupplyRequests({opId,owner}){
             <button className="sq-b escm" onClick={()=>escalateEmail(r)}><Icon n="send" s={13}/> تصعيد إيميل</button>
           </>}
           {r.status!=="completed"&&<button className="sq-b done" onClick={()=>complete(r)}><Icon n="check" s={13}/> اكتمال</button>}
+          <ActivityLog table="supply_requests" rowId={r.id} labels={SR_FL} valueMap={SR_DV} entityName="الطلب"/>
           <div style={{flex:1}}/>
           {owner&&<button className="sq-b del" onClick={()=>del(r)}><Icon n="trash" s={12}/></button>}
         </div>

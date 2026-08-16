@@ -1,6 +1,9 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
+import ActivityLog from"./ActivityLog";
+const CU_FL={name:"العهدة",status:"الحالة",start_date:"البداية",end_date:"النهاية",biker_name:"البايكر",sweater_id:"رقم البايكر",life_months:"العمر (شهر)",category:"الفئة"};
+const CU_DV={active:"نشطة",due:"مستحقة",replaced:"مُستبدلة",returned:"مُرجعة",planned:"مخطّطة"};
 
 // كتالوج عُهد سويتر (Biker Tools) — العمر الافتراضي بالأشهر ومهلة التخطيط بالأيام
 // mode: buy (دراجة → تخطيط شراء) · replace (أصل معمّر → استبدال) · reorder (مستهلك → طلب سويتر)
@@ -173,6 +176,7 @@ export default function Custody({opId,owner}){
           {r.status!=="replaced"&&d.due&&mode==="buy"&&<button className="cu-b buy" onClick={()=>planReplace(r)}><Icon n="bike" s={13}/> خطّط لشراء دراجة</button>}
           {r.status!=="replaced"&&d.due&&mode==="replace"&&<button className="cu-b plan" onClick={()=>planReplace(r)}><Icon n="alert" s={13}/> خطّط للاستبدال</button>}
           {r.status!=="replaced"&&<button className="cu-b done" onClick={()=>markReplaced(r)}><Icon n="check" s={13}/> استُبدلت</button>}
+          <ActivityLog table="custody_assets" rowId={r.id} labels={CU_FL} valueMap={CU_DV} entityName="العهدة"/>
           <div style={{flex:1}}/>
           {owner&&<button className="cu-b del" onClick={()=>del(r)}><Icon n="trash" s={12}/></button>}
         </div>

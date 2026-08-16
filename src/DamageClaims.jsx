@@ -1,6 +1,9 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
+import ActivityLog from"./ActivityLog";
+const DC_FL={status:"الحالة",biker_name:"البايكر",biker_share:"حصة البايكر",company_share:"حصة الشركة",recovered_amount:"المُحصّل",resolution_method:"طريقة التسوية",booking_ref:"مرجع الحجز",complaint_ref:"مرجع الشكوى",investigation_notes:"ملاحظات التحقيق",evidence:"الإثبات"};
+const DC_DV={investigating:"قيد التحقيق",charged:"محمّلة",recovering:"قيد التحصيل",closed:"مغلقة",dismissed:"مرفوضة",cash:"نقدي",salary:"خصم راتب",center:"مركز معتمد"};
 
 const money=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" ﷼";
 const CAP=0.5; // سقف الخصم الشهري = 50% من الراتب الأساسي
@@ -181,10 +184,11 @@ export default function DamageClaims({owner,opId}){
           </div>
           {over&&<div className="dc-warn sm"><Icon n="alert" s={13}/> الدفعة الشهرية تتجاوز سقف 50% من الأساس ({money(cap)}).</div>}
           {r.evidence&&<div className="dc-ev"><Icon n="doc" s={13}/> {r.evidence}</div>}
-          {owner&&<div className="dc-acts">
-            <button className="dc-b sm ghost" onClick={()=>edit(r)}><Icon n="doc" s={13}/> تعديل</button>
-            <button className="dc-b sm del" onClick={()=>del(r)}><Icon n="trash" s={13}/></button>
-          </div>}
+          <div className="dc-acts">
+            {owner&&<button className="dc-b sm ghost" onClick={()=>edit(r)}><Icon n="doc" s={13}/> تعديل</button>}
+            <ActivityLog table="damage_claims" rowId={r.id} labels={DC_FL} valueMap={DC_DV} entityName="الدعوى"/>
+            {owner&&<button className="dc-b sm del" onClick={()=>del(r)}><Icon n="trash" s={13}/></button>}
+          </div>
         </div>);})}
     </div>}
 
