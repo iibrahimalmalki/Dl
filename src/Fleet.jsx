@@ -27,7 +27,7 @@ export default function Fleet({opId,owner}){
   const[tab,setTab]=useState("veh");
   const[loading,setLoading]=useState(true);
   const[veh,setVeh]=useState([]);const[inc,setInc]=useState([]);
-  const[vForm,setVForm]=useState(null);const[iForm,setIForm]=useState(null);
+  const[vForm,setVForm]=useState(null);const[iForm,setIForm]=useState(null);const[cForm,setCForm]=useState(null);
   const[emps,setEmps]=useState([]);
   const[msg,setMsg]=useState(null);const[busy,setBusy]=useState(false);
   const note=(ok,t)=>setMsg({ok,t});
@@ -90,6 +90,28 @@ export default function Fleet({opId,owner}){
     }catch(e){note(false,"خطأ: "+(e.message||e));}
     setBusy(false);
   };
+  const saveCustody=async()=>{
+    if(!cForm.to_emp_id){note(false,"اختر البايكر البديل");return;}
+    if(!cForm.tam_authorized){note(false,"أكّد تفويض البديل على الدراجة عبر منصة تم (أبشر أعمال)");return;}
+    setBusy(true);
+    const emp=(emps||[]).find(x=>x.id===cForm.to_emp_id);const v=cForm._veh;
+    try{
+      await supabase.from("fleet_vehicles").update({held_by:cForm.to_emp_id,held_by_name:emp?emp.full_name:null,held_until:cForm.end_date||null,held_reason:cForm.reason||null}).eq("id",v.id);
+      await supabase.from("bike_custody").insert({operator_id:(opId&&opId!=="all")?opId:(v.operator_id||null),vehicle_id:v.id,plate:v.plate,from_emp_id:v.biker_employee_id||null,from_name:v.current_biker||null,to_emp_id:cForm.to_emp_id,to_name:emp?emp.full_name:null,end_date:cForm.end_date||null,reason:cForm.reason||null,tam_authorized:true,tam_ref:cForm.tam_ref||null,status:"active"});
+      setCForm(null);note(true,"تم نقل الحيازة مؤقتاً");await load();
+    }catch(e){note(false,"خطأ: "+(e.message||e));}
+    setBusy(false);
+  };
+  const returnCustody=async(v)=>{
+    if(!confirm("إرجاع الحيازة للبايكر الأساسي؟"))return;
+    setBusy(true);
+    try{
+      await supabase.from("fleet_vehicles").update({held_by:null,held_by_name:null,held_until:null,held_reason:null}).eq("id",v.id);
+      await supabase.from("bike_custody").update({status:"returned",returned_at:new Date().toISOString()}).eq("vehicle_id",v.id).eq("status","active");
+      note(true,"تم إرجاع الحيازة للأساسي");await load();
+    }catch(e){note(false,"خطأ: "+(e.message||e));}
+    setBusy(false);
+  };
   const delV=async(v)=>{if(!confirm("حذف مركبة «"+v.plate+"»؟"))return;await supabase.from("fleet_vehicles").delete().eq("id",v.id);await load();};
   const delI=async(x)=>{if(!confirm("حذف الحادثة؟"))return;await supabase.from("fleet_incidents").delete().eq("id",x.id);await load();};
 
@@ -125,6 +147,7 @@ export default function Fleet({opId,owner}){
             </div>
             <div className="fl-meta">
               {v.current_biker&&<span className="fl-mi"><Icon n="employees" s={13}/> {v.current_biker}</span>}
+              {v.held_by_name&&<span className="fl-mi" style={{color:"#CC5200",fontWeight:800}}><Icon n="key" s={13}/> بحوزة: {v.held_by_name}{v.held_until?" حتى "+v.held_until:""}</span>}
               {v.make&&<span className="fl-mi"><Icon n="bike" s={13}/> {v.make}{v.model_year?" "+v.model_year:""}</span>}
               {v.color&&<span className="fl-mi"><Icon n="ruler" s={13}/> {v.color}</span>}
             </div>
@@ -135,6 +158,8 @@ export default function Fleet({opId,owner}){
             </div>
             {v.notes&&<p className="fl-note">{v.notes}</p>}
             <div className="fl-act">
+              {!v.held_by&&<button onClick={()=>setCForm({_veh:v})}><Icon n="key" s={14}/> نقل حيازة</button>}
+              {v.held_by&&<button onClick={()=>returnCustody(v)}><Icon n="logout" s={14}/> إرجاع الحيازة</button>}
               <button onClick={()=>setVForm({...v})}><Icon n="edit" s={14}/> تعديل</button>
               <button className="d" onClick={()=>delV(v)}><Icon n="trash" s={14}/></button>
             </div>
@@ -199,7 +224,28 @@ export default function Fleet({opId,owner}){
 
     {vForm&&<VehModal f={vForm} set={setVForm} save={saveV} busy={busy} emps={emps}/>}
     {iForm&&<IncModal f={iForm} set={setIForm} save={saveI} busy={busy} veh={veh} emps={emps}/>}
+    {cForm&&<CustodyModal f={cForm} set={setCForm} save={saveCustody} busy={busy} emps={emps}/>}
   </div>);
+}
+
+function CustodyModal({f,set,save,busy,emps}){
+  const u=(k,val)=>set({...f,[k]:val});
+  const v=f._veh||{};
+  return(<div className="fl-scrim" onClick={()=>set(null)}><div className="fl-modal" onClick={e=>e.stopPropagation()}>
+    <div className="fl-mh"><b>نقل حيازة مؤقت — {v.plate}</b><button onClick={()=>set(null)}><Icon n="x" s={18}/></button></div>
+    <div className="fl-mb">
+      <Fld l="البايكر البديل *"><select value={f.to_emp_id||""} onChange={e=>u("to_emp_id",e.target.value)}><option value="">— اختر البديل —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
+      <Fld l="حتى تاريخ (نهاية الحيازة)"><input type="date" value={f.end_date||""} onChange={e=>u("end_date",e.target.value)}/></Fld>
+      <Fld l="السبب"><input value={f.reason||""} onChange={e=>u("reason",e.target.value)} placeholder="إجازة البايكر الأساسي"/></Fld>
+      <Fld l="مرجع التفويض في «تم» (اختياري)"><input value={f.tam_ref||""} onChange={e=>u("tam_ref",e.target.value)} placeholder="رقم/مرجع تفويض المركبة"/></Fld>
+      <label className="fl-fld" style={{flexDirection:"row",alignItems:"flex-start",gap:8,background:"#fff8f1",border:"1.5px solid #f0b27f",borderRadius:10,padding:"10px 12px"}}>
+        <input type="checkbox" checked={!!f.tam_authorized} onChange={e=>u("tam_authorized",e.target.checked)} style={{width:20,height:20,marginTop:2}}/>
+        <span style={{fontSize:12.5,fontWeight:700,lineHeight:1.7,color:"#7a4a1e"}}>أؤكّد تفويض البايكر البديل على الدراجة عبر منصة «تم» التابعة لأبشر أعمال (إلزامي نظاميًا لقيادة المركبة).</span>
+      </label>
+      <p className="fl-note">تنتقل الحيازة للبديل فيرى الدراجة في بوابته ويسجّل عليها. اضغط «إرجاع الحيازة» لإعادتها للأساسي.</p>
+    </div>
+    <div className="fl-mf"><button className="g" onClick={()=>set(null)}>إلغاء</button><button className="p" disabled={busy} onClick={save}>{busy?"...":"نقل الحيازة"}</button></div>
+  </div></div>);
 }
 
 function Kpi({ic,c,l,n,d}){return(<div className="fl-kpi"><div className="fl-kh"><span className="fl-kl">{l}</span><span className="fl-ki" style={{color:c,background:c+"18"}}><Icon n={ic} s={16}/></span></div><div className="fl-kn">{n}</div>{d?<div className="fl-kd" style={{color:c}}>{d}</div>:null}</div>);}
