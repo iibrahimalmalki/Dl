@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "./supabaseClient";
+import { supabase } from "./supabase";
 
 /*  بوابة البايكر — دلو ورغوة
     شاشتان: تسليم/استلام الدراجة + سجل الوقود
