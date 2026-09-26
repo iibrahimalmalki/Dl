@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "./supabaseClient";
+import { supabase } from "./supabase";
 
 /*  متتبّع التأمينات الاجتماعية (GOSI) — دلو ورغوة
     يعرض: الرصيد المستحق، خطة التقسيط، السجل الشهري، تنبيه الاستحقاق، وتسجيل الدفعات.
