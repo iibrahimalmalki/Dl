@@ -47,9 +47,9 @@ function LiveUrgencyBar(){
 }
 
 // رحلة الصعود — العنصر المميز: من نقطة البداية إلى دخل مستقر
-function IncomeJourney({daily,perf,onDaily,onPerf}){
+function IncomeJourney({daily,perf,onDaily,onPerf,base}){
   const monthly = Math.round(daily*26);
-  const BASE=1000;
+  const BASE=base||1000;
   const FIXED=2;
   const perfBonus = perf*2;
   const perOrder = FIXED + perfBonus;
@@ -189,7 +189,11 @@ export default function RecruitmentAd({onApply,onBack}){
   const[perf,setPerf]=useState(0.5);
   const[visible,setVisible]=useState(false);
   const[sharing,setSharing]=useState(false);
+  const[ad,setAd]=useState(null);           // محتوى الإعلان القابل للتحرير من الموارد البشرية
   const seenSections=useRef(new Set());
+  useEffect(()=>{
+    supabase.from("job_ad").select("*").eq("id","default").maybeSingle().then(({data})=>setAd(data||{}));
+  },[]);
   useEffect(()=>{
     setVisible(true);
     logStep("ad_page","0_landed");
@@ -222,7 +226,7 @@ export default function RecruitmentAd({onApply,onBack}){
     setSharing(false);
   };
 
-  const BENEFITS=[
+  const DEFAULT_BENEFITS=[
     ["💰","নির্দিষ্ট বেতন ১,০০০ + বোনাস","راتب 1,000 + مكافآت"],
     ["🏠","বিনামূল্যে আবাসন","سكن مجاني"],
     ["🏍️","মোটরসাইকেল + সরঞ্জাম","دراجة + معدات"],
@@ -232,6 +236,27 @@ export default function RecruitmentAd({onApply,onBack}){
     ["👕","সম্পূর্ণ ইউনিফর্ম","زي كامل"],
     ["🎓","পেশাদার প্রশিক্ষণ","تدريب احترافي"],
   ];
+  // تجاوزات المحتوى القابلة للتحرير من لوحة الموارد البشرية «إعلان التوظيف»
+  const base=(ad&&ad.salary_base)||1000;
+  const BENEFITS=(ad&&Array.isArray(ad.benefits)&&ad.benefits.length)?ad.benefits.map(b=>[b.ic||"✅",b.bn||"",b.ar||""]):DEFAULT_BENEFITS;
+  const titleBn=(ad&&ad.title_bn)||"নতুন জীবনের শুরু এখান থেকেই";
+  const titleAr=(ad&&ad.title_ar)||"";
+  const subBn=(ad&&ad.subtitle_bn)||"নির্দিষ্ট আয়, বিনামূল্যে থাকার জায়গা, নিজের বাইক";
+  const subAr=(ad&&ad.subtitle_ar)||"دخل ثابت، سكن مجاني، ودراجتك جاهزة";
+  const reqBn=(ad&&ad.requirements_bn)||"🏍️ মোটরসাইকেল চালাতে সক্ষম · 📏 উচ্চতা ১৬৭+ সেমি · 🎂 বয়স ২৫–৩৮ · 📍 রিয়াদ";
+  const reqAr=(ad&&ad.requirements_ar)||"🏍️ يقود دراجة نارية · 📏 الطول 167+ · 🎂 العمر 25–38 · 📍 الرياض";
+
+  // نيوغ مغلق: عرض شاشة اعتذار بدل الإعلان
+  if(ad&&ad.active===false){
+    return(<div style={{minHeight:"100dvh",background:"linear-gradient(170deg,#FFF9F0,#FFF3DC)",fontFamily:"'Segoe UI',Tahoma,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",padding:20,direction:"rtl"}}>
+      <div style={{background:"#fff",borderRadius:24,padding:"44px 28px",maxWidth:380,textAlign:"center",boxShadow:"0 10px 40px rgba(232,113,43,0.12)"}}>
+        <div style={{width:72,height:72,borderRadius:20,background:"linear-gradient(135deg,#E8712B,#f5a35f)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,margin:"0 auto 18px"}}>🪣</div>
+        <div style={{fontSize:16,fontWeight:900,color:"#1e293b",marginBottom:8,lineHeight:1.7}}>{(ad&&ad.closed_bn)||"বর্তমানে নিয়োগ বন্ধ আছে — শীঘ্রই আবার খুলবে।"}</div>
+        <div style={{fontSize:12.5,color:"#a8834f",lineHeight:1.8}}>{(ad&&ad.closed_ar)||"التوظيف مغلق حالياً — سيُعاد فتحه قريباً."}</div>
+        {onBack&&<button onClick={onBack} style={{marginTop:22,padding:"12px 22px",background:"#f1f5f9",border:"none",borderRadius:12,color:"#475569",fontSize:13,fontWeight:800,cursor:"pointer"}}>← رجوع</button>}
+      </div>
+    </div>);
+  }
 
   const STEPS=[
     ["🌅","সকাল","বাসা থেকে বাইক ও সরঞ্জাম নিয়ে বের হন","الصباح — تستلم الدراجة من السكن"],
@@ -256,9 +281,10 @@ export default function RecruitmentAd({onApply,onBack}){
             <span style={{color:"#E8712B",fontSize:11,fontWeight:800}}>রিয়াদে গাড়ি ধোয়ার চাকরি</span>
             <span style={{color:"#a8834f",fontSize:10}}> • وظيفة في الرياض</span>
           </div>
-          <h1 style={{color:"#1e293b",fontSize:26,fontWeight:900,lineHeight:1.4,margin:"0 0 8px"}}>নতুন জীবনের শুরু<br/>এখান থেকেই</h1>
-          <p style={{color:"#57534e",fontSize:13,lineHeight:1.7,marginBottom:4}}>নির্দিষ্ট আয়, বিনামূল্যে থাকার জায়গা, নিজের বাইক</p>
-          <p style={{color:"#a8834f",fontSize:11,marginBottom:18}}>دخل ثابت، سكن مجاني، ودراجتك جاهزة</p>
+          <h1 style={{color:"#1e293b",fontSize:26,fontWeight:900,lineHeight:1.4,margin:"0 0 8px"}}>{titleBn}</h1>
+          {titleAr&&<p style={{color:"#78716c",fontSize:14,fontWeight:800,marginBottom:6}}>{titleAr}</p>}
+          <p style={{color:"#57534e",fontSize:13,lineHeight:1.7,marginBottom:4}}>{subBn}</p>
+          <p style={{color:"#a8834f",fontSize:11,marginBottom:18}}>{subAr}</p>
 
           <div style={{marginBottom:22}}><WatchingNow/><LiveUrgencyBar/></div>
 
@@ -267,7 +293,8 @@ export default function RecruitmentAd({onApply,onBack}){
           </button>
           <div style={{marginTop:12,fontSize:11,color:"#78716c",lineHeight:1.9}}>
             <div style={{fontWeight:800,color:"#57534e"}}>✔️ মৌলিক শর্ত · الشروط الأساسية</div>
-            🏍️ মোটরসাইকেল চালাতে সক্ষম · يقود دراجة نارية &nbsp;|&nbsp; 📏 উচ্চতা ১৬৭+ সেমি · الطول 167+ &nbsp;|&nbsp; 🎂 বয়স ২৫–৩৮ · العمر 25–38 &nbsp;|&nbsp; 📍 রিয়াদ · الرياض
+            <div style={{marginTop:3}}>{reqBn}</div>
+            <div style={{color:"#a8834f",marginTop:2}}>{reqAr}</div>
           </div>
         </div>
       </div>
@@ -291,7 +318,7 @@ export default function RecruitmentAd({onApply,onBack}){
 
       {/* رحلة الدخل — العنصر المميز */}
       <div data-section="2_calculator" style={{maxWidth:480,margin:"0 auto",padding:"0 20px 32px"}}>
-        <IncomeJourney daily={daily} perf={perf} onDaily={setDaily} onPerf={setPerf}/>
+        <IncomeJourney daily={daily} perf={perf} onDaily={setDaily} onPerf={setPerf} base={base}/>
       </div>
 
       {/* يوم عمل */}

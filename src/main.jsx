@@ -40,7 +40,8 @@ function App(){
     if(directApply){setPage("ad");return;}
     if(employeeEditId){setPage("employee");return;}
     if(window.location.hash==="#admin")setPage("admin");
-    const h=()=>{if(window.location.hash==="#admin")setPage("admin");};
+    if(window.location.hash==="#biker")setPage("biker");
+    const h=()=>{if(window.location.hash==="#admin")setPage("admin");else if(window.location.hash==="#biker")setPage("biker");else if(!window.location.hash)setPage("landing");};
     window.addEventListener("hashchange",h);
     return()=>window.removeEventListener("hashchange",h);
   },[]);
@@ -68,7 +69,8 @@ function App(){
   };
 
   return(<Suspense fallback={<Spin/>}>
-    {page==="landing"&&<LandingPage onRecruit={()=>setPage("ad")} onEmployee={()=>setPage("employee")}/>}
+    {page==="landing"&&<LandingPage onBiker={()=>{window.location.hash="#biker";setPage("biker");}} onLogin={()=>{window.location.hash="#admin";setPage("admin");}}/>}
+    {page==="biker"&&<BikerPortal/>}
     {page==="ad"&&<RecruitmentAd onApply={()=>setPage("recruit")} onBack={()=>setPage("landing")}/>}
     {page==="recruit"&&<ApplicantForm onBack={()=>setPage("ad")}/>}
     {page==="employee"&&<EmployeePage onBack={()=>setPage("landing")} employeeId={employeeEditId}/>}

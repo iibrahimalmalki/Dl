@@ -19,9 +19,9 @@ const CSS = `
 .bp-pcell{flex:1;background:#fff;border:1px solid #f0e2ce;border-radius:14px;padding:12px 10px;text-align:center;box-shadow:0 3px 14px rgba(232,113,43,.06)}
 .bp-pcell .k{font-size:10.5px;color:#a8834f;font-weight:700}
 .bp-pcell .v{font-size:15px;font-weight:900;color:#15243a;margin-top:3px}
-.bp-tabs{display:flex;gap:8px;max-width:560px;margin:0 auto 14px}
-.bp-tab{flex:1;padding:11px 6px;text-align:center;border-radius:12px;background:#fff;border:1.5px solid #f0e2ce;font-weight:800;font-size:13px;cursor:pointer;color:#8a6d47;line-height:1.5}
-.bp-tab .bn{display:block;font-size:10px;font-weight:600;opacity:.75}
+.bp-tabs{display:flex;gap:6px;max-width:560px;margin:0 auto 14px}
+.bp-tab{flex:1;padding:10px 4px;text-align:center;border-radius:12px;background:#fff;border:1.5px solid #f0e2ce;font-weight:800;font-size:12.5px;cursor:pointer;color:#8a6d47;line-height:1.45}
+.bp-tab .bn{display:block;font-size:9px;font-weight:600;opacity:.75}
 .bp-tab.on{background:linear-gradient(135deg,#E8712B,#CC5200);color:#fff;border-color:#E8712B}
 .bp-sec{padding:16px 18px}
 .bp-lbl{font-size:13px;font-weight:800;color:#334155;margin:14px 0 6px;display:block}
@@ -83,6 +83,27 @@ const CHECKLIST = [
   { id: "oil", ar: "مستوى الزيت", bn: "তেলের স্তর" },
   { id: "box", ar: "صندوق التوصيل", bn: "ডেলিভারি বক্স" },
   { id: "plate", ar: "اللوحة والاستمارة", bn: "প্লেট ও কাগজপত্র" },
+];
+
+/* عناصر العهدة (الأدوات والمواد) */
+const ASSET_ITEMS = [
+  { key: "uniform", ar: "الزي (الملابس)", bn: "ইউনিফর্ম" },
+  { key: "shoes", ar: "الحذاء", bn: "জুতা" },
+  { key: "vest", ar: "سترة عاكسة", bn: "রিফ্লেক্টিভ ভেস্ট" },
+  { key: "helmet", ar: "الخوذة", bn: "হেলমেট" },
+  { key: "pump", ar: "المضخة", bn: "পাম্প" },
+  { key: "box", ar: "الصندوق", bn: "বক্স" },
+  { key: "vacuum", ar: "المكنسة", bn: "ভ্যাকুয়াম" },
+  { key: "bucket", ar: "الدلو", bn: "বালতি" },
+  { key: "hose", ar: "الخرطوم", bn: "হোস পাইপ" },
+  { key: "brush", ar: "الفرشاة", bn: "ব্রাশ" },
+  { key: "towels", ar: "المناشف", bn: "তোয়ালে" },
+  { key: "cleaners", ar: "مواد التنظيف", bn: "ক্লিনিং সামগ্রী" },
+];
+const CONDITIONS = [
+  { v: "good", ar: "جيدة", bn: "ভালো" },
+  { v: "fair", ar: "متوسطة", bn: "মাঝারি" },
+  { v: "damaged", ar: "تالفة", bn: "ক্ষতিগ্রস্ত" },
 ];
 
 function idToEmail(v) {
@@ -165,7 +186,7 @@ function Portal() {
       if (empId) {
         // الدراجة التي يحوزها هذا البايكر حالياً: إمّا حائز مؤقت، أو مخصّصة له ولا يحوزها أحد مؤقتاً
         const { data: bk } = await supabase.from("fleet_vehicles")
-          .select("id,plate,make,biker_employee_id,held_by,held_until,held_reason")
+          .select("id,plate,make,biker_employee_id,held_by,held_until,held_reason,needs_receipt_update")
           .eq("active", true)
           .or(`held_by.eq.${empId},and(held_by.is.null,biker_employee_id.eq.${empId})`).limit(1);
         const b = bk && bk[0] ? bk[0] : null;
@@ -197,6 +218,17 @@ function Portal() {
         <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div></div>
       </div>
 
+      {myBike && myBike.needs_receipt_update && (
+        <div className="bp-card" style={{ marginBottom: 14 }}>
+          <div className="bp-sec" style={{ padding: "12px 16px" }}>
+            <div className="bp-msg bp-err" style={{ margin: 0 }}>
+              ⚠️ مطلوب تحديث الاستلام: افتح تبويب «الدراجة» وسجّل استلامًا فعليًا بقراءة العدّاد والصور.<br />
+              রিসিট আপডেট প্রয়োজন: «বাইক» ট্যাবে গিয়ে প্রকৃত ওডোমিটার ও ছবিসহ গ্রহণ রেকর্ড করুন।
+            </div>
+          </div>
+        </div>
+      )}
+
       {temp && myBike && (
         <div className="bp-card" style={{ marginBottom: 14 }}>
           <div className="bp-sec" style={{ padding: "12px 16px" }}>
@@ -212,11 +244,13 @@ function Portal() {
         <div className={"bp-tab" + (tab === "profile" ? " on" : "")} onClick={() => setTab("profile")}>ملفي<span className="bn">প্রোফাইল</span></div>
         <div className={"bp-tab" + (tab === "handover" ? " on" : "")} onClick={() => setTab("handover")}>الدراجة<span className="bn">বাইক হস্তান্তর</span></div>
         <div className={"bp-tab" + (tab === "fuel" ? " on" : "")} onClick={() => setTab("fuel")}>الوقود<span className="bn">জ্বালানি</span></div>
+        <div className={"bp-tab" + (tab === "assets" ? " on" : "")} onClick={() => setTab("assets")}>العهدة<span className="bn">সরঞ্জাম</span></div>
       </div>
 
       {tab === "profile" && <Profile me={me} myBike={myBike} onGo={setTab} />}
       {tab === "handover" && <Handover me={me} myBike={myBike} />}
       {tab === "fuel" && <Fuel me={me} myBike={myBike} />}
+      {tab === "assets" && <Assets me={me} />}
     </div>
   );
 }
@@ -336,6 +370,7 @@ function Handover({ me, myBike }) {
         condition_notes: notes || null, pledge_accepted: true, created_by: me.uid,
       });
       if (error) throw error;
+      if (direction === "receive") { try { await supabase.from("fleet_vehicles").update({ needs_receipt_update: false }).eq("id", myBike.id); } catch (e) {} }
       setMsg({ t: "ok", m: "تم تسجيل حالة الدراجة بنجاح ✅ · সফলভাবে সংরক্ষিত" });
       setOdometer(""); setNotes(""); setFront(null); setBack(null); setRight(null); setLeft(null); setOdoPhoto(null); setDamages([]); setPledge(false);
       setChecks(Object.fromEntries(CHECKLIST.map(c => [c.id, true])));
@@ -500,6 +535,116 @@ function Fuel({ me, myBike }) {
             <div className="t">{r.plate || "—"} · {r.fuel_type === "oil" ? "زيت · অয়েল" : "بنزين · পেট্রল"} · {r.amount ? r.amount + "﷼" : "—"} · العدّاد {r.odometer}</div>
             <div className="m">{new Date(r.fill_at).toLocaleString("ar")}</div>
           </div>)}
+      </div>
+    </div></div>
+  );
+}
+
+/* ================= العهدة (الأدوات والمواد) ================= */
+const condAr = (v) => (CONDITIONS.find(c => c.v === v) || {}).ar || v;
+function Assets({ me }) {
+  const [rows, setRows] = useState(() => Object.fromEntries(
+    ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good" }])
+  ));
+  const [notes, setNotes] = useState("");
+  const [pledge, setPledge] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [recent, setRecent] = useState([]);
+
+  async function loadRecent() {
+    const { data } = await supabase.from("biker_assets")
+      .select("id,items,notes,created_at").order("created_at", { ascending: false }).limit(6);
+    setRecent(data || []);
+  }
+  useEffect(() => { loadRecent(); }, []);
+
+  function setItem(key, patch) { setRows(s => ({ ...s, [key]: { ...s[key], ...patch } })); }
+
+  async function submit() {
+    setMsg(null);
+    const chosen = ASSET_ITEMS.filter(it => rows[it.key].present);
+    if (chosen.length === 0) { setMsg({ t: "err", m: "حدّد العناصر المستلمة أولاً · অন্তত একটি সরঞ্জাম নির্বাচন করুন" }); return; }
+    if (!pledge) { setMsg({ t: "err", m: "يجب الموافقة على التعهّد قبل الحفظ · সংরক্ষণের আগে অঙ্গীকারে সম্মতি দিন" }); return; }
+    setBusy(true);
+    try {
+      const items = chosen.map(it => ({
+        key: it.key, name_ar: it.ar, name_bn: it.bn,
+        qty: Number(rows[it.key].qty) || 1, condition: rows[it.key].condition,
+      }));
+      const { error } = await supabase.from("biker_assets").insert({
+        operator_id: me.operator_id, biker_employee_id: me.biker_employee_id, biker_name: me.name,
+        items, pledge_accepted: true, notes: notes || null, status: "declared", created_by: me.uid,
+      });
+      if (error) throw error;
+      setMsg({ t: "ok", m: "تم تسجيل العهدة بنجاح ✅ · সফলভাবে সংরক্ষিত" });
+      setRows(Object.fromEntries(ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good" }])));
+      setNotes(""); setPledge(false); loadRecent();
+    } catch (e) { setMsg({ t: "err", m: "خطأ · ত্রুটি: " + (e.message || e) }); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="bp-card"><div className="bp-sec">
+      <label className="bp-lbl">إقرار العهدة — الأدوات والمواد <span className="bn">/ সরঞ্জাম ও উপকরণের ঘোষণা</span></label>
+      <div className="bp-note" style={{ marginBottom: 4 }}>حدّد ما استلمته، والكمية، وحالته. · আপনি যা পেয়েছেন, পরিমাণ ও অবস্থা নির্বাচন করুন।</div>
+
+      <div className="bp-chklist">
+        {ASSET_ITEMS.map(it => {
+          const r = rows[it.key];
+          return (
+            <div key={it.key} style={{ borderBottom: "1px solid #f4ece0", background: r.present ? "#fff8f1" : "#fffdf9" }}>
+              <label className="bp-chk" htmlFor={"as_" + it.key} style={{ borderBottom: "none" }}>
+                <input id={"as_" + it.key} type="checkbox" checked={r.present} onChange={e => setItem(it.key, { present: e.target.checked })} />
+                <span className="tx">{it.ar} <span className="bn">/ {it.bn}</span></span>
+              </label>
+              {r.present && (
+                <div className="bp-row" style={{ padding: "0 13px 12px", gap: 8 }}>
+                  <div style={{ flex: "0 0 34%" }}>
+                    <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الكمية <span className="bn">/ পরিমাণ</span></label>
+                    <input className="bp-in" type="number" inputMode="numeric" min="1" value={r.qty}
+                      onChange={e => setItem(it.key, { qty: e.target.value })} style={{ padding: "9px 11px" }} />
+                  </div>
+                  <div>
+                    <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الحالة <span className="bn">/ অবস্থা</span></label>
+                    <select className="bp-sel" value={r.condition} onChange={e => setItem(it.key, { condition: e.target.value })} style={{ padding: "9px 11px" }}>
+                      {CONDITIONS.map(c => <option key={c.v} value={c.v}>{c.ar} / {c.bn}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <label className="bp-lbl">ملاحظات (اختياري) <span className="bn">/ নোট (ঐচ্ছিক)</span></label>
+      <textarea className="bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي تفاصيل عن العهدة… · সরঞ্জাম সম্পর্কে বিস্তারিত…" />
+
+      <label className="bp-chk" style={{ marginTop: 14, background: "#fff8f1", border: "1.5px solid #f0b27f", borderRadius: 12, padding: "12px 13px", alignItems: "flex-start" }}>
+        <input type="checkbox" checked={pledge} onChange={e => setPledge(e.target.checked)} style={{ marginTop: 2 }} />
+        <span className="tx" style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.7 }}>
+          أُقرّ وأتعهّد بأن ما ذكرته أعلاه صحيح، وأنني استلمت هذه العهدة وأتحمّل مسؤوليتها والمحافظة عليها.
+          <span className="bn" style={{ display: "block", marginTop: 3 }}>আমি ঘোষণা করছি যে উপরের তথ্য সঠিক, আমি এই সরঞ্জাম বুঝে নিয়েছি এবং এর যত্ন ও দায়িত্ব নিচ্ছি।</span>
+        </span>
+      </label>
+
+      <button className="bp-btn" onClick={submit} disabled={busy}>{busy ? "جارٍ الحفظ… · সংরক্ষণ হচ্ছে…" : "حفظ إقرار العهدة · ঘোষণা সংরক্ষণ"}</button>
+      {msg && <div className={"bp-msg " + (msg.t === "ok" ? "bp-ok" : "bp-err")}>{msg.m}</div>}
+
+      <label className="bp-lbl" style={{ marginTop: 18 }}>آخر إقراراتك <span className="bn">/ সর্বশেষ ঘোষণা</span></label>
+      <div className="bp-list">
+        {recent.length === 0 ? <div className="bp-note">لا يوجد بعد · এখনও নেই</div> :
+          recent.map(r => {
+            const its = Array.isArray(r.items) ? r.items : [];
+            return (
+              <div className="bp-item" key={r.id}>
+                <div className="t">{its.length} عنصر · {its.length} টি সরঞ্জাম</div>
+                <div className="m">{its.map(x => `${x.name_ar}${x.qty > 1 ? "×" + x.qty : ""} (${condAr(x.condition)})`).join("، ")}</div>
+                <div className="m">{new Date(r.created_at).toLocaleString("ar")}</div>
+              </div>
+            );
+          })}
       </div>
     </div></div>
   );
