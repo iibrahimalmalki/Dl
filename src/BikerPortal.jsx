@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import TOOLREFS from "./toolRefs";
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
     هوية دلو ورغوة (برتقالي) · ثنائية اللغة (عربي + বাংলা)
@@ -69,6 +70,16 @@ const CSS = `
 .bp-note{font-size:11.5px;color:#a8834f;margin-top:6px;line-height:1.6}
 .bp-logo{width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#E8712B,#f5a35f);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:30px;box-shadow:0 8px 20px rgba(232,113,43,.32);overflow:hidden}
 .bp-logo img{width:70%;height:70%;object-fit:contain}
+.bp-aitem{border-bottom:1px solid #f4ece0}.bp-aitem:last-child{border-bottom:none}
+.bp-arow{display:flex;align-items:center;gap:10px;padding:10px 13px;cursor:pointer}
+.bp-arow input[type=checkbox]{width:22px;height:22px;accent-color:#2E7D32;flex:none}
+.bp-arow .tx{flex:1;font-size:13.5px;font-weight:700;color:#334155}
+.bp-arow .tx .bn{font-weight:600;color:#94a3b8;font-size:10.5px}
+.bp-aref{width:46px;height:46px;border-radius:10px;object-fit:cover;border:1px solid #eee4d3;flex:none;background:#fff}
+.bp-aref.ph{display:flex;align-items:center;justify-content:center;font-size:20px;color:#c9b48f}
+.bp-acap{display:inline-flex;align-items:center;gap:8px;padding:9px 13px;background:#fff4e9;border:1.5px dashed #f0b27f;border-radius:11px;color:#CC5200;font-weight:800;font-size:12.5px;cursor:pointer}
+.bp-acap input{display:none}
+.bp-athumb{width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid #e6dccb}
 `;
 
 /* قائمة التحقق الأساسية للدراجة (أفضل الممارسات) */
@@ -85,20 +96,43 @@ const CHECKLIST = [
   { id: "plate", ar: "اللوحة والاستمارة", bn: "প্লেট ও কাগজপত্র" },
 ];
 
-/* عناصر العهدة (الأدوات والمواد) */
+/* عناصر العهدة (الأدوات والمواد) — مطابقة لملف الأدوات، مع صورة مرجعية لكل صنف */
 const ASSET_ITEMS = [
-  { key: "uniform", ar: "الزي (الملابس)", bn: "ইউনিফর্ম" },
-  { key: "shoes", ar: "الحذاء", bn: "জুতা" },
-  { key: "vest", ar: "سترة عاكسة", bn: "রিফ্লেক্টিভ ভেস্ট" },
-  { key: "helmet", ar: "الخوذة", bn: "হেলমেট" },
-  { key: "pump", ar: "المضخة", bn: "পাম্প" },
-  { key: "box", ar: "الصندوق", bn: "বক্স" },
-  { key: "vacuum", ar: "المكنسة", bn: "ভ্যাকুয়াম" },
-  { key: "bucket", ar: "الدلو", bn: "বালতি" },
-  { key: "hose", ar: "الخرطوم", bn: "হোস পাইপ" },
-  { key: "brush", ar: "الفرشاة", bn: "ব্রাশ" },
-  { key: "towels", ar: "المناشف", bn: "তোয়ালে" },
-  { key: "cleaners", ar: "مواد التنظيف", bn: "ক্লিনিং সামগ্রী" },
+  // السلامة والملابس
+  { key: "uniform", ar: "الزي (ملابس العمل)", bn: "ইউনিফর্ম", img: null },
+  { key: "helmet", ar: "الخوذة", bn: "হেলমেট", img: "helmet" },
+  { key: "safety_chest", ar: "واقي الصدر", bn: "বুকের সুরক্ষা", img: "safety_chest" },
+  { key: "safety_limbs", ar: "واقيات اليدين والساقين", bn: "হাত ও পায়ের সুরক্ষা", img: "safety_limbs" },
+  { key: "shoes", ar: "حذاء السلامة", bn: "নিরাপত্তা জুতা", img: "shoes" },
+  { key: "headlight", ar: "كشّاف الرأس", bn: "হেডলাইট", img: "headlight" },
+  // نظام الماء
+  { key: "water_tank", ar: "خزان الماء", bn: "পানির ট্যাংক", img: null },
+  { key: "water_motor", ar: "موتور/مضخة الماء", bn: "ওয়াটার মোটর", img: "water_motor" },
+  { key: "water_gun", ar: "مسدس الماء", bn: "ওয়াটার গান", img: "water_gun" },
+  // الفرش
+  { key: "floor_brush", ar: "فرشاة الأرضية", bn: "ফ্লোর ব্রাশ", img: "floor_brush" },
+  { key: "tyre_brush", ar: "فرشاة الإطارات", bn: "টায়ার ব্রাশ", img: "tyre_brush" },
+  { key: "small_brush", ar: "فرشاة صغيرة", bn: "ছোট ব্রাশ", img: "small_brush" },
+  { key: "ac_brush", ar: "فرشاة المكيّف", bn: "এসি ব্রাশ", img: "ac_brush" },
+  // الإسفنج
+  { key: "sponge_body", ar: "إسفنجة البودي", bn: "বডি স্পঞ্জ", img: "sponge_body" },
+  { key: "sponge_tyre", ar: "إسفنجة الإطارات", bn: "টায়ার স্পঞ্জ", img: "sponge_tyre" },
+  // المكنسة
+  { key: "vacuum", ar: "المكنسة الكهربائية", bn: "ভ্যাকুয়াম ক্লিনার", img: "vacuum" },
+  // المناشف
+  { key: "towel_body", ar: "منشفة البودي (زرقاء)", bn: "বডি তোয়ালে (নীল)", img: "towel_body" },
+  { key: "towel_dashboard", ar: "منشفة التابلوه (خضراء)", bn: "ড্যাশবোর্ড তোয়ালে (সবুজ)", img: "towel_dashboard" },
+  { key: "towel_glass", ar: "منشفة الزجاج (صفراء)", bn: "গ্লাস তোয়ালে (হলুদ)", img: "towel_glass" },
+  { key: "towel_tyre", ar: "منشفة الإطارات", bn: "টায়ার তোয়ালে", img: "towel_tyre" },
+  // مواد التنظيف والتلميع
+  { key: "dashboard_polish", ar: "ملمّع التابلوه", bn: "ড্যাশবোর্ড পলিশ", img: "dashboard_polish" },
+  { key: "tyre_polish", ar: "ملمّع الإطارات", bn: "টায়ার পলিশ", img: "tyre_polish" },
+  { key: "stain_remover", ar: "مزيل البقع", bn: "স্টেন রিমুভার", img: "stain_remover" },
+  { key: "last_touch", ar: "اللمسة الأخيرة", bn: "লাস্ট টাচ", img: "last_touch" },
+  { key: "glass_cleaner", ar: "منظّف الزجاج", bn: "গ্লাস ক্লিনার", img: "glass_cleaner" },
+  // إضافات
+  { key: "service_box", ar: "صندوق الخدمة الإضافي", bn: "সার্ভিস বক্স", img: "service_box" },
+  { key: "soap_bottle", ar: "عبوة الصابون الفارغة", bn: "সাবানের বোতল", img: "soap_bottle" },
 ];
 const CONDITIONS = [
   { v: "good", ar: "جيدة", bn: "ভালো" },
@@ -544,7 +578,7 @@ function Fuel({ me, myBike }) {
 const condAr = (v) => (CONDITIONS.find(c => c.v === v) || {}).ar || v;
 function Assets({ me }) {
   const [rows, setRows] = useState(() => Object.fromEntries(
-    ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good" }])
+    ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null }])
   ));
   const [notes, setNotes] = useState("");
   const [pledge, setPledge] = useState(false);
@@ -560,6 +594,7 @@ function Assets({ me }) {
   useEffect(() => { loadRecent(); }, []);
 
   function setItem(key, patch) { setRows(s => ({ ...s, [key]: { ...s[key], ...patch } })); }
+  const reset = () => setRows(Object.fromEntries(ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null }])));
 
   async function submit() {
     setMsg(null);
@@ -568,18 +603,21 @@ function Assets({ me }) {
     if (!pledge) { setMsg({ t: "err", m: "يجب الموافقة على التعهّد قبل الحفظ · সংরক্ষণের আগে অঙ্গীকারে সম্মতি দিন" }); return; }
     setBusy(true);
     try {
-      const items = chosen.map(it => ({
-        key: it.key, name_ar: it.ar, name_bn: it.bn,
-        qty: Number(rows[it.key].qty) || 1, condition: rows[it.key].condition,
-      }));
+      const bid = me.biker_employee_id;
+      const items = [];
+      for (const it of chosen) {
+        const r = rows[it.key];
+        let photoUrl = null;
+        if (r.photo) { try { photoUrl = await uploadPhoto(r.photo, "asset-" + it.key, bid); } catch (e) {} }
+        items.push({ key: it.key, name_ar: it.ar, name_bn: it.bn, qty: Number(r.qty) || 1, condition: r.condition, photo: photoUrl });
+      }
       const { error } = await supabase.from("biker_assets").insert({
-        operator_id: me.operator_id, biker_employee_id: me.biker_employee_id, biker_name: me.name,
+        operator_id: me.operator_id, biker_employee_id: bid, biker_name: me.name,
         items, pledge_accepted: true, notes: notes || null, status: "declared", created_by: me.uid,
       });
       if (error) throw error;
       setMsg({ t: "ok", m: "تم تسجيل العهدة بنجاح ✅ · সফলভাবে সংরক্ষিত" });
-      setRows(Object.fromEntries(ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good" }])));
-      setNotes(""); setPledge(false); loadRecent();
+      reset(); setNotes(""); setPledge(false); loadRecent();
     } catch (e) { setMsg({ t: "err", m: "خطأ · ত্রুটি: " + (e.message || e) }); }
     setBusy(false);
   }
@@ -587,30 +625,41 @@ function Assets({ me }) {
   return (
     <div className="bp-card"><div className="bp-sec">
       <label className="bp-lbl">إقرار العهدة — الأدوات والمواد <span className="bn">/ সরঞ্জাম ও উপকরণের ঘোষণা</span></label>
-      <div className="bp-note" style={{ marginBottom: 4 }}>حدّد ما استلمته، والكمية، وحالته. · আপনি যা পেয়েছেন, পরিমাণ ও অবস্থা নির্বাচন করুন।</div>
+      <div className="bp-note" style={{ marginBottom: 4 }}>حدّد ما استلمته، والكمية، وحالته، وصوّر الصنف. · আপনি যা পেয়েছেন তা নির্বাচন করুন, পরিমাণ ও অবস্থা দিন এবং ছবি তুলুন।</div>
 
       <div className="bp-chklist">
         {ASSET_ITEMS.map(it => {
           const r = rows[it.key];
+          const ref = it.img ? TOOLREFS[it.img] : null;
           return (
-            <div key={it.key} style={{ borderBottom: "1px solid #f4ece0", background: r.present ? "#fff8f1" : "#fffdf9" }}>
-              <label className="bp-chk" htmlFor={"as_" + it.key} style={{ borderBottom: "none" }}>
+            <div className="bp-aitem" key={it.key} style={{ background: r.present ? "#fff8f1" : "#fffdf9" }}>
+              <label className="bp-arow" htmlFor={"as_" + it.key}>
+                {ref ? <img className="bp-aref" src={ref} alt="" /> : <div className="bp-aref ph">🧰</div>}
                 <input id={"as_" + it.key} type="checkbox" checked={r.present} onChange={e => setItem(it.key, { present: e.target.checked })} />
                 <span className="tx">{it.ar} <span className="bn">/ {it.bn}</span></span>
               </label>
               {r.present && (
-                <div className="bp-row" style={{ padding: "0 13px 12px", gap: 8 }}>
-                  <div style={{ flex: "0 0 34%" }}>
-                    <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الكمية <span className="bn">/ পরিমাণ</span></label>
-                    <input className="bp-in" type="number" inputMode="numeric" min="1" value={r.qty}
-                      onChange={e => setItem(it.key, { qty: e.target.value })} style={{ padding: "9px 11px" }} />
+                <div style={{ padding: "0 13px 12px" }}>
+                  <div className="bp-row" style={{ gap: 8 }}>
+                    <div style={{ flex: "0 0 32%" }}>
+                      <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الكمية <span className="bn">/ পরিমাণ</span></label>
+                      <input className="bp-in" type="number" inputMode="numeric" min="1" value={r.qty}
+                        onChange={e => setItem(it.key, { qty: e.target.value })} style={{ padding: "9px 11px" }} />
+                    </div>
+                    <div>
+                      <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الحالة <span className="bn">/ অবস্থা</span></label>
+                      <select className="bp-sel" value={r.condition} onChange={e => setItem(it.key, { condition: e.target.value })} style={{ padding: "9px 11px" }}>
+                        {CONDITIONS.map(c => <option key={c.v} value={c.v}>{c.ar} / {c.bn}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الحالة <span className="bn">/ অবস্থা</span></label>
-                    <select className="bp-sel" value={r.condition} onChange={e => setItem(it.key, { condition: e.target.value })} style={{ padding: "9px 11px" }}>
-                      {CONDITIONS.map(c => <option key={c.v} value={c.v}>{c.ar} / {c.bn}</option>)}
-                    </select>
-                  </div>
+                  <label className="bp-lbl" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>صورة الصنف (اختياري) <span className="bn">/ ছবি (ঐচ্ছিক)</span></label>
+                  <label className="bp-acap" htmlFor={"asph_" + it.key}>
+                    {r.photo ? <img className="bp-athumb" src={URL.createObjectURL(r.photo)} alt="" /> : <>📷 تصوير الصنف · ছবি তুলুন</>}
+                    {r.photo && <span style={{ color: "#1b7a3d" }}>✓ تم · হয়েছে</span>}
+                    <input id={"asph_" + it.key} type="file" accept="image/*" capture="environment"
+                      onChange={e => setItem(it.key, { photo: (e.target.files || [])[0] || null })} />
+                  </label>
                 </div>
               )}
             </div>
