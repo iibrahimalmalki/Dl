@@ -42,7 +42,7 @@ const BikerPortal=lazy(()=>import("./BikerPortal"));
 const SUPERVISOR_POS=["sec_ops","ops1","field_sup"];
 // الصفحات المنقولة إلى نظام التصميم الزجاجي (تتبع الوضع الداكن). غير المنقولة تُعرض كجزيرة فاتحة حتى نقلها.
 // migrated pages follow the theme; others render inside a light island until migrated (Phase 1/2)
-const GLASS_READY=new Set(["dashboard"]);
+const GLASS_READY=new Set(["dashboard","field_rounds"]);
 
 const NAV=[
   {g:"الرئيسية"},

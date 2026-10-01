@@ -38,19 +38,19 @@ export default function ActivityLog({table,rowId,labels={},valueMap={},entityNam
 
 const CSS=`
 .alg{display:contents}
-.alg-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:9px;border:1px solid #e6e9ee;background:#fff;color:#475467;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
-.alg-btn.on{background:#eef2f6;border-color:#cbd5e1;color:#1d5bbf}
-.alg-list{margin-top:9px;border:1px solid #eef1f4;border-radius:11px;background:#fafbfc;padding:8px 10px;flex-basis:100%}
-.alg-l{font-size:11.5px;color:#94a3b8;font-weight:600;padding:6px 2px}
-.alg-i{padding:8px 0;border-bottom:1px solid #eef1f4}
+.alg-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:9px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink-2);font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+.alg-btn.on{background:var(--soft);border-color:var(--line-2);color:var(--info-ink)}
+.alg-list{margin-top:9px;border:1px solid var(--line);border-radius:11px;background:var(--soft);padding:8px 10px;flex-basis:100%}
+.alg-l{font-size:11.5px;color:var(--mut-2);font-weight:600;padding:6px 2px}
+.alg-i{padding:8px 0;border-bottom:1px solid var(--line)}
 .alg-i:last-child{border-bottom:none}
 .alg-i-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.alg-i-top b{font-size:12px;color:#0f172a;font-weight:800}
-.alg-i-top span{font-size:10.5px;color:#94a3b8;font-weight:600}
+.alg-i-top b{font-size:12px;color:var(--ink);font-weight:800}
+.alg-i-top span{font-size:10.5px;color:var(--mut-2);font-weight:600}
 .alg-ch{margin-top:5px;display:flex;flex-direction:column;gap:3px}
-.alg-ch div{font-size:11px;color:#475569;font-weight:600;line-height:1.6}
-.alg-ch.dim{color:#94a3b8}
-.alg-f{font-weight:800;color:#0f172a}
-.alg-ch s{color:#b42318}
-.alg-ch b{color:#087443}
+.alg-ch div{font-size:11px;color:var(--ink-2);font-weight:600;line-height:1.6}
+.alg-ch.dim{color:var(--mut-2)}
+.alg-f{font-weight:800;color:var(--ink)}
+.alg-ch s{color:var(--bad-ink)}
+.alg-ch b{color:var(--ok-ink)}
 `;
