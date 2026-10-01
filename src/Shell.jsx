@@ -92,6 +92,8 @@ export default function Shell({onLogout,me}){
   // الثيم العام (فاتح/داكن/تلقائي) من مزوّد الثيم — الشريط ولوحة القيادة يتبعانه
   const{resolved:sbTheme}=useTheme();
   const[search,setSearch]=useState(false);
+  // آخر حدث dw:open — للصفحات المحمّلة كسولاً التي تُركَّب بعد بثّ الحدث
+  useEffect(()=>{const h=e=>{window.__dwLast={...(e.detail||{}),t:Date.now()};};window.addEventListener("dw:open",h);return()=>window.removeEventListener("dw:open",h);},[]);
   useEffect(()=>{const prev=document.title;document.title="دلو ورغوة · المنصة التشغيلية";return()=>{document.title=prev;};},[]);
   // شارات حيّة على القائمة: طلبات الإمداد المفتوحة | live badges (open supply requests)
   const[badges,setBadges]=useState({});
