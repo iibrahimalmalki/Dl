@@ -144,7 +144,7 @@ function trySplit(s,b){ /* يحاول إبقاء رأس البند وصفّ صو
   var gal=b.querySelector(".gal");if(!gal||gal.children.length<=3)return null;
   var removed=[];
   while(gal.children.length>3&&overflows(s,b)){for(var k=0;k<3&&gal.children.length>3;k++){removed.unshift(gal.lastElementChild);gal.removeChild(gal.lastElementChild);}}
-  if(removed.length&&!overflows(s,b))return contOf(b,removed);
+  if(removed.length>=2&&!overflows(s,b))return contOf(b,removed); /* لا نترك صورة يتيمة في صفحة المتابعة */
   removed.forEach(function(f){gal.appendChild(f);});return null;}
 function flow(section,cont){
   var s=(cont&&sheets.length)?sheets[sheets.length-1]:newSheet(),blocks=blocksOf(section),i=0;
@@ -160,11 +160,21 @@ function flow(section,cont){
     }
     i++;}
 }
+function fitCover(cs,cover){ /* يضغط الغلاف تدريجياً حتى يظهر ذيله (الإصدار/الاعتماد/QR) فوق تذييل الصفحة */
+  var foot=cover.querySelector(".cv-foot");if(!foot)return;
+  var lim=function(){return foot.getBoundingClientRect().bottom-cs.getBoundingClientRect().top>(H-MM(13));};
+  for(var lv=1;lv<=4&&lim();lv++){cover.classList.add("t"+lv);}
+}
+function balanceGal(){ /* يوزّع الصور بالتساوي: لا صورة يتيمة في صف أخير */
+  var m={2:2,4:2,7:4,10:5};
+  Array.prototype.slice.call(document.querySelectorAll(".gal")).forEach(function(g){var c=m[g.children.length];if(c)g.style.gridTemplateColumns="repeat("+c+",1fr)";});
+}
 function paginate(){
-  var cover=src.querySelector(".cover");if(cover){newSheet("cv0").appendChild(cover);}
+  var cover=src.querySelector(".cover");if(cover){var cs=newSheet("cv0");cs.appendChild(cover);fitCover(cs,cover);}
   var sum=src.querySelector(".pg.summary");if(sum)flow(sum,false);
   var it=src.querySelector(".pg.items");if(it)flow(it,true);
   var cl=src.querySelector(".pg.closing");if(cl)flow(cl,true);
+  balanceGal();
   var tpl=document.getElementById("pf-tpl");
   sheets.forEach(function(s,i){var f=tpl.content.firstElementChild.cloneNode(true);f.querySelector(".pno").textContent="صفحة "+(i+1)+" من "+sheets.length;s.appendChild(f);});
   var toc={},last2=0;sheets.forEach(function(sh,i){sh.querySelectorAll("h2 .n").forEach(function(n){var k=n.textContent.trim();if(!toc[k])toc[k]=i+1;});if(sh.querySelector(".item"))last2=i+1;});
@@ -242,7 +252,7 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
         <div class="avatar">${bikerPhoto?`<img src="${esc(bikerPhoto)}" alt=""/>`:`<span>${esc(initials(round.biker_name))}</span>`}</div>
         <div class="who"><div class="nm">${esc(round.biker_name||"—")}</div><div class="sid">رقم سويتر <b dir="ltr">#${esc(round.sweater_id||"—")}</b>${extras.team?` · ${esc(extras.team)}`:""}</div><div class="rid-l">رقم التقرير <b dir="ltr">${rid}</b></div></div>
         <div class="meta">
-          <div><span>تاريخ الجولة</span><b>${esc(fmtDateAr(round.round_date))}${round.round_time?` · <i>${esc(fmtTime12(round.round_time))}</i>`:""}</b></div>
+          <div><span>تاريخ الجولة</span><b>${esc(fmtDateAr(round.round_date))}${round.round_time?`<small class="tm">${esc(fmtTime12(round.round_time))}</small>`:""}</b></div>
           <div><span>منفّذ الجولة</span><b>${esc(inspector||"—")}</b></div>
           <div><span>المشغّل</span><b>${esc(opName||"دلو ورغوة")}</b></div>
           <div><span>الموقع</span><b>${esc(locName||"موقع الخدمة")}${coords?` <small dir="ltr">${esc(coords)}</small>`:""}</b></div>
@@ -273,7 +283,7 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
         <div><b>${photoN}</b><span>صورة توثيق</span></div>
       </div>
       <div class="cv-grid">
-        <div class="cv-box"><div class="bx-h">الاتجاه · آخر ${series.length} جولات</div>${series.length>=2?sparkSVG(series):`<div class="muted">لا توجد جولة سابقة للمقارنة.</div>`}${an.trend?.text?`<div class="tr-txt">${esc(an.trend.text)}</div>`:""}</div>
+        <div class="cv-box"><div class="bx-h">الاتجاه · آخر ${series.length} جولات</div>${series.length>=2?sparkSVG(series):`<div class="muted">لا توجد جولة سابقة للمقارنة.</div>`}${series.length>=2&&an.trend?.text?`<div class="tr-txt">${esc(an.trend.text)}</div>`:""}</div>
         <div class="cv-box"><div class="bx-h">الأولويات التصحيحية</div>${prioLines?`<table class="prio">${prioLines}</table>`:`<div class="muted ok">لا مخالفات على البايكر في هذه الجولة.</div>`}${an.rootCause&&prioLines?`<div class="tr-txt"><b>السبب الجذري:</b> ${esc(an.rootCause)}</div>`:""}</div>
       </div>
       <div class="cv-toc">
@@ -356,9 +366,9 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
     <div class="bn" lang="bn" dir="ltr">${bn.map(l=>`<div>${l}</div>`).join("")}</div>
     <h2 style="margin-top:14pt"><span class="n">5</span>التوقيعات</h2>
     <div class="sign">
-      <div><div class="line"></div><b>منفّذ الجولة</b><span>${esc(inspector||"—")}</span><small>التاريخ: &nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;/${now.getFullYear()}</small></div>
-      <div><div class="line"></div><b>البايكر · বাইকার</b><span>${esc(round.biker_name||"—")}</span><small>التاريخ: &nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;/${now.getFullYear()}</small></div>
-      <div><div class="line"></div><b>الاعتماد</b><span>${esc(approver)}</span><small>التاريخ: &nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;/${now.getFullYear()}</small></div>
+      <div><div class="line"></div><b>منفّذ الجولة</b><span>${esc(inspector||"—")}</span><small>التاريخ: <span dir="ltr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/ ${now.getFullYear()}</span></small></div>
+      <div><div class="line"></div><b>البايكر · বাইকার</b><span>${esc(round.biker_name||"—")}</span><small>التاريخ: <span dir="ltr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/ ${now.getFullYear()}</span></small></div>
+      <div><div class="line"></div><b>الاعتماد</b><span>${esc(approver)}</span><small>التاريخ: <span dir="ltr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/ ${now.getFullYear()}</span></small></div>
     </div>
     <div class="limits">حدود التقرير: نتائج هذه الجولة عيّنة لحظية لحالة البايكر ومعداته وقت الفحص، ولا تُعمَّم على غير وقتها. تُعتمد الصور المرفقة دليلاً أساسياً، ويُراجع أي اعتراض خلال 48 ساعة من الإصدار.</div>
   </section>`;
@@ -405,7 +415,7 @@ small{font-size:8.5pt;color:var(--muted)}
 .who .nm{font-size:18pt;font-weight:700;line-height:1.25}.who .sid{font-size:10.5pt;color:var(--muted);margin-top:1pt}.who .sid b{color:var(--ink);font-weight:700}
 .who .rid-l{font-size:9.5pt;color:var(--muted);margin-top:4pt}.who .rid-l b{color:var(--ink);font-weight:700}
 .meta{display:grid;grid-template-columns:1fr 1fr;gap:3mm 5mm}
-.meta div{min-width:0}.meta span{display:block;font-size:8.5pt;color:var(--muted)}.meta b{display:block;font-size:10pt;font-weight:700;line-height:1.5}.meta b i{font-style:normal;white-space:nowrap}.meta b small{display:block;direction:ltr;text-align:right;color:var(--muted);font-weight:400;font-size:8pt}
+.meta div{min-width:0}.meta span{display:block;font-size:8.5pt;color:var(--muted)}.meta b{display:block;font-size:10pt;font-weight:700;line-height:1.5}.meta b i{font-style:normal;white-space:nowrap}.meta b small.tm{direction:rtl;text-align:right;color:var(--ink);font-weight:400;font-size:9pt}.meta b small{display:block;direction:ltr;text-align:right;color:var(--muted);font-weight:400;font-size:8pt}
 .cv-stats{display:grid;grid-template-columns:1.25fr 1fr 1.15fr;gap:5mm;align-items:stretch}
 .st{border:1px solid var(--line);border-radius:4mm;background:var(--surface-2);padding:4mm 4mm 3mm}
 .g-main{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -430,6 +440,12 @@ small{font-size:8.5pt;color:var(--muted)}
 .cv-toc li{counter-increment:toc;display:flex;align-items:baseline;gap:5pt;font-size:9.5pt;padding:2pt 0;border-bottom:1px dotted var(--line)}
 .cv-toc li::before{content:counter(toc);background:var(--navy);color:#fff;font-size:8pt;width:14pt;height:14pt;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none;position:relative;top:2pt}
 .cv-toc li span{flex:1}.cv-toc li i{font-style:normal;color:var(--muted);font-size:9pt;white-space:nowrap}
+/* مستويات ضغط الغلاف (يضيفها fitCover عند الحاجة) */
+.cover.t1 .cv{gap:2.6mm;padding-top:5mm}.cover.t1 .cv-id{padding:3.5mm 5mm}.cover.t1 .avatar{width:24mm;height:24mm;font-size:16pt}.cover.t1 .cv-id{grid-template-columns:24mm 1fr 1.45fr}
+.cover.t1 .g-wrap{width:96px;height:96px}.cover.t1 .g-wrap svg{width:96px;height:96px}.cover.t1 .g-val{font-size:17pt}
+.cover.t2 .cv-kpis div{padding:2mm 2mm}.cover.t2 .cv-kpis b{font-size:15pt}.cover.t2 .tr-txt{display:none}.cover.t2 .prio td{font-size:9pt}.cover.t2 .cv-toc li{font-size:9pt;padding:1pt 0}
+.cover.t3 .cv{gap:2mm;padding-top:4mm}.cover.t3 .st{padding:2.5mm 3mm}.cover.t3 .g-wrap{width:80px;height:80px}.cover.t3 .g-wrap svg{width:80px;height:80px}.cover.t3 .g-val{font-size:14pt}.cover.t3 .cv-foot .qr svg{width:15mm;height:15mm}
+.cover.t4 .cv-grid{grid-template-columns:1fr}.cover.t4 .cv-grid .cv-box:first-child{display:none}
 .cv-foot{display:flex;align-items:center;gap:8mm;border-top:1px solid var(--line);padding-top:3.5mm;font-size:9.5pt;color:var(--muted)}
 .cf-t{flex:1;display:flex;flex-direction:column;gap:2pt}.cf-t b{color:var(--ink);margin-left:3pt}.cf-t .muted{font-size:8.5pt}
 .cv-foot .qr{flex:none;text-align:center}.cv-foot .qr svg{width:19mm;height:19mm;display:block;margin:0 auto}.cv-foot .qr small{display:block;font-size:7.5pt;color:var(--muted);margin-top:1pt;white-space:nowrap}
