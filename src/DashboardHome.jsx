@@ -4,6 +4,7 @@ import Icon from"./Icon";
 import{payoutForBiker}from"./sweaterContract";
 import{bikerScore,trend}from"./scorecard";
 import DashHero from"./DashHero";
+import Assistant from"./Assistant";
 import{usePeriod}from"./period";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
@@ -53,9 +54,9 @@ export default function DashboardHome({onNav,theme="light"}){
       q("ops_biker_month","period,sweater_id,biker_name,net_washes,rating,complaint_pct,approved_complaints"),
       q("payroll_lines","period,role,total"),
       q("violations","status,severity,fine_applied"),
-      q("field_rounds","compliance_pct,period,status,round_date"),
+      q("field_rounds","compliance_pct,period,status,round_date,sweater_id"),
       q("vendor_expenses","exp_date,amount"),
-      q("renewal_docs","doc_type,subject,end_date,active"),
+      q("renewal_docs","id,doc_type,subject,end_date,active"),
       q("fleet_vehicles","plate,status,has_gps,has_camera,active"),
       q("fleet_incidents","title,status,active"),
       q("housing_units","name,annual_rent,active"),
@@ -285,6 +286,7 @@ export default function DashboardHome({onNav,theme="light"}){
     <style>{CSS}</style>
     <div className="dh-orbs" aria-hidden><span className="dh-orb a"/><span className="dh-orb b"/><span className="dh-orb c"/></div>
 
+    <div className="dh-layout"><div className="dh-main">
     {/* البطل: الغسلات + الالتزام + المؤشرات الأساسية للفترة المشتركة */}
     <DashHero d={d} period={period} onPeriod={setPeriod} onNav={nav}/>
 
@@ -528,6 +530,10 @@ export default function DashboardHome({onNav,theme="light"}){
       {[["recruitment","المتقدّمون","applicants"],["interviews","المقابلات","interview"],["operations","العمليات","operations"],["payroll","الرواتب","payroll"],["pricing","التسعير","cash"],["complaints","الشكاوى","complaints"],["field_rounds","الجولات","rounds"],["fleet","الأسطول","bike"],["housing","السكن","home"],["renewals","الوثائق","doc"],["supply","الإمداد","bucket"],["vendors","الموردون","vendors"],["org","الهيكل","building"]].map(([k,ar,ic])=>(
         <button key={k} className="dh-q" onClick={()=>nav(k)}><span className="dh-q-ic"><Icon n={ic} s={18}/></span>{ar}</button>))}
     </div>
+    </div>
+    {/* مساعد العمليات: جانبي على الشاشات الواسعة، وورقة سفلية على الجوال */}
+    <Assistant d={d} period={period} onNav={nav}/>
+    </div>
   </div>);
 }
 
@@ -562,6 +568,11 @@ function Leg({c,t,v}){return(<div style={{display:"flex",alignItems:"center",gap
 // ── التصميم الزجاجي (Glass) — فاتح افتراضياً، داكن عبر data-theme="dark" ──
 // كل الألوان عبر رموز --dh-* حتى تعمل البطاقات في السمتين. الهوية: برتقالي #E8712B/#F59E0B، وردي #FB7185، navy #0A0E27.
 const CSS=`
+/* ── التخطيط: المحتوى + مساعد العمليات ── */
+.dh-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start}
+.dh-main{min-width:0}
+@media(max-width:1279px){.dh-layout{grid-template-columns:minmax(0,1fr)}}
+
 /* ── البطل ── */
 .dh-hero{padding:18px 20px;margin-bottom:14px}
 .dh-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}

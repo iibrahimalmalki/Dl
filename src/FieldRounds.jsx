@@ -96,6 +96,13 @@ export default function FieldRounds({opId,onGo}){
 
   // تفريغ النموذج للحالة الابتدائية
   const resetForm=()=>{setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setItemParts({});setPhotos({});setNotes("");setEditId(null);};
+  // فتح جولة جديدة لبايكر محدّد من المساعد/لوحة القيادة: dw:open {view:'field_rounds',action:'new',sweater_id}
+  useEffect(()=>{
+    const startFor=d=>{if(!d||d.view!=="field_rounds"||d.action!=="new"||!d.sweater_id)return;resetForm();setHd(h=>({...h,sweater_id:String(d.sweater_id)}));setShowReq(false);setShowNew(true);};
+    const h=e=>startFor(e.detail);window.addEventListener("dw:open",h);
+    const last=window.__dwLast;if(last&&last.view==="field_rounds"&&Date.now()-last.t<8000){window.__dwLast=null;startFor(last);}
+    return()=>window.removeEventListener("dw:open",h);
+  /*eslint-disable-next-line*/},[]);
   // فتح نموذج تعديل جولة محفوظة — يحمّل بياناتها بالكامل
   const startEdit=(r)=>{
     setEditId(r.id);
