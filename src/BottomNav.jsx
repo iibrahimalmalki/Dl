@@ -1,0 +1,19 @@
+// شريط التنقّل السفلي للجوال (≤640px): أهم أربع صفحات + «المزيد» يفتح القائمة الجانبية
+import Icon from"./Icon";
+
+export const BOTTOM_ITEMS=[
+  {k:"dashboard",ar:"الرئيسية",ic:"dashboard"},
+  {k:"operations",ar:"العمليات",ic:"operations"},
+  {k:"field_rounds",ar:"الجولات",ic:"rounds"},
+  {k:"performance",ar:"الأداء",ic:"performance"},
+];
+
+export default function BottomNav({active,allowed,onGo,onMore,badges={}}){
+  const items=BOTTOM_ITEMS.filter(x=>!allowed||allowed.includes(x.k));
+  const inBar=items.some(x=>x.k===active);
+  return(<nav className="g-bnav" aria-label="التنقّل السريع">
+    {items.map(x=><button key={x.k} type="button" className={"g-bnav-i"+(active===x.k?" on":"")} aria-current={active===x.k?"page":undefined} onClick={()=>onGo(x.k)}>
+      <span className="g-bnav-ic"><Icon n={x.ic} s={20}/>{badges[x.k]?<i className="g-bnav-b">{badges[x.k]>9?"9+":badges[x.k]}</i>:null}</span><span>{x.ar}</span></button>)}
+    <button type="button" className={"g-bnav-i"+(!inBar?" on":"")} onClick={onMore} aria-label="المزيد — كل الصفحات"><span className="g-bnav-ic"><Icon n="menu" s={20}/></span><span>المزيد</span></button>
+  </nav>);
+}

@@ -3,6 +3,7 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import DashboardHome from"./DashboardHome";
 import Notifications from"./Notifications";
+import BottomNav from"./BottomNav";
 import GlassSidebar from"./GlassSidebar";
 import{Search}from"lucide-react";
 import{useTheme}from"./theme";
@@ -114,6 +115,7 @@ export default function Shell({onLogout,me}){
     <GlassSidebar items={nav} active={view} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={sbTheme}
       user={{name:nm,role:owner?"المالك · صلاحية كاملة":isSup?"مشرف ميداني":"مستخدم"}} onLogout={onLogout} onSettings={owner?()=>go("users"):undefined} onSearch={()=>setSearch(true)}/>
     <GlobalSearch open={search} onClose={()=>setSearch(false)} items={nav} onGo={go}/>
+    <BottomNav active={view} allowed={nav.map(n=>n.k)} onGo={go} onMore={()=>setOpen(true)} badges={badges}/>
 
     <div className="sh-main">
       <header className="sh-top">
