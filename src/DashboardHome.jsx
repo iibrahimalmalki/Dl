@@ -164,6 +164,9 @@ export default function DashboardHome({onNav,theme="light"}){
     const docsA=d.docs.filter(x=>x.active!==false);
     const docExpired=docsA.filter(x=>{const l=dLeft(x.end_date);return l!=null&&l<0;});
     const docSoon=docsA.filter(x=>{const l=dLeft(x.end_date);return l!=null&&l>=0&&l<=30;});
+    // شرائح تراكمية غير منتهية: ≤7 · ≤14 · ≤30
+    const docLe=n=>docsA.filter(x=>{const l=dLeft(x.end_date);return l!=null&&l>=0&&l<=n;}).length;
+    const docD7=docLe(7),docD14=docLe(14);
     const fveh=d.fveh.filter(v=>v.active!==false);
     const stolen=fveh.filter(v=>v.status==="stolen").length;
     const fMaint=fveh.filter(v=>v.status==="maintenance").length;
@@ -241,7 +244,7 @@ export default function DashboardHome({onNav,theme="light"}){
       topBikers,maxW,nBikers,targets,insTop,
       A,accepted,rejected,pending,funnel,total0,bikers,teams:d.teams,
       openViol,finesTotal,avgComp2:avgComp,rounds:d.rounds,ivPending,onbAvg,
-      docExpired:docExpired.length,docSoon:docSoon.length,nVeh:fveh.length,stolen,fMaint,fIncOpen,gpsCov,
+      docExpired:docExpired.length,docSoon:docSoon.length,docD7,docD14,nVeh:fveh.length,stolen,fMaint,fIncOpen,gpsCov,
       hpNext,hpNextDl,hvOpen,houseMonthly,scPending,scLow,alerts,
       tPending,tReviewed,tTotal};
   },[d,preset,cFrom,cTo,fBiker,fCat]);
@@ -251,7 +254,7 @@ export default function DashboardHome({onNav,theme="light"}){
   const {allP,maxP,rangeLabel,prevLabel,nMonths,bikerOpts,catOpts,washes,avgRating,revenue,payrollTotal,tApproved,cash,avgComp,coverPct,margin,
     deltas,series,finChart,daily,dailyWashTot,catList,catTotal,selCatVal,selCatTrend,topBikers,maxW,nBikers,targets,insTop,
     A,accepted,rejected,pending,funnel,total0,bikers,teams,openViol,ivPending,onbAvg,
-    docExpired,docSoon,nVeh,stolen,fMaint,fIncOpen,gpsCov,hpNext,hpNextDl,hvOpen,scPending,scLow,alerts,
+    docExpired,docSoon,docD7,docD14,nVeh,stolen,fMaint,fIncOpen,gpsCov,hpNext,hpNextDl,hvOpen,scPending,scLow,alerts,
     tPending,tReviewed,tTotal}=s;
 
   const finMax=Math.max(1,...finChart.map(x=>Math.max(x.i,x.o)));
@@ -365,7 +368,8 @@ export default function DashboardHome({onNav,theme="light"}){
     <div className="dh-ops">
       <Kpi label="الأسطول" ic="bike" ib="var(--info-bg)" c="var(--info-ink)" n={nVeh} sub={`${fIncOpen} حوادث · تتبّع ${gpsCov}%`} tone={stolen?"red":""} onClick={()=>nav("fleet")}/>
       <Kpi label="السكن — الدفعة القادمة" ic="home" ib="var(--p-100)" c="var(--warn-ink)" n={hpNext?money(hpNext.amount):"—"} sub={hpNext?`تستحق ${fmtD(hpNext.due_date)}`:"مكتمل"} onClick={()=>nav("housing")}/>
-      <Kpi label="الوثائق — عاجلة ≤30" ic="doc" ib="var(--warn-bg)" c="var(--warn-ink)" n={docSoon} sub={docExpired?`${docExpired} منتهية`:"لا منتهية"} tone={docExpired?"red":""} onClick={()=>nav("renewals")}/>
+      <Kpi label="الوثائق — عاجلة (≤7 + منتهية)" ic="doc" ib="var(--bad-bg)" c="var(--bad-ink)" n={docD7+docExpired} tone={docD7+docExpired?"red":""} onClick={()=>nav("renewals")}
+        sub={<span className="dh-docs" title={`منتهية: ${docExpired}`}><span className="g-badge bad">≤7 · {docD7}</span><span className="g-badge warn">≤14 · {docD14}</span><span className="g-badge info">≤30 · {docSoon}</span></span>}/>
       <Kpi label="الإمداد — طلبات معلّقة" ic="bucket" ib="var(--ok-bg)" c="var(--ok-ink)" n={scPending} sub={scLow?`${scLow} تحت الحدّ`:"المخزون متوازن"} onClick={()=>nav("supply")}/>
     </div>
 
@@ -615,6 +619,7 @@ const CSS=`
 .dh-kh{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .dh-kl{font-size:11px;color:var(--dh-mut);font-weight:700;line-height:1.3}
 .dh-ki{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;filter:drop-shadow(0 0 6px rgba(0,0,0,.05))}
+.dh-docs{display:inline-flex;gap:4px;flex-wrap:wrap}.dh-docs .g-badge{padding:1px 7px;font-size:10.5px;direction:ltr;unicode-bidi:isolate}
 .dh-kn{font-size:23px;font-weight:800;margin-top:9px;letter-spacing:-.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(90deg,var(--dh-ink),var(--dh-ink));-webkit-background-clip:text;background-clip:text}
 .dh-kd{font-size:11px;font-weight:700}
 .dh-kfoot{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;margin-top:3px}
