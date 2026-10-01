@@ -4,18 +4,11 @@
 import{ITEMS,AXES,bikerItems,mgmtItems,complianceByAxis,compliance,supplyReadiness,effect}from"./fieldChecklist";
 import{ITEM_EN,ITEM_BN,AXES_EN,STATUS_BIKER,STATUS_MGMT,EFFECT_BN}from"./fieldReportI18n";
 import QRCode from"qrcode/lib/browser.js";
+// الخط المضمّن — تعريفه المشترك في fonts.js | shared embedded font definitions
+import{FONT_BASE,fontFaces}from"./fonts";
 export{ITEM_EN};
 
 const SITE=(typeof location!=="undefined"&&location.origin)||"https://db1-sandy.vercel.app";
-// الخط المضمّن (مستضاف مع المنصة في public/) — لا اعتماد على خطوط النظام أو خدمات خارجية | self-hosted embedded fonts
-const FONT_BASE=(typeof globalThis!=="undefined"&&globalThis.__DW_FONT_BASE)||SITE;
-function fontFaces(){
-  const f=(fam,file,w,range)=>`@font-face{font-family:'${fam}';font-style:normal;font-weight:${w};font-display:block;src:url(${FONT_BASE}/${file}) format('woff2');${range?`unicode-range:${range};`:""}}`;
-  const AR="U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0898-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC";
-  const BN="U+0951-0952,U+0964-0965,U+0980-09FE,U+1CD0,U+1CD2,U+1CD5-1CD6,U+1CD8,U+1CE1,U+1CEA,U+1CED,U+1CF2,U+1CF5-1CF7,U+200C-200D,U+20B9,U+25CC,U+A8F1";
-  return[400,500,700].map(w=>f("IBM Plex Sans Arabic",`ibm-plex-sans-arabic-arabic-${w}-normal.woff2`,w,AR)+f("IBM Plex Sans Arabic",`ibm-plex-sans-arabic-latin-${w}-normal.woff2`,w,"")).join("")
-    +[400,600].map(w=>f("Noto Sans Bengali",`noto-sans-bengali-bengali-${w}-normal.woff2`,w,BN)).join("");
-}
 const OWNER="إبراهيم المالكي";
 const OPS_MANAGER="مدير العمليات";
 

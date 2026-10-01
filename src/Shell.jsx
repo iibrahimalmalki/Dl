@@ -148,7 +148,7 @@ export default function Shell({onLogout,me}){
         {view==="damage_claims"&&<Suspense fallback={<Sk/>}><DamageClaims owner={owner} opId={op}/></Suspense>}
         {view==="operations"&&<Suspense fallback={<Sk/>}><Operations opId={op}/></Suspense>}
         {view==="complaints"&&<Suspense fallback={<Sk/>}><Complaints opId={op} me={me} owner={owner}/></Suspense>}
-        {view==="performance"&&<Suspense fallback={<Sk/>}><Performance opId={op}/></Suspense>}
+        {view==="performance"&&<Suspense fallback={<Sk/>}><Performance opId={op} onNav={go}/></Suspense>}
         {view==="field_rounds"&&<Suspense fallback={<Sk/>}><FieldRounds opId={op} onGo={go}/></Suspense>}
         {view==="supply_requests"&&<Suspense fallback={<Sk/>}><SupplyRequests owner={owner} opId={op}/></Suspense>}
         {view==="custody"&&<Suspense fallback={<Sk/>}><Custody owner={owner} opId={op}/></Suspense>}
