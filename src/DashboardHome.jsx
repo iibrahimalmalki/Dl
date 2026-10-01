@@ -257,11 +257,11 @@ export default function DashboardHome({onNav,theme="light"}){
   const finMax=Math.max(1,...finChart.map(x=>Math.max(x.i,x.o)));
   const dMaxW=Math.max(1,...daily.map(x=>x.washes));
   const recent=A.slice(0,4);
-  const scoreCol=v=>v==null?["#eef1f4","#94a3b8"]:v>=6.5?["#e7f7ef","#087443"]:v>=5?["#fef3e2","#b54708"]:["#feecea","#b42318"];
+  const scoreCol=v=>v==null?["var(--track)","var(--mut-2)"]:v>=6.5?["var(--ok-bg)","var(--ok-ink)"]:v>=5?["var(--warn-bg)","var(--warn-ink)"]:["var(--bad-bg)","var(--bad-ink)"];
   const stName=x=>x==="accepted"?"مقبول":x==="rejected"?"مرفوض":"معلّق";
   const stCls=x=>x==="accepted"?"p-acc":x==="rejected"?"p-rej":"p-pend";
-  const av=i=>["#f79009","#12b76a","#2e90fa","#7c3aed","#64748b","#e8712b"][i%6];
-  const sevC={crit:["#feecea","#b42318"],warn:["#fff3e2","#c2410c"],info:["#eef4ff","#1d5bbf"]};
+  const av=i=>["var(--warn)","var(--ok)","var(--info)","var(--info)","var(--mut)","var(--p)"][i%6];
+  const sevC={crit:["var(--bad-bg)","var(--bad-ink)"],warn:["var(--warn-bg)","var(--warn-ink)"],info:["var(--info-bg)","var(--info-ink)"]};
   const monthOpts=allP;
 
   return(<div className="dh" data-theme={theme}>
@@ -308,7 +308,7 @@ export default function DashboardHome({onNav,theme="light"}){
         <SM t="الغسلات" v={washes.toLocaleString("en-US")} dl={deltas.wash}/>
         <SM t="إيراد سويتر" v={money(revenue)} dl={deltas.rev}/>
         <SM t="النقد الخارج" v={money(cash.o)} dl={deltas.out} inv/>
-        <SM t="الصافي النقدي" v={money(cash.net)} dl={deltas.cash} col={cash.net>=0?"#087443":"#b42318"}/>
+        <SM t="الصافي النقدي" v={money(cash.net)} dl={deltas.cash} col={cash.net>=0?"var(--ok-ink)":"var(--bad-ink)"}/>
         <SM t="الرواتب" v={payrollTotal?money(payrollTotal):"—"} dl={deltas.pay} inv/>
         <SM t="شكاوى معتمدة" v={tApproved} dl={deltas.appr} inv/>
       </div>
@@ -333,7 +333,7 @@ export default function DashboardHome({onNav,theme="light"}){
     {insTop.length>0&&<div className="dh-ins">
       <div className="dh-ins-h"><Icon n="robot" s={16}/> رؤى ذكية · {rangeLabel}</div>
       <div className="dh-ins-list">
-        {insTop.map((x,i)=>{const cc=x.tone==="good"?"#087443":x.tone==="bad"?"#b42318":"#b54708";const bg=x.tone==="good"?"#e7f7ef":x.tone==="bad"?"#feecea":"#fef3e2";return(
+        {insTop.map((x,i)=>{const cc=x.tone==="good"?"var(--ok-ink)":x.tone==="bad"?"var(--bad-ink)":"var(--warn-ink)";const bg=x.tone==="good"?"var(--ok-bg)":x.tone==="bad"?"var(--bad-bg)":"var(--warn-bg)";return(
           <div className="dh-ins-i" key={i} style={{borderInlineStartColor:cc}}><span className="dh-ins-ic" style={{background:bg,color:cc}}><Icon n={x.ic} s={14}/></span><span>{x.t}</span></div>);})}
       </div>
     </div>}
@@ -342,7 +342,7 @@ export default function DashboardHome({onNav,theme="light"}){
     {d.ins&&d.ins.length>0&&<div className="dh-ai">
       <div className="dh-ai-head"><span className="dh-ai-hl"><Icon n="robot" s={16}/> تحليلات ذكية · شاملة</span><span className="dh-ai-cnt">{d.ins.length} رؤية</span></div>
       <div className="dh-ai-list">
-        {d.ins.map((x,i)=>{const cc=x.tone==="good"?"#087443":x.tone==="bad"?"#b42318":x.tone==="warn"?"#b54708":"#334155";const bg=x.tone==="good"?"#e7f7ef":x.tone==="bad"?"#feecea":x.tone==="warn"?"#fef3e2":"#eef1f4";return(
+        {d.ins.map((x,i)=>{const cc=x.tone==="good"?"var(--ok-ink)":x.tone==="bad"?"var(--bad-ink)":x.tone==="warn"?"var(--warn-ink)":"var(--ink-2)";const bg=x.tone==="good"?"var(--ok-bg)":x.tone==="bad"?"var(--bad-bg)":x.tone==="warn"?"var(--warn-bg)":"var(--track)";return(
           <div className="dh-ai-i" key={i} style={{borderInlineStartColor:cc}}>
             <div className="dh-ai-t"><span className="dh-ins-ic" style={{background:bg,color:cc}}><Icon n={x.icon||"robot"} s={14}/></span><b>{x.title}</b>{x.scope_ar&&<span className="dh-ai-tag">{x.scope_ar}</span>}</div>
             <div className="dh-ai-b">{x.body}</div>
@@ -353,20 +353,20 @@ export default function DashboardHome({onNav,theme="light"}){
 
     {/* شريط المؤشرات الأساسي */}
     <div className="dh-kpis">
-      <Kpi label="البايكرز" ic="bike" ib="#fff2e8" c="#E8712B" n={bikers.length} sub={`${teams.length} فرق`} onClick={()=>nav("employees")}/>
-      <Kpi label="المتقدّمون" ic="applicants" ib="#eef4ff" c="#1d5bbf" n={A.length} sub={`${pending} قيد المراجعة`} onClick={()=>nav("recruitment")}/>
-      <Kpi label={"غسلات · "+rangeLabel} ic="operations" ib="#e7f7ef" c="#087443" n={washes.toLocaleString("en-US")} sub={avgRating?`تقييم ${avgRating.toFixed(2)}`:"لا بيانات بعد"} delta={deltas.wash} spark={series.wash} onClick={()=>nav("operations")}/>
-      <Kpi label={"إيراد سويتر · "+rangeLabel} ic="cash" ib="#e7f7ef" c="#087443" n={revenue?money(revenue):"—"} sub={coverPct!=null?`تغطية ${coverPct}%`:"—"} delta={deltas.rev} spark={series.rev} onClick={()=>nav("reports")}/>
-      <Kpi label={"رواتب · "+rangeLabel} ic="payroll" ib="#f6f2ff" c="#6d4bcb" n={payrollTotal?money(payrollTotal):"—"} sub={nMonths>1?`${nMonths} أشهر`:"مسير الشهر"} delta={deltas.pay} inv onClick={()=>nav("payroll")}/>
-      <Kpi label="شكاوى سويتر" ic="complaints" ib="#feecea" c="#b42318" n={tPending+tReviewed} sub={tReviewed?`${tReviewed} بانتظار اعتمادك`:(tTotal?`${tApproved} معتمدة بالفترة`:"لا شكاوى")} tone={tReviewed?"red":""} delta={deltas.appr} inv spark={series.appr} onClick={()=>nav("complaints")}/>
+      <Kpi label="البايكرز" ic="bike" ib="var(--p-100)" c="var(--p)" n={bikers.length} sub={`${teams.length} فرق`} onClick={()=>nav("employees")}/>
+      <Kpi label="المتقدّمون" ic="applicants" ib="var(--info-bg)" c="var(--info-ink)" n={A.length} sub={`${pending} قيد المراجعة`} onClick={()=>nav("recruitment")}/>
+      <Kpi label={"غسلات · "+rangeLabel} ic="operations" ib="var(--ok-bg)" c="var(--ok-ink)" n={washes.toLocaleString("en-US")} sub={avgRating?`تقييم ${avgRating.toFixed(2)}`:"لا بيانات بعد"} delta={deltas.wash} spark={series.wash} onClick={()=>nav("operations")}/>
+      <Kpi label={"إيراد سويتر · "+rangeLabel} ic="cash" ib="var(--ok-bg)" c="var(--ok-ink)" n={revenue?money(revenue):"—"} sub={coverPct!=null?`تغطية ${coverPct}%`:"—"} delta={deltas.rev} spark={series.rev} onClick={()=>nav("reports")}/>
+      <Kpi label={"رواتب · "+rangeLabel} ic="payroll" ib="var(--info-bg)" c="var(--info-ink)" n={payrollTotal?money(payrollTotal):"—"} sub={nMonths>1?`${nMonths} أشهر`:"مسير الشهر"} delta={deltas.pay} inv onClick={()=>nav("payroll")}/>
+      <Kpi label="شكاوى سويتر" ic="complaints" ib="var(--bad-bg)" c="var(--bad-ink)" n={tPending+tReviewed} sub={tReviewed?`${tReviewed} بانتظار اعتمادك`:(tTotal?`${tApproved} معتمدة بالفترة`:"لا شكاوى")} tone={tReviewed?"red":""} delta={deltas.appr} inv spark={series.appr} onClick={()=>nav("complaints")}/>
     </div>
 
     {/* شريط تشغيلي — الوحدات الجديدة (حالة راهنة) */}
     <div className="dh-ops">
-      <Kpi label="الأسطول" ic="bike" ib="#eef4ff" c="#1d5bbf" n={nVeh} sub={`${fIncOpen} حوادث · تتبّع ${gpsCov}%`} tone={stolen?"red":""} onClick={()=>nav("fleet")}/>
-      <Kpi label="السكن — الدفعة القادمة" ic="home" ib="#fff2e8" c="#c2410c" n={hpNext?money(hpNext.amount):"—"} sub={hpNext?`تستحق ${fmtD(hpNext.due_date)}`:"مكتمل"} onClick={()=>nav("housing")}/>
-      <Kpi label="الوثائق — عاجلة ≤30" ic="doc" ib="#fef3e2" c="#b54708" n={docSoon} sub={docExpired?`${docExpired} منتهية`:"لا منتهية"} tone={docExpired?"red":""} onClick={()=>nav("renewals")}/>
-      <Kpi label="الإمداد — طلبات معلّقة" ic="bucket" ib="#eefaf3" c="#087443" n={scPending} sub={scLow?`${scLow} تحت الحدّ`:"المخزون متوازن"} onClick={()=>nav("supply")}/>
+      <Kpi label="الأسطول" ic="bike" ib="var(--info-bg)" c="var(--info-ink)" n={nVeh} sub={`${fIncOpen} حوادث · تتبّع ${gpsCov}%`} tone={stolen?"red":""} onClick={()=>nav("fleet")}/>
+      <Kpi label="السكن — الدفعة القادمة" ic="home" ib="var(--p-100)" c="var(--warn-ink)" n={hpNext?money(hpNext.amount):"—"} sub={hpNext?`تستحق ${fmtD(hpNext.due_date)}`:"مكتمل"} onClick={()=>nav("housing")}/>
+      <Kpi label="الوثائق — عاجلة ≤30" ic="doc" ib="var(--warn-bg)" c="var(--warn-ink)" n={docSoon} sub={docExpired?`${docExpired} منتهية`:"لا منتهية"} tone={docExpired?"red":""} onClick={()=>nav("renewals")}/>
+      <Kpi label="الإمداد — طلبات معلّقة" ic="bucket" ib="var(--ok-bg)" c="var(--ok-ink)" n={scPending} sub={scLow?`${scLow} تحت الحدّ`:"المخزون متوازن"} onClick={()=>nav("supply")}/>
     </div>
 
     {/* أهداف الأداء */}
@@ -374,7 +374,7 @@ export default function DashboardHome({onNav,theme="light"}){
       <div className="dw-panel">
         <div className="dw-ph"><b>أهداف الأداء · {rangeLabel}</b><span className="dw-a">مقابل معايير العقد</span></div>
         <div className="dw-pb dh-targets">
-          {targets.map((g,i)=>{const cc=g.good?"#087443":g.warn?"#b54708":"#b42318";const bg=g.good?"#e7f7ef":g.warn?"#fef3e2":"#feecea";const pct=g.v==null?0:Math.max(0,Math.min(100,g.v/g.t*100));return(
+          {targets.map((g,i)=>{const cc=g.good?"var(--ok-ink)":g.warn?"var(--warn-ink)":"var(--bad-ink)";const bg=g.good?"var(--ok-bg)":g.warn?"var(--warn-bg)":"var(--bad-bg)";const pct=g.v==null?0:Math.max(0,Math.min(100,g.v/g.t*100));return(
             <div className="dh-tg" key={i}>
               <div className="dh-tg-top"><span className="dh-tg-k">{g.k}</span><span className="dh-tg-v" style={{color:cc}}>{g.fmt(g.v)}{g.unit}<small> / {g.t}{g.unit}</small></span></div>
               <div className="dh-tg-bar"><div style={{width:Math.max(3,Math.min(100,pct))+"%",background:cc}}/></div>
@@ -398,7 +398,7 @@ export default function DashboardHome({onNav,theme="light"}){
         <div className="dw-pb" style={{display:"flex",alignItems:"center",gap:18}}>
           <Donut a={accepted} p={pending} r={rejected} total={A.length}/>
           <div style={{flex:1,display:"flex",flexDirection:"column",gap:9}}>
-            <Leg c="#12b76a" t="مقبول" v={accepted}/><Leg c="#f79009" t="قيد المراجعة" v={pending}/><Leg c="#f04438" t="مرفوض" v={rejected}/>
+            <Leg c="var(--ok)" t="مقبول" v={accepted}/><Leg c="var(--warn)" t="قيد المراجعة" v={pending}/><Leg c="var(--bad)" t="مرفوض" v={rejected}/>
             <div className="dh-mini"><span>مقابلات معلّقة</span><b>{ivPending}</b></div>
             <div className="dh-mini"><span>متوسط التعاقد</span><b>{onbAvg}%</b></div>
           </div>
@@ -413,7 +413,7 @@ export default function DashboardHome({onNav,theme="light"}){
         <div className="dw-pb">
           {topBikers.length===0?<Empty t="لا بيانات عمليات بعد" s="ارفع تقارير سويتر الشهرية لتظهر الغسلات هنا."/>:
           <div className="dw-team">{topBikers.map((o,i)=>(
-            <div className="dw-tm" key={i}><div className="dw-tn">{o.biker_name||"—"}<small>{o.rating?`تقييم ${Number(o.rating).toFixed(2)}`:""}</small></div><div className="dw-tbar"><div style={{width:`${Math.round(o.net_washes/maxW*100)}%`,height:"100%",borderRadius:6,background:i===0?"linear-gradient(90deg,#12b76a,#32d583)":"linear-gradient(90deg,#F59E0B,#E8712B)"}}/></div><span className="dw-tv">{o.net_washes}</span></div>))}</div>}
+            <div className="dw-tm" key={i}><div className="dw-tn">{o.biker_name||"—"}<small>{o.rating?`تقييم ${Number(o.rating).toFixed(2)}`:""}</small></div><div className="dw-tbar"><div style={{width:`${Math.round(o.net_washes/maxW*100)}%`,height:"100%",borderRadius:6,background:i===0?"linear-gradient(90deg,var(--ok),color-mix(in srgb,var(--ok) 70%,white))":"linear-gradient(90deg,var(--a),var(--p))"}}/></div><span className="dw-tv">{o.net_washes}</span></div>))}</div>}
         </div>
       </div>
       <div className="dw-panel">
@@ -435,8 +435,8 @@ export default function DashboardHome({onNav,theme="light"}){
                   {(i===0||i===daily.length-1||i===Math.floor(daily.length/2))&&<span className="dh-cf-m">{x.day.slice(8)}/{x.day.slice(5,7)}</span>}
                 </div>))}</div>
               <div className="dh-fin" style={{marginTop:10}}>
-                <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"#e7f7ef",color:"#087443"}}><Icon n="operations" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إجمالي الغسلات · {rangeLabel}</div><div style={{fontSize:11,color:"var(--dh-mut2)",fontWeight:600}}>{daily.length} يوم عمل</div></div><b>{dailyWashTot.toLocaleString("en-US")}</b></div>
-                <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef4ff",color:"#1d5bbf"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إيراد مُكتسب تقديري ({RATE}﷼/غسلة)</div></div><b>{money(dailyWashTot*RATE)}</b></div>
+                <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"var(--ok-bg)",color:"var(--ok-ink)"}}><Icon n="operations" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إجمالي الغسلات · {rangeLabel}</div><div style={{fontSize:11,color:"var(--dh-mut2)",fontWeight:600}}>{daily.length} يوم عمل</div></div><b>{dailyWashTot.toLocaleString("en-US")}</b></div>
+                <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"var(--info-bg)",color:"var(--info-ink)"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إيراد مُكتسب تقديري ({RATE}﷼/غسلة)</div></div><b>{money(dailyWashTot*RATE)}</b></div>
                 <div className="dh-fin-tot"><span>متوسط يومي</span><b>{Math.round(dailyWashTot/Math.max(1,daily.length))} غسلة</b></div>
               </div>
             </>
@@ -450,13 +450,13 @@ export default function DashboardHome({onNav,theme="light"}){
                   </div>
                   <span className="dh-cf-m">{periodShort(x.p)}</span>
                 </div>))}</div>
-              <div className="dh-cf-lg"><span><i style={{background:"#12b76a"}}/>داخل</span><span><i style={{background:"#f04438"}}/>خارج</span></div>
+              <div className="dh-cf-lg"><span><i style={{background:"var(--ok)"}}/>داخل</span><span><i style={{background:"var(--bad)"}}/>خارج</span></div>
               <div className="dh-fin" style={{marginTop:10}}>
-                <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"#e7f7ef",color:"#087443"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الداخل</div><div style={{fontSize:11,color:"var(--dh-mut2)",fontWeight:600}}>سويتر {money(cash.sw)} · تمويل {money(cash.i-cash.sw)}</div></div><b>{money(cash.i)}</b></div>
-                <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#feecea",color:"#b42318"}}><Icon n="payroll" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الخارج (تشغيلي)</div></div><b>{money(cash.o)}</b></div>
-                <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef4ff",color:"#1d5bbf"}}><Icon n="chart" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">تغطية إيراد سويتر للمصروف</div></div><b style={{color:coverPct!=null&&coverPct>=100?"#087443":"#b54708"}}>{coverPct!=null?coverPct+"%":"—"}</b></div>
-                <div className="dh-fin-tot"><span>الصافي النقدي</span><b style={{color:cash.net>=0?"#087443":"#b42318"}}>{money(cash.net)}</b></div>
-                {cash.net<0&&<div style={{fontSize:11,color:"#b54708",fontWeight:700,marginTop:-2}}>عجز تشغيلي مُغطّى بتمويل داخلي.</div>}
+                <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"var(--ok-bg)",color:"var(--ok-ink)"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الداخل</div><div style={{fontSize:11,color:"var(--dh-mut2)",fontWeight:600}}>سويتر {money(cash.sw)} · تمويل {money(cash.i-cash.sw)}</div></div><b>{money(cash.i)}</b></div>
+                <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"var(--bad-bg)",color:"var(--bad-ink)"}}><Icon n="payroll" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الخارج (تشغيلي)</div></div><b>{money(cash.o)}</b></div>
+                <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"var(--info-bg)",color:"var(--info-ink)"}}><Icon n="chart" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">تغطية إيراد سويتر للمصروف</div></div><b style={{color:coverPct!=null&&coverPct>=100?"var(--ok-ink)":"var(--warn-ink)"}}>{coverPct!=null?coverPct+"%":"—"}</b></div>
+                <div className="dh-fin-tot"><span>الصافي النقدي</span><b style={{color:cash.net>=0?"var(--ok-ink)":"var(--bad-ink)"}}>{money(cash.net)}</b></div>
+                {cash.net<0&&<div style={{fontSize:11,color:"var(--warn-ink)",fontWeight:700,marginTop:-2}}>عجز تشغيلي مُغطّى بتمويل داخلي.</div>}
               </div>
             </>:<Empty t="لا بيانات مالية في هذا النطاق" s="ارفع كشف الحساب البنكي لعرض التدفّق النقدي."/>
           )}
@@ -511,12 +511,12 @@ export default function DashboardHome({onNav,theme="light"}){
 }
 
 function SM({t,v,dl,inv,col}){
-  const up=dl!=null&&dl>=0;const good=inv?!up:up;const dc=dl==null?null:(dl===0?"var(--dh-mut2)":good?"#087443":"#b42318");
+  const up=dl!=null&&dl>=0;const good=inv?!up:up;const dc=dl==null?null:(dl===0?"var(--dh-mut2)":good?"var(--ok-ink)":"var(--bad-ink)");
   return(<div className="dh-sm"><span className="dh-sm-t">{t}</span><span className="dh-sm-v" style={col?{color:col}:null}>{v}</span>{dl!=null&&<span className="dh-sm-d" style={{color:dc}}>{dl>0?"▲":dl<0?"▼":"■"} {Math.abs(dl)}%</span>}</div>);
 }
 function Kpi({label,ic,c,ib,n,sub,tone,onClick,delta,spark,inv}){
-  const dc=tone==="red"?"#b42318":"var(--dh-mut)";
-  const up=delta!=null&&delta>=0;const good=inv?!up:up;const dcol=delta==null?null:(delta===0?"var(--dh-mut2)":good?"#087443":"#b42318");
+  const dc=tone==="red"?"var(--bad-ink)":"var(--dh-mut)";
+  const up=delta!=null&&delta>=0;const good=inv?!up:up;const dcol=delta==null?null:(delta===0?"var(--dh-mut2)":good?"var(--ok-ink)":"var(--bad-ink)");
   return(<div className={"dh-kpi"+(onClick?" dw-clk":"")} onClick={onClick}>
     <div className="dh-kh"><span className="dh-kl">{label}</span><span className="dh-ki" style={{background:ib,color:c}}><Icon n={ic} s={17}/></span></div>
     <div className="dh-kn">{n}{delta!=null&&<span className="dh-delta" style={{color:dcol}}>{delta>0?"▲":delta<0?"▼":"■"} {Math.abs(delta)}%</span>}</div>
@@ -534,21 +534,21 @@ function Donut({a,p,r,total}){
   const T=Math.max(a+p+r,1);const seg=v=>v/T*100;const A=seg(a),P=seg(p),R=seg(r);
   let off=25;const arc=(len,col,o)=>(<circle cx="21" cy="21" r="15.9" fill="none" stroke={col} strokeWidth="6" strokeDasharray={`${len} ${100-len}`} strokeDashoffset={o} transform="rotate(-90 21 21)"/>);
   const c1=off;off-=A;const c2=off;off-=P;const c3=off;
-  return(<svg width="118" height="118" viewBox="0 0 42 42"><circle cx="21" cy="21" r="15.9" fill="none" className="dh-donut-track" strokeWidth="6"/>{arc(A,"#12b76a",c1)}{arc(P,"#f79009",c2)}{arc(R,"#f04438",c3)}<text x="21" y="20.5" textAnchor="middle" fontSize="7" fontWeight="800" className="dh-donut-n">{total}</text><text x="21" y="27" textAnchor="middle" fontSize="3.2" className="dh-donut-l">إجمالي</text></svg>);
+  return(<svg width="118" height="118" viewBox="0 0 42 42"><circle cx="21" cy="21" r="15.9" fill="none" className="dh-donut-track" strokeWidth="6"/>{arc(A,"var(--ok)",c1)}{arc(P,"var(--warn)",c2)}{arc(R,"var(--bad)",c3)}<text x="21" y="20.5" textAnchor="middle" fontSize="7" fontWeight="800" className="dh-donut-n">{total}</text><text x="21" y="27" textAnchor="middle" fontSize="3.2" className="dh-donut-l">إجمالي</text></svg>);
 }
 function Leg({c,t,v}){return(<div style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:"var(--dh-mut)"}}><i style={{width:10,height:10,borderRadius:3,background:c}}/>{t}<b style={{marginInlineStart:"auto",color:"var(--dh-ink)"}}>{v}</b></div>);}
 
 // ── التصميم الزجاجي (Glass) — فاتح افتراضياً، داكن عبر data-theme="dark" ──
 // كل الألوان عبر رموز --dh-* حتى تعمل البطاقات في السمتين. الهوية: برتقالي #E8712B/#F59E0B، وردي #FB7185، navy #0A0E27.
 const CSS=`
-.dh{position:relative;--dh-bg:#F5F6FA;--dh-glass:rgba(255,255,255,.66);--dh-glass2:rgba(255,255,255,.82);--dh-line:rgba(15,23,42,.09);--dh-ink:#0F172A;--dh-mut:#64748B;--dh-mut2:#94A3B8;--dh-track:#EEF1F4;--dh-soft:rgba(15,23,42,.04);--dh-hero:linear-gradient(135deg,#0f2a43,#1a3f5f);--dh-shadow:0 10px 30px -18px rgba(15,23,42,.25);--p:#E8712B;--p-rgb:232,113,43;--a:#F59E0B;--s:#FB7185;color:var(--dh-ink)}
+.dh{position:relative;overflow-x:clip;max-width:100%;--dh-bg:#F5F6FA;--dh-glass:rgba(255,255,255,.66);--dh-glass2:rgba(255,255,255,.82);--dh-line:rgba(15,23,42,.09);--dh-ink:#0F172A;--dh-mut:#64748B;--dh-mut2:#94A3B8;--dh-track:#EEF1F4;--dh-soft:rgba(15,23,42,.04);--dh-hero:linear-gradient(135deg,#0f2a43,#1a3f5f);--dh-shadow:0 10px 30px -18px rgba(15,23,42,.25);--p:#E8712B;--p-rgb:232,113,43;--a:#F59E0B;--s:#FB7185;color:var(--dh-ink)}
 .dh[data-theme=dark]{--dh-bg:#0A0E27;--dh-glass:rgba(255,255,255,.07);--dh-glass2:rgba(255,255,255,.10);--dh-line:rgba(255,255,255,.13);--dh-ink:#F8FAFC;--dh-mut:#A3AFC2;--dh-mut2:#7C8AA0;--dh-track:rgba(255,255,255,.10);--dh-soft:rgba(255,255,255,.06);--dh-hero:linear-gradient(135deg,rgba(15,23,42,.9),rgba(23,33,52,.9));--dh-shadow:0 10px 40px -18px rgba(0,0,0,.7)}
 /* الكرات الضبابية خلف اللوحة */
 .dh-orbs{position:absolute;inset:-20px;overflow:hidden;pointer-events:none;z-index:0;border-radius:24px}
 .dh-orb{position:absolute;border-radius:9999px;filter:blur(80px);opacity:.28;will-change:transform}
-.dh-orb.a{width:420px;height:420px;top:-140px;right:-120px;background:radial-gradient(circle,#E8712B,transparent 65%);animation:dhFloat 14s ease-in-out infinite}
+.dh-orb.a{width:420px;height:420px;top:-140px;right:-120px;background:radial-gradient(circle,var(--p),transparent 65%);animation:dhFloat 14s ease-in-out infinite}
 .dh-orb.b{width:380px;height:380px;top:38%;left:-160px;background:radial-gradient(circle,#2563EB,transparent 65%);opacity:.18;animation:dhFloat 18s ease-in-out infinite reverse}
-.dh-orb.c{width:320px;height:320px;bottom:-140px;right:30%;background:radial-gradient(circle,#FB7185,transparent 65%);opacity:.2;animation:dhFloat 22s ease-in-out infinite}
+.dh-orb.c{width:320px;height:320px;bottom:-140px;right:30%;background:radial-gradient(circle,var(--s),transparent 65%);opacity:.2;animation:dhFloat 22s ease-in-out infinite}
 .dh[data-theme=dark] .dh-orb{opacity:.5}.dh[data-theme=dark] .dh-orb.b{opacity:.35}.dh[data-theme=dark] .dh-orb.c{opacity:.3}
 @keyframes dhFloat{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(30px,-40px,0)}}
 .dh>*:not(.dh-orbs){position:relative;z-index:1}
@@ -567,7 +567,7 @@ const CSS=`
 .dh .dw-tbl th{background:var(--dh-soft);color:var(--dh-mut);border-bottom:1px solid var(--dh-line)}
 .dh .dw-tbl td{border-bottom:1px solid var(--dh-line);color:var(--dh-ink)}.dh .dw-tbl tbody tr:hover{background:var(--dh-soft)}
 .dh .dw-cand small{color:var(--dh-mut)}.dh .dw-fl{color:var(--dh-mut)}.dh .dw-fv{color:var(--dh-mut)}
-.dh .dw-fbar{background:var(--dh-track)}.dh .dw-ffill{background:linear-gradient(90deg,#F59E0B,#E8712B)}
+.dh .dw-fbar{background:var(--dh-track)}.dh .dw-ffill{background:linear-gradient(90deg,var(--a),var(--p))}
 .dh .dw-tbar{background:var(--dh-track)}.dh .dw-tn{color:var(--dh-ink)}.dh .dw-tn small{color:var(--dh-mut)}.dh .dw-tv{color:var(--dh-ink)}
 .dh .dw-a{color:var(--p)}
 .dh .dh-donut-track{stroke:var(--dh-track)}.dh .dh-donut-n{fill:var(--dh-ink)}.dh .dh-donut-l{fill:var(--dh-mut)}
@@ -577,13 +577,13 @@ const CSS=`
 .dh-pcap{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--dh-ink);margin-inline-end:4px}
 .dh-chip{border:1px solid var(--dh-line);background:var(--dh-soft);color:var(--dh-mut);font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .12s}
 .dh-chip:hover{border-color:rgba(var(--p-rgb),.5);color:var(--dh-ink)}
-.dh-chip.on{background:linear-gradient(135deg,#F59E0B,#E8712B);border-color:transparent;color:#fff;box-shadow:0 6px 18px -8px rgba(var(--p-rgb),.8)}
+.dh-chip.on{background:linear-gradient(135deg,var(--a),var(--p));border-color:transparent;color:#fff;box-shadow:0 6px 18px -8px rgba(var(--p-rgb),.8)}
 .dh-custom{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
 .dh-custom label{font-size:12px;font-weight:700;color:var(--dh-mut)}
-.dh-custom select,.dh-fsel select{font-family:inherit;font-size:12.5px;font-weight:600;color:var(--dh-ink);border:1px solid var(--dh-line);border-radius:9px;padding:6px 8px;background:var(--dh-glass2);cursor:pointer}
+.dh-custom select,.dh-fsel select{max-width:100%;min-width:0;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--dh-ink);border:1px solid var(--dh-line);border-radius:9px;padding:6px 8px;background:var(--dh-glass2);cursor:pointer}
 .dh-filters{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-top:11px;padding-top:11px;border-top:1px dashed var(--dh-line)}
-.dh-fsel{display:flex;align-items:center;gap:6px;color:var(--dh-mut)}
-.dh-clear{border:none;background:#feecea;color:#b42318;font-family:inherit;font-size:11.5px;font-weight:700;padding:6px 11px;border-radius:9px;cursor:pointer}
+.dh-fsel{display:flex;align-items:center;gap:6px;color:var(--dh-mut);min-width:0;max-width:100%}.dh-fsel select{flex:1;min-width:0}
+.dh-clear{border:none;background:var(--bad-bg);color:var(--bad-ink);font-family:inherit;font-size:11.5px;font-weight:700;padding:6px 11px;border-radius:9px;cursor:pointer}
 /* ملخّص الفترة (بطل) */
 .dh-summary{background:var(--dh-hero);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:14px 16px;margin-bottom:14px;box-shadow:0 20px 50px -30px rgba(0,0,0,.6);position:relative;overflow:hidden}
 .dh-summary::after{content:"";position:absolute;inset:auto -60px -120px auto;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(232,113,43,.45),transparent 65%);filter:blur(30px);pointer-events:none}
@@ -595,15 +595,13 @@ const CSS=`
 .dh-sm{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:12px;padding:9px 11px;display:flex;flex-direction:column;gap:2px}
 .dh-sm-t{font-size:10.5px;color:#b8c7d8;font-weight:700}
 .dh-sm-v{font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dh-sm-v[style*="color: rgb(8, 116, 67)"],.dh-sm-v[style*="#087443"]{color:#5fe0a0!important}.dh-sm-v[style*="#b42318"],.dh-sm-v[style*="rgb(180, 35, 24)"]{color:#ff9a8f!important}
 .dh-sm-d{font-size:10.5px;font-weight:800}
-.dh-sm-d[style*="#087443"],.dh-sm-d[style*="rgb(8, 116, 67)"]{color:#5fe0a0!important}.dh-sm-d[style*="#b42318"],.dh-sm-d[style*="rgb(180, 35, 24)"]{color:#ff9a8f!important}
 /* التنبيهات */
 .dh-alerts{padding:14px 16px;margin-bottom:14px}
 .dh-al-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .dh-al-h span{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:var(--dh-ink)}
-.dh-al-h b{background:#feecea;color:#b42318;font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px}
-.dh-al-ok{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#087443;background:#e7f7ef;border-radius:11px;padding:11px 13px}
+.dh-al-h b{background:var(--bad-bg);color:var(--bad-ink);font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px}
+.dh-al-ok{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--ok-ink);background:var(--ok-bg);border-radius:11px;padding:11px 13px}
 .dh-al-list{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .dh-al{display:flex;align-items:center;gap:9px;border:none;border-radius:11px;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:start;width:100%;transition:transform .15s}
 .dh-al:hover{transform:translateX(-3px)}
@@ -659,8 +657,8 @@ const CSS=`
 .dh-cf-day .dh-cf-bars{gap:0}
 .dh-cf-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;background:none;border:none;padding:4px 2px 0;border-radius:8px;font-family:inherit}
 .dh-cf-bars{display:flex;align-items:flex-end;gap:3px;height:48px}
-.dh-cf-in{width:8px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#32d583,#12b76a)}
-.dh-cf-out{width:8px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#fb7185,#f04438)}
+.dh-cf-in{width:8px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#32d583,var(--ok))}
+.dh-cf-out{width:8px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#fb7185,var(--bad))}
 .dh-cf-m{font-size:9.5px;color:var(--dh-mut2);font-weight:700;white-space:nowrap}
 .dh-cf-lg{display:flex;gap:14px;justify-content:center;margin-top:6px;font-size:10.5px;color:var(--dh-mut);font-weight:600}
 .dh-cf-lg span{display:flex;align-items:center;gap:5px}.dh-cf-lg i{width:9px;height:9px;border-radius:3px}
@@ -669,7 +667,7 @@ const CSS=`
 .dh-cat:hover{border-color:var(--dh-line)}
 .dh-cat.on{border-color:var(--p);background:rgba(var(--p-rgb),.10)}
 .dh-cat-k{flex:none;width:38%;font-size:12px;font-weight:700;color:var(--dh-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dh-cat-bar{flex:1;height:8px;background:var(--dh-track);border-radius:6px;overflow:hidden}.dh-cat-bar div{height:100%;background:linear-gradient(90deg,#F59E0B,#E8712B);border-radius:6px}
+.dh-cat-bar{flex:1;height:8px;background:var(--dh-track);border-radius:6px;overflow:hidden}.dh-cat-bar div{height:100%;background:linear-gradient(90deg,var(--a),var(--p));border-radius:6px}
 .dh-cat-v{flex:none;font-size:12px;font-weight:800;color:var(--dh-ink);white-space:nowrap}.dh-cat-v small{color:var(--dh-mut2);font-weight:600}
 .dh-mini{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--dh-mut);border-top:1px solid var(--dh-line);padding-top:7px}
 .dh-mini b{color:var(--dh-ink);font-size:13px}
