@@ -89,14 +89,13 @@ async function buildImgMap(photos,extraUrls=[],maxW=1200,q=0.8){
 }
 
 // ── عناصر رسومية SVG | SVG widgets ──
-function gaugeSVG(pct,color,size=150){
-  // نصف دائرة من 180° إلى 0° | semicircle gauge
-  const r=size/2-10,cx=size/2,cy=size/2+2;
-  const arc=(a0,a1)=>{const p=a=>[cx+r*Math.cos(Math.PI*(1-a)),cy-r*Math.sin(Math.PI*(1-a))];const[x0,y0]=p(a0),[x1,y1]=p(a1);return`M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 ${a1-a0>0.5?1:0} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;};
-  const v=pct==null?0:Math.max(0.005,Math.min(1,pct/100));
-  return`<svg width="${size}" height="${size/2+14}" viewBox="0 0 ${size} ${size/2+14}" aria-hidden="true">
-    <path d="${arc(0,1)}" fill="none" stroke="#e6e9ed" stroke-width="11" stroke-linecap="round"/>
-    <path d="${arc(0,v)}" fill="none" stroke="${color}" stroke-width="11" stroke-linecap="round"/>
+function gaugeSVG(pct,color,size=118){
+  // حلقة كاملة (donut) تبدأ من الأعلى — الرقم في المنتصف بلا تداخل | full ring, value centred
+  const sw=9,r=size/2-sw/2-1,c=size/2,C=2*Math.PI*r;
+  const v=pct==null?0:Math.max(0.004,Math.min(1,pct/100));
+  return`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#e6e9ed" stroke-width="${sw}"/>
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${(v*C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 ${c} ${c})"/>
   </svg>`;
 }
 function sparkSVG(points,w=230,h=60){
@@ -258,7 +257,7 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
       </div>
       <div class="cv-stats">
         <div class="st g-main">
-          <div class="g-wrap">${gaugeSVG(pct,eff.color,150)}<div class="g-val" style="color:${eff.color}">${pct!=null?pct+"%":"—"}</div></div>
+          <div class="g-wrap">${gaugeSVG(pct,eff.color,118)}<div class="g-val" style="color:${eff.color}">${pct!=null?pct+"%":"—"}</div></div>
           <div class="g-lbl">التزام البايكر</div>
           <div class="g-sub">${comp.denom?`${comp.points} من ${comp.denom} بنود مقيَّمة`:"لا بنود مقيَّمة"}${comp.notAssessed.length?` · ${comp.notAssessed.length} غير مقيَّم`:""}</div>
         </div>
@@ -417,8 +416,8 @@ small{font-size:8.5pt;color:var(--muted)}
 .cv-stats{display:grid;grid-template-columns:1.25fr 1fr 1.15fr;gap:5mm;align-items:stretch}
 .st{border:1px solid var(--line);border-radius:4mm;background:var(--surface-2);padding:4mm 4mm 3mm}
 .g-main{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.g-wrap{position:relative;width:150px;margin:0 auto}.g-wrap svg{display:block}
-.g-val{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:26pt;font-weight:700;line-height:1}
+.g-wrap{position:relative;width:118px;height:118px;margin:0 auto}.g-wrap svg{display:block}
+.g-val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:21pt;font-weight:700;line-height:1;letter-spacing:0}
 .g-lbl{font-size:11pt;font-weight:700;margin-top:3pt}.g-sub{font-size:9pt;color:var(--muted)}
 .g-side{display:flex;flex-direction:column;justify-content:center}
 .g-side-v{font-size:26pt;font-weight:700;line-height:1.1}.g-side-l{font-size:11pt;font-weight:700;margin-top:2pt}.g-side-s{font-size:9pt;color:var(--muted);margin-bottom:3pt}
