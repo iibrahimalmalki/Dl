@@ -97,7 +97,7 @@ export default function SweaterTickets({opId,me,owner}){
     try{const{data}=await supabase.from("ops_tickets").update({sweater_pic_url:url}).eq("id",t.id).select().single();if(data)setRows(p=>p.map(r=>r.id===t.id?data:r));}catch(_){}
     // حاول تنزيل الصورة وتخزينها في نظامنا (أرشفة دائمة)
     const ok=await pullImage(t,url,true);
-    if(!ok)setMsg({ok:true,t:"تم ربط الرابط بالشكوى ويظهر مباشرةً؛ تعذّرت الأرشفة الآن — يمكنك «سحب من سويتر» لاحقاً"});
+    if(!ok){setMsgRaw(null);toast.warn("تم ربط الرابط بالشكوى ويظهر مباشرةً","تعذّرت الأرشفة الآن — يمكنك «سحب من سويتر» لاحقاً",7000);}
   };
 
   // رفع يدوي: مسؤول الجودة ينزّل الصورة من سويتر ويرفعها هنا

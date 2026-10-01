@@ -381,7 +381,7 @@ const CSS=`
 .fr-axm{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
 .fr-axm-h{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:var(--mut);font-weight:700;margin-bottom:6px}
 .fr-axm-h b{font-size:12px}
-.fr-axm-t{height:6px;background:var(--soft);border-radius:5px;overflow:hidden}.fr-axm-t div{height:100%;border-radius:5px}
+.fr-axm-t{height:6px;background:var(--track);border-radius:5px;overflow:hidden}.fr-axm-t div{height:100%;border-radius:5px}
 .fr-report{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;border:1px solid rgba(var(--p-rgb),.35);background:var(--p-50);color:var(--warn-ink);font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
 .fr-report:hover{background:var(--p-100)}
 .fr-score{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding:13px;border:2px solid var(--line);border-radius:13px;background:var(--soft)}
