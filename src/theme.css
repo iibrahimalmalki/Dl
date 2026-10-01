@@ -195,6 +195,33 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-
 kbd.g-kbd{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:3px 6px;border-radius:6px;border:1px solid var(--line-2);background:var(--soft);color:var(--mut)}
 
 /* ── حركات ── */
+/* ── جدول البيانات (DataTable.jsx) ── */
+.g-dt-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line)}
+.g-dt-q{position:relative;flex:1;min-width:180px;display:flex}.g-dt-q svg{position:absolute;inset-inline-start:11px;top:50%;transform:translateY(-50%);color:var(--mut-2);pointer-events:none}
+.g-dt-q input{padding-inline-start:34px;min-height:40px}
+.g-dt-f{width:auto;min-height:40px;max-width:200px}
+.g-dt-n{font-size:11.5px;color:var(--mut);font-weight:700;margin-inline-start:auto}
+.g-dt-wrap{overflow:auto;max-height:70vh}
+.g-dt-t th.g-dt-s{padding:0}
+.g-dt-t th.g-dt-s button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:4px;width:100%;padding:10px 14px;cursor:pointer;font:inherit;color:inherit}
+.g-dt-t th.num.g-dt-s button{justify-content:flex-end}
+.g-dt-t th.g-dt-s button:focus-visible{box-shadow:inset var(--glow);border-radius:6px}
+.g-dt-t th.on{color:var(--p-ink)}
+.g-dt-ar{font-size:10px;opacity:.55}.g-dt-t th.on .g-dt-ar{opacity:1}
+.g-dt-click{cursor:pointer}.g-dt-click:focus-visible{outline:none;box-shadow:inset 0 0 0 2px rgba(var(--p-rgb),.55)}
+.g-dt-pg{display:flex;align-items:center;justify-content:center;gap:12px;padding:10px;border-top:1px solid var(--line);font-size:12px;color:var(--mut);font-weight:700}
+.g-dt-pg .g-btn{min-width:40px;min-height:36px}
+/* الجوال: كل صف بطاقة، وكل خلية «العنوان: القيمة» */
+@media(max-width:640px){
+  .g-dt-wrap{max-height:none;overflow:visible}
+  .g-dt-t thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .g-dt-t,.g-dt-t tbody{display:block}
+  .g-dt-t tr{display:block;margin:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--glass-2);padding:6px 12px}
+  .g-dt-t td{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed var(--line);text-align:start!important;direction:inherit}
+  .g-dt-t tr td:last-child{border-bottom:none}
+  .g-dt-t td::before{content:attr(data-l);font-size:11.5px;color:var(--mut);font-weight:700;flex:none}
+  .g-dt-t td.num>*{direction:ltr}
+}
 /* ── حالة فارغة تجريدية (EmptyState) ── */
 .g-es{display:flex;flex-direction:column;align-items:center;text-align:center;padding:30px 20px;color:var(--mut)}
 .g-es.compact{padding:16px 12px}.g-es.compact .g-es-art{width:84px;height:77px}
