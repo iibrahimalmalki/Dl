@@ -44,11 +44,14 @@ ok('العنوان «انتهاء النوع — الموضوع»',ics.replace(/
 ok('هروب الفواصل',ics.replace(/\r\n /g,'').includes('Karim\\, Ali\\; X'));
 ok('أسطر CRLF ≤75 بايت',ics.split('\r\n').every(l=>new TextEncoder().encode(l).length<=75));
 
-// توجيه الرسالة حسب تسلسل الصلاحيات
-const H=[{position:'su1',display_name:'مدير HR',mobile:'0550000001'},{position:'su2',display_name:'مدير اللوجستي',mobile:''},{position:'sec_sup',display_name:'مدير المساندة',mobile:'0550000003'}];
+// توجيه الرسالة حسب تسلسل الصلاحيات — بشكل صفوف RPC doc_contacts {pos,display_name,mobile}
+const H=[{pos:'owner',display_name:'المالك',mobile:'966500000009'},{pos:'su1',display_name:'مدير HR',mobile:'966550000001'},
+  {pos:'su2',display_name:'مدير اللوجستي',mobile:null},{pos:'su3',display_name:'مدير المالية',mobile:'966550000004'},{pos:'sec_sup',display_name:'مدير المساندة',mobile:'966550000003'}];
 const OW='966566884419';
 ok('الإقامة ← الموارد البشرية',L.pickContact('إقامة',H,OW).pos==='su1'&&L.pickContact('إقامة',H,OW).wa==='966550000001');
 ok('رخصة العمل ← الموارد البشرية',L.pickContact('رخصة عمل',H,OW).pos==='su1');
-ok('تأمين مركبة بلا جوال للوجستي ← الخدمات المساندة',L.pickContact('تأمين مركبة',H,OW).pos==='sec_sup');
-ok('لا أحد ← المالك',L.pickContact('إقامة',[],OW).pos==='owner'&&L.pickContact('إقامة',[],OW).wa===OW);
+ok('su2 بلا mobile شاغر ← الخدمات المساندة',L.pickContact('تأمين مركبة',H,OW).pos==='sec_sup');
+ok('su3 لا يدخل سلسلة الوثائق',L.pickContact('عقد إيجار',H.filter(x=>x.pos!=='sec_sup'),OW).pos==='owner');
+ok('المالك من doc_contacts',L.pickContact('إقامة',[H[0]],OW).wa==='966500000009');
+ok('لا صفوف ← رقم المالك الاحتياطي',L.pickContact('إقامة',[],OW).wa===OW&&L.pickContact('إقامة',null,OW).pos==='owner');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

@@ -49,17 +49,24 @@ export default function UserManagement(){
   const[cred,setCred]=useState(null);                            // {name,email,password,phone}
   const[credLang,setCredLang]=useState("both");                  // ar | bn | both
   const[pwFor,setPwFor]=useState(null);const[pwVal,setPwVal]=useState("");
+  const[mob,setMob]=useState("");   // جوال الحساب الإداري لرسائل الوثائق (app_users.mobile)
 
-  const loadUsers=async()=>{setLoading(true);const{data}=await supabase.from("app_users").select("id,email,display_name,is_owner,active,biker_employee_id").order("created_at");setUsers(data||[]);setLoading(false);};
+  const loadUsers=async()=>{setLoading(true);const{data}=await supabase.from("app_users").select("id,email,display_name,is_owner,active,biker_employee_id,mobile").order("created_at");setUsers(data||[]);setLoading(false);};
   useEffect(()=>{loadUsers();supabase.auth.getUser().then(({data})=>setMyId(data.user&&data.user.id));
     supabase.from("employees").select("id,full_name,mobile,employee_id").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
-  const openUser=async(u)=>{setSel(u);note("");const{data}=await supabase.from("user_permissions").select("module,can_view,can_edit,raci").eq("user_id",u.id);const m={};(data||[]).forEach(r=>{m[r.module]=r.raci||(r.can_edit?"R":(r.can_view?"I":null));});setPerms(m);};
+  const openUser=async(u)=>{setSel(u);setMob(u.mobile||"");note("");const{data}=await supabase.from("user_permissions").select("module,can_view,can_edit,raci").eq("user_id",u.id);const m={};(data||[]).forEach(r=>{m[r.module]=r.raci||(r.can_edit?"R":(r.can_view?"I":null));});setPerms(m);};
   const setRaci=(mod,code)=>setPerms(p=>({...p,[mod]:p[mod]===code?null:code}));
   const grantAll=()=>{const m={};MOD_KEYS.forEach(x=>m[x.k]="R");setPerms(m);};
   const revokeAll=()=>setPerms({});
   const savePerms=async()=>{if(!sel)return;setSaving(true);note("");await supabase.from("user_permissions").delete().eq("user_id",sel.id);const rows=MOD_KEYS.filter(x=>perms[x.k]).map(x=>({user_id:sel.id,module:x.k,raci:perms[x.k],can_view:true,can_edit:raciEdit(perms[x.k])}));if(rows.length){const{error}=await supabase.from("user_permissions").insert(rows);if(error){note("خطأ: "+error.message);setSaving(false);return;}}setSaving(false);note("تم حفظ مصفوفة RACI",true);};
 
+  // حفظ الجوال بصيغة 9665xxxxxxxx (05… ← 9665…)
+  const saveMobile=async()=>{if(!sel)return;const raw=mob.trim();const m=raw?waNum(raw):null;
+    if(m&&!/^9665\d{8}$/.test(m)){note("رقم سعودي غير صالح — المطلوب 05xxxxxxxx أو 9665xxxxxxxx");return;}
+    setSaving(true);note("");const{error}=await supabase.from("app_users").update({mobile:m}).eq("id",sel.id);setSaving(false);
+    if(error){note("خطأ: "+error.message);return;}
+    setMob(m||"");setSel(x=>({...x,mobile:m}));setUsers(us=>us.map(u=>u.id===sel.id?{...u,mobile:m}:u));note(m?"تم حفظ الجوال "+m:"تم حذف الجوال",true);};
   const reloadEmps=()=>supabase.from("employees").select("id,full_name,mobile,employee_id").order("full_name").then(({data})=>setEmps(data||[]));
   const pickEmp=id=>{const e=emps.find(x=>x.id===id);setQ(p=>({...p,emp:id,kind:id?"biker":p.kind,name:e?e.full_name:p.name,phone:e?(e.mobile||p.phone):p.phone}));};
   const quickCreate=async()=>{
@@ -107,6 +114,12 @@ export default function UserManagement(){
         <button className="um-back" onClick={()=>{setSel(null);note("");}}><Icon n="back" s={15}/> رجوع</button>
         <div style={{flex:1,minWidth:0}}><div className="um-h-t">{sel.display_name||sel.email}</div><div className="um-h-s" dir="ltr">{sel.email}</div></div>
       </div>
+      {!sel.biker_employee_id&&<div className="um-mob">
+        <label><span>الجوال (لرسائل الوثائق)</span>
+          <input className="g-input" dir="ltr" inputMode="tel" value={mob} onChange={e=>setMob(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveMobile()} placeholder="05xxxxxxxx"/></label>
+        <button className="um-btn" onClick={saveMobile} disabled={saving||(mob||"")===(sel.mobile||"")}><Icon n="save" s={15}/> حفظ الجوال</button>
+        <small>تصل إليه رسائل البايكرز عن الوثائق حسب منصبه (الموارد البشرية · الدعم اللوجستي · الخدمات المساندة).</small>
+      </div>}
       <div className="um-perm-bar">
         <button className="um-btn ok" onClick={grantAll}><Icon n="check" s={15}/> منح كل شيء</button>
         <button className="um-btn danger" onClick={revokeAll}><Icon n="x" s={15}/> سحب الكل</button>
@@ -201,6 +214,9 @@ export default function UserManagement(){
 }
 
 const CSS=`
+.um-mob{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.um-mob label{display:flex;flex-direction:column;gap:5px;flex:1;min-width:200px}.um-mob label span{font-size:11.5px;font-weight:700;color:var(--mut)}
+.um-mob input{text-align:left}.um-mob small{flex-basis:100%;font-size:11px;color:var(--mut)}
 .um{--b:var(--p)}
 .um-msg{padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:700;margin-bottom:12px}
 .um-msg.ok{background:var(--ok-bg);color:var(--ok-ink)}.um-msg.err{background:var(--bad-bg);color:var(--bad-ink)}

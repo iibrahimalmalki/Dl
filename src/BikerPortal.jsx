@@ -323,13 +323,10 @@ function Docs({ me }) {
   const [reads, setReads] = useState({});
   const [holders, setHolders] = useState([]);
   useEffect(() => { (async () => {
-    // أصحاب المناصب المسؤولة (الموارد البشرية/الدعم اللوجستي/الخدمات المساندة) وجوالاتهم — لتوجيه رسالة واتساب
+    // جهات الاتصال حسب المنصب (owner/su1/su2/su3/sec_sup) عبر RPC doc_contacts — لتوجيه رسالة واتساب
     try {
-      const { data: us } = await supabase.from("app_users").select("id,display_name,position")
-        .in("position", ["su1", "su2", "sec_sup"]).eq("active", true);
-      const ids = (us || []).map(u => u.id);
-      const { data: em } = ids.length ? await supabase.from("employees").select("user_id,mobile").in("user_id", ids) : { data: [] };
-      setHolders((us || []).map(u => ({ ...u, mobile: ((em || []).find(e => e.user_id === u.id) || {}).mobile })));
+      const { data: dc, error } = await supabase.rpc("doc_contacts");
+      if (!error) setHolders(dc || []);
     } catch (e) {}
     // RLS (renewal_docs_self_sel) يعيد وثائق هذا البايكر فقط
     const { data } = await supabase.from("renewal_docs")
