@@ -14,7 +14,7 @@ const STAT={
   open:["مفتوح","Open","var(--warn-ink)","var(--warn-bg)"],
   escalated:["مُصعّد","Escalated","var(--bad-ink)","var(--bad-bg)"],
   completed:["مكتمل","Completed","var(--ok-ink)","var(--ok-bg)"],
-  cancelled:["مُلغى","Cancelled","var(--mut)","var(--mut-2)"],
+  cancelled:["مُلغى","Cancelled","var(--mut)","var(--soft)"],
 };
 const fmtDT=iso=>{const d=new Date(iso);if(isNaN(d))return"—";const p=n=>String(n).padStart(2,"0");return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
 
