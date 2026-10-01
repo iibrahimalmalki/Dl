@@ -27,4 +27,13 @@ ok('inspector≠approver',html.includes('مدير العمليات'));
 ok('prev actions + trend',html.includes('إجراءات الجولة السابقة')&&html.includes('83.3%'));
 ok('root cause + recommendation',html.includes('السبب الجذري')&&an.rootCause.includes('#1'));
 ok('photo caption with time',/أمام · \d{2}:\d{2}/.test(html));
+// v3: أقسام الجمهور بالترتيب + السرد الذكي
+const order=['class="cover"','class="pg exec"','class="pg sup"','class="pg ev"','class="pg emp"'].map(k=>html.indexOf(k));
+ok('audience sections in order',order.every((v,i)=>v>0&&(i===0||v>order[i-1])));
+ok('executive summary headline + reading',html.includes('الملخص التنفيذي')&&html.includes('Midul Hassan حقق 85.7%')&&html.includes('ماذا وجدنا')&&html.includes('ماذا بعد'));
+ok('leadership decisions for supply gap',html.includes('قرارات مطلوبة من القيادة')&&html.includes('اعتماد توفير'));
+ok('supervisor checklist',html.includes('المتابعة الإشرافية')&&html.includes('معيار الإغلاق')&&html.includes('☐ أُغلق'));
+ok('evidence: gaps before compliant',html.indexOf('تحتاج تصحيحاً')<html.indexOf('evh g'));
+ok('employee page bilingual',html.includes('صفحة الموظف')&&html.includes('ভালো করেছেন')&&html.includes('ليست عليك'));
+ok('PDF capture never zoomed',html.includes('onclone')&&html.includes('if(busy)return'));
 fs.rmSync(tmp,{recursive:true,force:true});
