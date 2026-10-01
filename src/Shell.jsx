@@ -194,18 +194,18 @@ const CSS=`
 .sh-prof{display:flex;align-items:center;gap:10px;padding:8px;border-radius:11px}
 .sh-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#334155,#475569);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;flex:none}
 .sh-prof b{font-size:12.5px;color:#fff;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sh-prof span{font-size:10.5px;color:var(--sidmut)}
-.sh-main{display:flex;flex-direction:column;min-width:0;flex:1;position:relative;z-index:1}
+.sh-main{display:flex;flex-direction:column;min-width:0;flex:1;position:relative;z-index:1;overflow-x:hidden}
 .sh-top{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:30}
 .sh-burger{display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink)}
 .sh-ttl h1{font-size:16px;font-weight:800;margin:0}.sh-sub{font-size:12px;color:var(--mut)}
-.sh-ops{margin-inline-start:auto;display:flex;align-items:center;gap:7px;background:var(--glass-2);border:1px solid var(--line2);border-radius:11px;padding:6px 10px}
+.sh-ops{margin-inline-start:auto;display:flex;align-items:center;gap:7px;background:var(--glass-2);border:1px solid var(--line-2);border-radius:11px;padding:6px 10px}
 .sh-ops-ic{display:flex;align-items:center;color:var(--mut)}
 .sh-ops select{border:none;background:none;outline:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
-.sh-ib{width:38px;height:38px;border-radius:11px;border:1px solid var(--line2);background:var(--glass-2);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;position:relative}
+.sh-ib{width:38px;height:38px;border-radius:11px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;position:relative}
 .sh-ib:hover,.sh-tt:hover{border-color:rgba(var(--p-rgb),.4)}
 .sh-dot{position:absolute;top:8px;inset-inline-end:9px;width:7px;height:7px;border-radius:50%;background:var(--bad);border:1.5px solid var(--glass-3)}
 .sh-av2{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#E8712B,#f5a35f);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px}
-.sh-menu{position:absolute;top:46px;inset-inline-start:0;background:var(--glass-3);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow-lg);overflow:hidden;min-width:170px;z-index:40}
+.sh-menu{position:absolute;top:46px;inset-inline-start:0;background:var(--glass-3);border:1px solid var(--line-2);border-radius:12px;box-shadow:var(--shadow-lg);overflow:hidden;min-width:170px;z-index:40}
 .sh-mi{padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:9px;color:var(--ink)}.sh-mi:hover{background:var(--hover)}
 .sh-content{padding:20px;max-width:1200px;width:100%;margin:0 auto}
 .sh-embed{margin:-20px;}
