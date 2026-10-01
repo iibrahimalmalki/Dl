@@ -90,3 +90,33 @@ export function Gauge({value,max=100,size=140,stroke=12,label,sub,unit="%",tone,
     {sub&&<div className="g-gauge-s">{sub}</div>}
   </div>);
 }
+
+// ── حالة فارغة بشكل تجريدي ثلاثي الأبعاد (SVG خفيف، زخرفي) ──
+// <EmptyState title="لا بيانات" text="…" variant="orb|stack|ring">{أزرار}</EmptyState>
+export function EmptyState({title,text,children,variant="orb",compact}){
+  const gid="es"+useIdSafe();
+  const shape=variant==="ring"?(<>
+      <ellipse cx="60" cy="96" rx="34" ry="7" style={{fill:"var(--ink)"}} opacity=".08"/>
+      <circle cx="60" cy="56" r="30" fill="none" stroke={`url(#${gid}a)`} strokeWidth="14"/>
+      <circle cx="49" cy="44" r="6" style={{fill:"#fff"}} opacity=".55"/></>)
+    :variant==="stack"?(<>
+      <ellipse cx="60" cy="98" rx="38" ry="7" style={{fill:"var(--ink)"}} opacity=".08"/>
+      <rect x="30" y="58" width="60" height="26" rx="10" fill={`url(#${gid}b)`} transform="rotate(-8 60 71)"/>
+      <rect x="34" y="34" width="52" height="26" rx="10" fill={`url(#${gid}a)`} transform="rotate(6 60 47)"/>
+      <circle cx="74" cy="26" r="9" style={{fill:"var(--s)"}} opacity=".85"/></>)
+    :(<>
+      <ellipse cx="60" cy="98" rx="32" ry="7" style={{fill:"var(--ink)"}} opacity=".08"/>
+      <circle cx="60" cy="54" r="34" fill={`url(#${gid}a)`}/>
+      <ellipse cx="60" cy="54" rx="46" ry="12" fill="none" stroke={`url(#${gid}b)`} strokeWidth="5" transform="rotate(-18 60 54)" opacity=".85"/>
+      <circle cx="48" cy="40" r="9" style={{fill:"#fff"}} opacity=".5"/></>);
+  return(<div className={cx("g-es",compact&&"compact")}>
+    <svg width="120" height="110" viewBox="0 0 120 110" aria-hidden className="g-es-art">
+      <defs>
+        <radialGradient id={gid+"a"} cx=".35" cy=".3" r=".8"><stop offset="0" style={{stopColor:"var(--a)"}}/><stop offset=".6" style={{stopColor:"var(--p)"}}/><stop offset="1" style={{stopColor:"var(--p-700)"}}/></radialGradient>
+        <linearGradient id={gid+"b"} x1="0" x2="1"><stop offset="0" style={{stopColor:"var(--s)"}}/><stop offset="1" style={{stopColor:"var(--a)"}}/></linearGradient>
+      </defs>{shape}
+    </svg>
+    {title&&<b>{title}</b>}{text&&<p>{text}</p>}{children&&<div className="g-es-a">{children}</div>}
+  </div>);
+}
+let __es=0;function useIdSafe(){const r=useRef(null);if(r.current==null)r.current=(++__es).toString(36);return r.current;}

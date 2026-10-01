@@ -195,6 +195,15 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-
 kbd.g-kbd{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:3px 6px;border-radius:6px;border:1px solid var(--line-2);background:var(--soft);color:var(--mut)}
 
 /* ── حركات ── */
+/* ── حالة فارغة تجريدية (EmptyState) ── */
+.g-es{display:flex;flex-direction:column;align-items:center;text-align:center;padding:30px 20px;color:var(--mut)}
+.g-es.compact{padding:16px 12px}.g-es.compact .g-es-art{width:84px;height:77px}
+.g-es-art{margin-bottom:10px;filter:drop-shadow(0 12px 18px rgba(var(--p-rgb),.25))}
+@media(prefers-reduced-motion:no-preference){.g-es-art{animation:esFloat 5s ease-in-out infinite}}
+@keyframes esFloat{50%{transform:translateY(-5px)}}
+.g-es b{display:block;color:var(--ink);font-size:15px;font-weight:800;margin-bottom:4px}
+.g-es p{font-size:12.5px;margin:0 auto;max-width:380px;line-height:1.7}
+.g-es-a{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 /* ── مساعد العمليات (Assistant.jsx) ── */
 .as-side{position:sticky;top:76px;max-height:calc(100dvh - 92px);overflow:auto;padding:0;scrollbar-width:thin}
 .as-in{padding:16px;display:flex;flex-direction:column;gap:14px}

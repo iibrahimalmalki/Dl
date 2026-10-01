@@ -1,7 +1,7 @@
 import{useState,useEffect,useMemo,useRef,useCallback}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
-import{useToast,Modal,Badge,Empty}from"./ui";
+import{useToast,Modal,Badge,EmptyState}from"./ui";
 import{bikerScore,rankBikers,trend,teamSummary,monthDelta,nextHints,bikerBrief,LEVEL_AR}from"./scorecard";
 import{dailySVG,sparkSVG}from"./perfCharts";
 import{periodAr,downloadCardPdf}from"./perfExport";
@@ -155,8 +155,8 @@ export default function Performance({opId,onNav}){
       {M.list.length>0&&<button className="g-btn" onClick={allCards} disabled={!!busy} title="بطاقة تكريم PNG لكل بايكر في ملف zip واحد"><Icon n="star" s={15}/> {busy==="all:zip"?"جارٍ الضغط…":busy.startsWith("all")?`جارٍ التوليد ${busy.slice(4)}`:"بطاقات الشهر"}</button>}
     </div>
 
-    {M.list.length===0?<div className="g-card"><Empty icon={<Icon n="performance" s={26}/>} title={`لا بيانات أداء في ${periodAr(period)}`} text="الأداء يُبنى من تقرير سويتر الشهري (الغسلات والتقييم والشكاوى). ارفع التقرير في العمليات اليومية.">
-      <button className="g-btn primary" style={{marginTop:14}} onClick={()=>onNav&&onNav("operations")}><Icon n="operations" s={15}/> فتح العمليات اليومية</button></Empty></div>:<>
+    {M.list.length===0?<div className="g-card"><EmptyState variant="stack" title={`لا بيانات أداء في ${periodAr(period)}`} text="الأداء يُبنى من تقرير سويتر الشهري (الغسلات والتقييم والشكاوى). ارفع التقرير في العمليات اليومية.">
+      <button className="g-btn primary" onClick={()=>onNav&&onNav("operations")}><Icon n="operations" s={15}/> فتح العمليات اليومية</button></EmptyState></div>:<>
 
     <div className="g-grid c4 pf-kpis">
       <div className="g-card g-kpi"><div className="g-kpi-l">غسلات الفريق<Icon n="operations" s={16}/></div><div className="g-kpi-n">{n0(T.washes)}</div>{kd(T.washes,TP&&TP.washes)}</div>
