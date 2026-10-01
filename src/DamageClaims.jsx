@@ -1,6 +1,7 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
+import{useToast}from"./ui";
 import ActivityLog from"./ActivityLog";
 const DC_FL={status:"الحالة",biker_name:"البايكر",biker_share:"حصة البايكر",company_share:"حصة الشركة",recovered_amount:"المُحصّل",resolution_method:"طريقة التسوية",booking_ref:"مرجع الحجز",complaint_ref:"مرجع الشكوى",investigation_notes:"ملاحظات التحقيق",evidence:"الإثبات"};
 const DC_DV={investigating:"قيد التحقيق",charged:"محمّلة",recovering:"قيد التحصيل",closed:"مغلقة",dismissed:"مرفوضة",cash:"نقدي",salary:"خصم راتب",center:"مركز معتمد"};
@@ -10,20 +11,20 @@ const CAP=0.5; // سقف الخصم الشهري = 50% من الراتب الأ�
 const fmtD=d=>d?new Date(d+"T00:00:00").toLocaleDateString("en-GB"):"—";
 
 const STATUS={
-  investigating:{ar:"قيد التحقيق",bg:"#fef3e2",c:"#b54708"},
-  proven:{ar:"ثابتة (تم الإثبات)",bg:"#eef4ff",c:"#1d5bbf"},
-  agreed:{ar:"متفق عليها",bg:"#eef4ff",c:"#1d5bbf"},
-  deducting:{ar:"قيد الخصم",bg:"#fff3e2",c:"#c2410c"},
-  settled:{ar:"مُسدَّدة",bg:"#e7f7ef",c:"#087443"},
-  waived:{ar:"متنازَل عنها",bg:"#eef1f4",c:"#64748b"},
-  dismissed:{ar:"أُسقطت (لم تثبت)",bg:"#feecea",c:"#b42318"},
+  investigating:{ar:"قيد التحقيق",bg:"var(--warn-bg)",c:"var(--warn-ink)"},
+  proven:{ar:"ثابتة (تم الإثبات)",bg:"var(--info-bg)",c:"var(--info-ink)"},
+  agreed:{ar:"متفق عليها",bg:"var(--info-bg)",c:"var(--info-ink)"},
+  deducting:{ar:"قيد الخصم",bg:"var(--warn-bg)",c:"var(--p-700)"},
+  settled:{ar:"مُسدَّدة",bg:"var(--ok-bg)",c:"var(--ok-ink)"},
+  waived:{ar:"متنازَل عنها",bg:"var(--soft)",c:"var(--mut)"},
+  dismissed:{ar:"أُسقطت (لم تثبت)",bg:"var(--bad-bg)",c:"var(--bad-ink)"},
 };
 const STATUS_ORDER=["investigating","proven","agreed","deducting","settled","waived","dismissed"];
 const CLOSED=["settled","waived","dismissed"];
 const METHOD={
-  cash:{ar:"تعويض نقدي مباشر",ic:"cash",c:"#1d5bbf"},
-  center:{ar:"إصلاح عبر مركز معتمد (بسعر مخفّض — دون نقد مباشر)",ic:"wrench",c:"#087443"},
-  amicable:{ar:"تسوية ودية على مستويات",ic:"compare",c:"#b54708"},
+  cash:{ar:"تعويض نقدي مباشر",ic:"cash",c:"var(--info-ink)"},
+  center:{ar:"إصلاح عبر مركز معتمد (بسعر مخفّض — دون نقد مباشر)",ic:"wrench",c:"var(--ok-ink)"},
+  amicable:{ar:"تسوية ودية على مستويات",ic:"compare",c:"var(--warn-ink)"},
 };
 const METHOD_ORDER=["cash","center","amicable"];
 const blank=()=>({sweater_id:"",biker_name:"",incident_date:new Date().toISOString().slice(0,10),description:"",
@@ -36,7 +37,9 @@ export default function DamageClaims({owner,opId}){
   const[loading,setLoading]=useState(true);
   const[busy,setBusy]=useState(false);
   const[form,setForm]=useState(null);      // كائن الإدخال/التعديل
-  const[msg,setMsg]=useState(null);
+  const toast=useToast();const[msg,setMsgRaw]=useState(null);
+  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
+  const setMsg=m=>{if(m&&m.ok){toast.ok(m.t,undefined,m.t.length>60?7000:undefined);setMsgRaw(null);}else setMsgRaw(m);};
   const note=(ok,t)=>setMsg({ok,t});
 
   const load=async()=>{
@@ -100,17 +103,17 @@ export default function DamageClaims({owner,opId}){
     resolution_method:r.resolution_method||"cash",approved_center:r.approved_center||"",booking_ref:r.booking_ref||"",complaint_ref:r.complaint_ref||""});
   const del=async(r)=>{if(!owner)return;if(!confirm("حذف دعوى الضرر؟"))return;await supabase.from("damage_claims").delete().eq("id",r.id);await load();};
 
-  if(loading)return(<div className="dw-skel" style={{height:200}}/>);
+  if(loading)return(<div className="g-skel" style={{height:200}}/>);
 
   return(<div className="dc">
     <style>{CSS}</style>
     {msg&&msg.t&&<div className={"dc-toast"+(msg.ok?" ok":" err")} onClick={()=>setMsg(null)}>{msg.t}</div>}
 
     <div className="dc-kpis">
-      <Kpi l="المحمّل على البايكرز" n={money(tot.charged)} sub={`${rows.length} دعوى`} c="#E8712B" big/>
-      <Kpi l="المُحصّل" n={money(tot.recovered)} c="#087443"/>
-      <Kpi l="المتبقّي القائم" n={money(tot.outstanding)} sub={`${tot.open} مفتوحة`} c="#b54708"/>
-      <Kpi l="تحمّل المؤسسة" n={money(tot.company)} c="#1d5bbf"/>
+      <Kpi l="المحمّل على البايكرز" n={money(tot.charged)} sub={`${rows.length} دعوى`} c="var(--p)" big/>
+      <Kpi l="المُحصّل" n={money(tot.recovered)} c="var(--ok-ink)"/>
+      <Kpi l="المتبقّي القائم" n={money(tot.outstanding)} sub={`${tot.open} مفتوحة`} c="var(--warn-ink)"/>
+      <Kpi l="تحمّل المؤسسة" n={money(tot.company)} c="var(--info-ink)"/>
     </div>
 
     <div className="dc-bar">
@@ -179,8 +182,8 @@ export default function DamageClaims({owner,opId}){
             <F l="المؤسسة" v={money(r.company_share)}/>
             <F l="على البايكر" v={money(r.biker_share)} hi/>
             <F l="مُحصّل" v={money(r.recovered_amount)}/>
-            <F l="متبقٍّ" v={money(outstanding)} c={outstanding>0?"#b54708":"#087443"}/>
-            <F l="الدفعة/شهر" v={r.installment_months?`${money(md)} × ${r.installment_months}`:"—"} c={over?"#b42318":undefined}/>
+            <F l="متبقٍّ" v={money(outstanding)} c={outstanding>0?"var(--warn-ink)":"var(--ok-ink)"}/>
+            <F l="الدفعة/شهر" v={r.installment_months?`${money(md)} × ${r.installment_months}`:"—"} c={over?"var(--bad-ink)":undefined}/>
           </div>
           {over&&<div className="dc-warn sm"><Icon n="alert" s={13}/> الدفعة الشهرية تتجاوز سقف 50% من الأساس ({money(cap)}).</div>}
           {r.evidence&&<div className="dc-ev"><Icon n="doc" s={13}/> {r.evidence}</div>}
@@ -201,66 +204,66 @@ function Kpi({l,n,sub,c,big}){return(<div className={"dc-kpi"+(big?" big":"")}><
 function F({l,v,hi,c}){return(<div className={"dc-f"+(hi?" hi":"")}><span>{l}</span><b style={c?{color:c}:null}>{v}</b></div>);}
 
 const CSS=`
-.dc{--brand:#E8712B;--ink:#0f172a;--mut:#64748b;--line:#eceef1}
+.dc{--brand:var(--p)}
 .dc *{box-sizing:border-box}
 .dc-toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:80;padding:11px 18px;border-radius:12px;font-weight:700;font-size:13px;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.18);cursor:pointer}
-.dc-toast.ok{background:#087443}.dc-toast.err{background:#b42318}
+.dc-toast.ok{background:var(--ok)}.dc-toast.err{background:var(--bad)}
 .dc-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
-.dc-kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 15px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
-.dc-kpi.big{background:linear-gradient(135deg,#fff7f2,#fff)}
+.dc-kpi{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:14px 15px;box-shadow:var(--shadow)}
+.dc-kpi.big{background:linear-gradient(135deg,var(--p-50),var(--glass-3))}
 .dc-kl{font-size:11.5px;color:var(--mut);font-weight:700;display:block}
 .dc-kpi b{font-size:19px;font-weight:800;margin-top:6px;display:block;letter-spacing:-.5px}
 .dc-kpi.big b{font-size:22px}
-.dc-kpi em{font-size:11px;color:#94a3b8;font-style:normal;font-weight:600;display:block;margin-top:3px}
+.dc-kpi em{font-size:11px;color:var(--mut-2);font-style:normal;font-weight:600;display:block;margin-top:3px}
 .dc-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .dc-hint{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);font-weight:600;line-height:1.5}
-.dc-hint b{color:#b42318}
-.dc-b{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:11px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;color:var(--ink)}
+.dc-hint b{color:var(--bad-ink)}
+.dc-b{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:11px;border:1px solid var(--line);background:var(--glass-2);font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;color:var(--ink)}
 .dc-b.brand{background:var(--brand);color:#fff;border-color:var(--brand)}
 .dc-b.ghost:hover{border-color:var(--brand);color:var(--brand)}
 .dc-b.sm{padding:6px 10px;font-size:11.5px}
-.dc-b.del{background:#feecea;color:#b42318;border-color:#f5cfca}
+.dc-b.del{background:var(--bad-bg);color:var(--bad-ink);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
 .dc-b:disabled{opacity:.55}
-.dc-form{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,24,40,.05);margin-bottom:14px}
+.dc-form{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
 .dc-fh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .dc-fh b{font-size:15px;font-weight:800}
-.dc-x{border:none;background:#f1f3f5;width:30px;height:30px;border-radius:9px;cursor:pointer;color:#64748b}
+.dc-x{border:none;background:var(--soft);width:30px;height:30px;border-radius:9px;cursor:pointer;color:var(--mut)}
 .dc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .dc-grid label{display:flex;flex-direction:column;gap:5px}
 .dc-wide{grid-column:1/-1}
 .dc-grid span{font-size:11.5px;color:var(--mut);font-weight:700}
-.dc-grid input,.dc-grid select,.dc-grid textarea{border:1px solid #dfe3e8;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none;background:#fff;width:100%}
+.dc-grid input,.dc-grid select,.dc-grid textarea{border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none;background:var(--glass-3);width:100%}
 .dc-grid textarea{min-height:52px;resize:vertical}
 .dc-row2{display:flex;gap:8px;flex-wrap:wrap}
 .dc-row2 select,.dc-row2 input{flex:1;min-width:120px}
-.dc-cap{display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:#f4fbf7;border:1px solid #d6f0e2;border-radius:12px;padding:11px 14px;margin-top:12px}
-.dc-cap.over{background:#feecea;border-color:#f5cfca}
+.dc-cap{display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:var(--ok-bg);border:1px solid color-mix(in srgb,var(--ok) 35%,transparent);border-radius:12px;padding:11px 14px;margin-top:12px}
+.dc-cap.over{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
 .dc-cap>div{display:flex;flex-direction:column}
 .dc-cap span{font-size:10.5px;color:var(--mut);font-weight:700}
 .dc-cap b{font-size:15px;font-weight:800}
-.dc-ok{color:#087443;font-weight:700;font-size:12px;display:flex;align-items:center;gap:6px;margin-inline-start:auto}
-.dc-warn{color:#b42318;font-weight:700;font-size:12px;display:flex;align-items:center;gap:6px;margin-inline-start:auto}
+.dc-ok{color:var(--ok-ink);font-weight:700;font-size:12px;display:flex;align-items:center;gap:6px;margin-inline-start:auto}
+.dc-warn{color:var(--bad-ink);font-weight:700;font-size:12px;display:flex;align-items:center;gap:6px;margin-inline-start:auto}
 .dc-warn.sm{margin:8px 0 0;font-size:11.5px}
 .dc-save{display:flex;gap:10px;margin-top:14px}
-.dc-empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 16px;text-align:center;color:#94a3b8;background:#fff;border:1px solid var(--line);border-radius:16px}
-.dc-empty b{font-size:14px;color:#334155}.dc-empty span{font-size:12px}
+.dc-empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 16px;text-align:center;color:var(--mut-2);background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px}
+.dc-empty b{font-size:14px;color:var(--ink-2)}.dc-empty span{font-size:12px}
 .dc-list{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-.dc-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.dc-card{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--shadow)}
 .dc-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .dc-who{display:flex;align-items:center;gap:9px}
-.dc-av{width:32px;height:32px;border-radius:10px;background:#feecea;color:#b42318;display:flex;align-items:center;justify-content:center;flex:none}
+.dc-av{width:32px;height:32px;border-radius:10px;background:var(--bad-bg);color:var(--bad-ink);display:flex;align-items:center;justify-content:center;flex:none}
 .dc-who b{font-size:13.5px;font-weight:800;display:block}.dc-who small{font-size:11px;color:var(--mut)}
 .dc-badge{font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:20px;white-space:nowrap}
 .dc-method{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;margin:0 0 8px;line-height:1.4}
-.dc-desc{font-size:12px;color:#475569;line-height:1.55;margin:0 0 10px}
+.dc-desc{font-size:12px;color:var(--ink-2);line-height:1.55;margin:0 0 10px}
 .dc-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.dc-f{background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:7px 9px}
-.dc-f.hi{background:#fff7f1;border-color:#f7d7bf}
+.dc-f{background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+.dc-f.hi{background:var(--p-50);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
 .dc-f span{font-size:10px;color:var(--mut);font-weight:700;display:block}
 .dc-f b{font-size:12.5px;font-weight:800}
-.dc-ev{font-size:11px;color:#64748b;font-weight:600;margin-top:9px;display:flex;align-items:center;gap:6px}
-.dc-warn.sm{color:#b42318}
-.dc-acts{display:flex;gap:8px;margin-top:11px;border-top:1px solid #f1f3f5;padding-top:11px}
-.dc-disc{font-size:11px;color:#94a3b8;line-height:1.7;margin:14px 2px 0}
+.dc-ev{font-size:11px;color:var(--mut);font-weight:600;margin-top:9px;display:flex;align-items:center;gap:6px}
+.dc-warn.sm{color:var(--bad-ink)}
+.dc-acts{display:flex;gap:8px;margin-top:11px;border-top:1px solid var(--line);padding-top:11px}
+.dc-disc{font-size:11px;color:var(--mut-2);line-height:1.7;margin:14px 2px 0}
 @media(max-width:820px){.dc-kpis{grid-template-columns:1fr 1fr}.dc-grid{grid-template-columns:1fr}.dc-list{grid-template-columns:1fr}}
 `;
