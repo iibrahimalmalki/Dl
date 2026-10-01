@@ -22,14 +22,14 @@ export default function MyTeam(){
     setLoading(false);
   })();},[]);
 
-  if(loading)return <div className="dw-skel" style={{height:220}}/>;
+  if(loading)return <div className="g-skel" style={{height:220}}/>;
 
   const total=emps.length;
   return(<div className="mt">
     <style>{CSS}</style>
     <div className="mt-kpis">
-      <div className="mt-kpi"><span className="mt-ki" style={{background:"#fff2e8",color:"#E8712B"}}><Icon n="bike" s={17}/></span><div><div className="mt-kv">{total}</div><div className="mt-kl">إجمالي البايكرز</div></div></div>
-      <div className="mt-kpi"><span className="mt-ki" style={{background:"#eef4ff",color:"#1d5bbf"}}><Icon n="performance" s={17}/></span><div><div className="mt-kv">{teams.length}</div><div className="mt-kl">فرقي</div></div></div>
+      <div className="mt-kpi"><span className="mt-ki" style={{background:"var(--p-100)",color:"var(--p)"}}><Icon n="bike" s={17}/></span><div><div className="mt-kv">{total}</div><div className="mt-kl">إجمالي البايكرز</div></div></div>
+      <div className="mt-kpi"><span className="mt-ki" style={{background:"var(--info-bg)",color:"var(--info-ink)"}}><Icon n="performance" s={17}/></span><div><div className="mt-kv">{teams.length}</div><div className="mt-kl">فرقي</div></div></div>
     </div>
 
     {teams.length===0?<div className="mt-empty"><div className="mt-empty-ic"><Icon n="bike" s={30}/></div><h3>لا فرق مُسندة إليك بعد</h3><p>حين يُسند إليك المالك فريقاً، سيظهر هنا مع بيانات أعضائه.</p></div>:
@@ -51,26 +51,26 @@ export default function MyTeam(){
 }
 
 const CSS=`
-.mt{--b:#E8712B}
+.mt{--b:var(--p)}
 .mt-kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-.mt-kpi{background:#fff;border:1px solid #eceef1;border-radius:15px;padding:13px;display:flex;align-items:center;gap:11px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.mt-kpi{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:15px;padding:13px;display:flex;align-items:center;gap:11px;box-shadow:var(--shadow)}
 .mt-ki{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
-.mt-kv{font-size:20px;font-weight:800;letter-spacing:-.5px}.mt-kl{font-size:11px;color:#64748b;font-weight:600}
-.mt-team{background:#fff;border:1px solid #eceef1;border-radius:16px;margin-bottom:12px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.05)}
-.mt-team-h{display:flex;align-items:center;gap:9px;padding:13px 15px;border-bottom:1px solid #f1f3f5;background:#fafbfc}
-.mt-team-ic{width:30px;height:30px;border-radius:9px;background:#fff2e8;color:var(--b);display:flex;align-items:center;justify-content:center;flex:none}
+.mt-kv{font-size:20px;font-weight:800;letter-spacing:-.5px}.mt-kl{font-size:11px;color:var(--mut);font-weight:600}
+.mt-team{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow)}
+.mt-team-h{display:flex;align-items:center;gap:9px;padding:13px 15px;border-bottom:1px solid var(--line);background:var(--soft)}
+.mt-team-ic{width:30px;height:30px;border-radius:9px;background:var(--p-100);color:var(--b);display:flex;align-items:center;justify-content:center;flex:none}
 .mt-team-h b{font-size:14px;font-weight:800;flex:1}
-.mt-cnt{font-size:11px;font-weight:800;color:#64748b;background:#fff;border:1px solid #eceef1;padding:2px 10px;border-radius:20px}
+.mt-cnt{font-size:11px;font-weight:800;color:var(--mut);background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);padding:2px 10px;border-radius:20px}
 .mt-list{padding:8px 10px}
-.mt-mem{display:flex;align-items:center;gap:11px;padding:9px 8px;border-bottom:1px solid #f6f7f9}
+.mt-mem{display:flex;align-items:center;gap:11px;padding:9px 8px;border-bottom:1px solid var(--line)}
 .mt-mem:last-child{border-bottom:none}
-.mt-av{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#E8712B,#f5a35f);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:none}
-.mt-name{font-size:13px;font-weight:800;color:#0f172a}
-.mt-lead{font-size:9.5px;font-weight:800;background:#fff2e8;color:#b54708;padding:1px 8px;border-radius:20px;margin-inline-start:6px}
-.mt-sub{font-size:11.5px;color:#94a3b8;margin-top:1px}
-.mt-wa{width:36px;height:36px;border-radius:11px;background:#e7f7ef;color:#087443;display:flex;align-items:center;justify-content:center;flex:none;text-decoration:none}
-.mt-none{padding:14px;text-align:center;color:#94a3b8;font-size:12.5px}
-.mt-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:16px;padding:40px 24px;text-align:center}
-.mt-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff2e8,#ffe2cc);color:var(--b)}
-.mt-empty h3{font-size:16px;margin:0 0 8px}.mt-empty p{color:#64748b;font-size:12.5px;max-width:420px;margin:0 auto;line-height:1.7}
+.mt-av{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--p),var(--a));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:none}
+.mt-name{font-size:13px;font-weight:800;color:var(--ink)}
+.mt-lead{font-size:9.5px;font-weight:800;background:var(--p-100);color:var(--warn-ink);padding:1px 8px;border-radius:20px;margin-inline-start:6px}
+.mt-sub{font-size:11.5px;color:var(--mut-2);margin-top:1px}
+.mt-wa{width:36px;height:36px;border-radius:11px;background:var(--ok-bg);color:var(--ok-ink);display:flex;align-items:center;justify-content:center;flex:none;text-decoration:none}
+.mt-none{padding:14px;text-align:center;color:var(--mut-2);font-size:12.5px}
+.mt-empty{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px dashed var(--line);border-radius:16px;padding:40px 24px;text-align:center}
+.mt-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--p-100),var(--p-100));color:var(--b)}
+.mt-empty h3{font-size:16px;margin:0 0 8px}.mt-empty p{color:var(--mut);font-size:12.5px;max-width:420px;margin:0 auto;line-height:1.7}
 `;
