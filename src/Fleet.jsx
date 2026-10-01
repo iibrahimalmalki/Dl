@@ -1,24 +1,25 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
+import{useToast}from"./ui";
 
 const V_STATUS={
-  active:{ar:"تعمل",c:"#087443",bg:"#e7f7ef"},
-  stolen:{ar:"مسروقة",c:"#b42318",bg:"#feecea"},
-  maintenance:{ar:"صيانة",c:"#b54708",bg:"#fef3e2"},
-  spare:{ar:"احتياطية/بديلة",c:"#1d5bbf",bg:"#eef4ff"},
-  retired:{ar:"مسحوبة",c:"#64748b",bg:"#f1f5f9"},
+  active:{ar:"تعمل",c:"var(--ok-ink)",bg:"var(--ok-bg)"},
+  stolen:{ar:"مسروقة",c:"var(--bad-ink)",bg:"var(--bad-bg)"},
+  maintenance:{ar:"صيانة",c:"var(--warn-ink)",bg:"var(--warn-bg)"},
+  spare:{ar:"احتياطية/بديلة",c:"var(--info-ink)",bg:"var(--info-bg)"},
+  retired:{ar:"مسحوبة",c:"var(--mut)",bg:"var(--soft)"},
 };
 const V_ORDER=["stolen","maintenance","active","spare","retired"];
 const INCIDENT_TYPES=["سرقة","تخريب","عطل","حادث مروري","فقدان جهاز","أخرى"];
 const IT_ICON={"سرقة":"alert","تخريب":"alert","عطل":"wrench","حادث مروري":"alert","فقدان جهاز":"pin","أخرى":"doc"};
 const INC_STATUS={
-  open:{ar:"مفتوحة",c:"#b42318",bg:"#feecea"},
-  investigating:{ar:"قيد التحقيق",c:"#b54708",bg:"#fef3e2"},
-  resolved:{ar:"مُعالجة",c:"#1d5bbf",bg:"#eef4ff"},
-  closed:{ar:"مغلقة",c:"#087443",bg:"#e7f7ef"},
+  open:{ar:"مفتوحة",c:"var(--bad-ink)",bg:"var(--bad-bg)"},
+  investigating:{ar:"قيد التحقيق",c:"var(--warn-ink)",bg:"var(--warn-bg)"},
+  resolved:{ar:"مُعالجة",c:"var(--info-ink)",bg:"var(--info-bg)"},
+  closed:{ar:"مغلقة",c:"var(--ok-ink)",bg:"var(--ok-bg)"},
 };
-const SEV={low:{ar:"منخفضة",c:"#64748b"},med:{ar:"متوسطة",c:"#b54708"},high:{ar:"عالية",c:"#c2410c"},critical:{ar:"حرجة",c:"#b42318"}};
+const SEV={low:{ar:"منخفضة",c:"var(--mut)"},med:{ar:"متوسطة",c:"var(--warn-ink)"},high:{ar:"عالية",c:"var(--p-700)"},critical:{ar:"حرجة",c:"var(--bad-ink)"}};
 // حالات المفتاح التي تُعد فجوة تتطلب معالجة
 const KEY_BAD=s=>!s||/مفقود|لا يوجد|بحوزة|غير محدد|غير متاح/.test(s);
 const fmtD=d=>d?new Date(d+"T00:00:00").toLocaleDateString("en-GB"):"—";
@@ -29,7 +30,9 @@ export default function Fleet({opId,owner}){
   const[veh,setVeh]=useState([]);const[inc,setInc]=useState([]);
   const[vForm,setVForm]=useState(null);const[iForm,setIForm]=useState(null);const[cForm,setCForm]=useState(null);
   const[emps,setEmps]=useState([]);
-  const[msg,setMsg]=useState(null);const[busy,setBusy]=useState(false);
+  const toast=useToast();const[msg,setMsgRaw]=useState(null);
+  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
+  const setMsg=m=>{if(m&&m.ok){toast.ok(m.t,undefined,m.t.length>60?7000:undefined);setMsgRaw(null);}else setMsgRaw(m);};const[busy,setBusy]=useState(false);
   const note=(ok,t)=>setMsg({ok,t});
 
   const load=async()=>{
@@ -115,19 +118,19 @@ export default function Fleet({opId,owner}){
   const delV=async(v)=>{if(!confirm("حذف مركبة «"+v.plate+"»؟"))return;await supabase.from("fleet_vehicles").delete().eq("id",v.id);await load();};
   const delI=async(x)=>{if(!confirm("حذف الحادثة؟"))return;await supabase.from("fleet_incidents").delete().eq("id",x.id);await load();};
 
-  if(loading)return <div className="dw-skel" style={{height:260}}/>;
+  if(loading)return <div className="g-skel" style={{height:260}}/>;
 
   return(<div className="fl">
     <style>{CSS}</style>
     {msg&&msg.t&&<div className={"fl-toast"+(msg.ok?" ok":" err")} onClick={()=>setMsg(null)}>{msg.t}</div>}
 
     <div className="fl-kpis">
-      <Kpi ic="bike" c="#0f172a" l="إجمالي المركبات" n={k.total}/>
-      <Kpi ic="check" c="#087443" l="تعمل" n={k.active}/>
-      <Kpi ic="alert" c="#b42318" l="مسروقة" n={k.stolen} d={k.stolen?"بلاغات مفتوحة":""}/>
-      <Kpi ic="pin" c="#1d5bbf" l="تغطية التتبّع GPS" n={k.gps+"%"}/>
-      <Kpi ic="camera" c="#7c3aed" l="تغطية الكاميرات" n={k.cam+"%"}/>
-      <Kpi ic="key" c={k.keyGaps?"#c2410c":"#087443"} l="فجوات المفاتيح" n={k.keyGaps}/>
+      <Kpi ic="bike" c="var(--ink)" l="إجمالي المركبات" n={k.total}/>
+      <Kpi ic="check" c="var(--ok-ink)" l="تعمل" n={k.active}/>
+      <Kpi ic="alert" c="var(--bad-ink)" l="مسروقة" n={k.stolen} d={k.stolen?"بلاغات مفتوحة":""}/>
+      <Kpi ic="pin" c="var(--info-ink)" l="تغطية التتبّع GPS" n={k.gps+"%"}/>
+      <Kpi ic="camera" c="var(--info)" l="تغطية الكاميرات" n={k.cam+"%"}/>
+      <Kpi ic="key" c={k.keyGaps?"var(--p-700)":"var(--ok-ink)"} l="فجوات المفاتيح" n={k.keyGaps}/>
     </div>
 
     <div className="fl-tabs">
@@ -147,7 +150,7 @@ export default function Fleet({opId,owner}){
             </div>
             <div className="fl-meta">
               {v.current_biker&&<span className="fl-mi"><Icon n="employees" s={13}/> {v.current_biker}</span>}
-              {v.held_by_name&&<span className="fl-mi" style={{color:"#CC5200",fontWeight:800}}><Icon n="key" s={13}/> بحوزة: {v.held_by_name}{v.held_until?" حتى "+v.held_until:""}</span>}
+              {v.held_by_name&&<span className="fl-mi" style={{color:"var(--p-700)",fontWeight:800}}><Icon n="key" s={13}/> بحوزة: {v.held_by_name}{v.held_until?" حتى "+v.held_until:""}</span>}
               {v.make&&<span className="fl-mi"><Icon n="bike" s={13}/> {v.make}{v.model_year?" "+v.model_year:""}</span>}
               {v.color&&<span className="fl-mi"><Icon n="ruler" s={13}/> {v.color}</span>}
             </div>
@@ -216,7 +219,7 @@ export default function Fleet({opId,owner}){
               <td>{v.key_holder||"—"}</td>
               <td>{v.current_biker||"—"}</td>
             </tr>);})}
-          {!veh.length&&<tr><td colSpan={4} style={{textAlign:"center",color:"#94a3b8",padding:20}}>لا بيانات</td></tr>}
+          {!veh.length&&<tr><td colSpan={4} style={{textAlign:"center",color:"var(--mut-2)",padding:20}}>لا بيانات</td></tr>}
         </tbody>
       </table>
       <div className="fl-recs"><b>توصيات تصحيحية:</b> نقطة مركزية واحدة لحفظ نُسخ المفاتيح مع نسخة احتياطية موثّقة · استرجاع المفاتيح بحوزة أطراف خارجية · دراسة الانتقال لأقفال بالكود لإنهاء مشكلة «المفتاح المفقود» نهائياً.</div>
@@ -238,9 +241,9 @@ function CustodyModal({f,set,save,busy,emps}){
       <Fld l="حتى تاريخ (نهاية الحيازة)"><input type="date" value={f.end_date||""} onChange={e=>u("end_date",e.target.value)}/></Fld>
       <Fld l="السبب"><input value={f.reason||""} onChange={e=>u("reason",e.target.value)} placeholder="إجازة البايكر الأساسي"/></Fld>
       <Fld l="مرجع التفويض في «تم» (اختياري)"><input value={f.tam_ref||""} onChange={e=>u("tam_ref",e.target.value)} placeholder="رقم/مرجع تفويض المركبة"/></Fld>
-      <label className="fl-fld" style={{flexDirection:"row",alignItems:"flex-start",gap:8,background:"#fff8f1",border:"1.5px solid #f0b27f",borderRadius:10,padding:"10px 12px"}}>
+      <label className="fl-fld" style={{flexDirection:"row",alignItems:"flex-start",gap:8,background:"var(--p-50)",border:"1.5px solid var(--warn)",borderRadius:10,padding:"10px 12px"}}>
         <input type="checkbox" checked={!!f.tam_authorized} onChange={e=>u("tam_authorized",e.target.checked)} style={{width:20,height:20,marginTop:2}}/>
-        <span style={{fontSize:12.5,fontWeight:700,lineHeight:1.7,color:"#7a4a1e"}}>أؤكّد تفويض البايكر البديل على الدراجة عبر منصة «تم» التابعة لأبشر أعمال (إلزامي نظاميًا لقيادة المركبة).</span>
+        <span style={{fontSize:12.5,fontWeight:700,lineHeight:1.7,color:"var(--warn-ink)"}}>أؤكّد تفويض البايكر البديل على الدراجة عبر منصة «تم» التابعة لأبشر أعمال (إلزامي نظاميًا لقيادة المركبة).</span>
       </label>
       <p className="fl-note">تنتقل الحيازة للبديل فيرى الدراجة في بوابته ويسجّل عليها. اضغط «إرجاع الحيازة» لإعادتها للأساسي.</p>
     </div>
@@ -248,7 +251,7 @@ function CustodyModal({f,set,save,busy,emps}){
   </div></div>);
 }
 
-function Kpi({ic,c,l,n,d}){return(<div className="fl-kpi"><div className="fl-kh"><span className="fl-kl">{l}</span><span className="fl-ki" style={{color:c,background:c+"18"}}><Icon n={ic} s={16}/></span></div><div className="fl-kn">{n}</div>{d?<div className="fl-kd" style={{color:c}}>{d}</div>:null}</div>);}
+function Kpi({ic,c,l,n,d}){return(<div className="fl-kpi"><div className="fl-kh"><span className="fl-kl">{l}</span><span className="fl-ki" style={{color:c,background:`color-mix(in srgb,${c} 10%,transparent)`}}><Icon n={ic} s={16}/></span></div><div className="fl-kn">{n}</div>{d?<div className="fl-kd" style={{color:c}}>{d}</div>:null}</div>);}
 function Empty({t}){return<div className="fl-empty"><Icon n="bike" s={30}/><p>{t}</p></div>;}
 function Fld({l,children}){return(<label className="fl-fld"><span>{l}</span>{children}</label>);}
 
@@ -329,29 +332,29 @@ function IncModal({f,set,save,busy,veh,emps}){
 }
 
 const CSS=`
-.fl{--brand:#E8712B;--ink:#0f172a;--mut:#64748b;--line:#eceef1;--bg:#f4f5f7;--r:16px}
+.fl{--brand:var(--p);--r:16px}
 .fl *{box-sizing:border-box}
 .fl-toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:80;padding:11px 18px;border-radius:12px;font-weight:700;font-size:13px;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.18);cursor:pointer}
-.fl-toast.ok{background:#087443}.fl-toast.err{background:#b42318}
+.fl-toast.ok{background:var(--ok)}.fl-toast.err{background:var(--bad)}
 .fl-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
-.fl-kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 15px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.fl-kpi{background:var(--glass-3);border:1px solid var(--line);border-radius:14px;padding:14px 15px;box-shadow:var(--shadow-lg)}
 .fl-kh{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .fl-kl{font-size:11.5px;color:var(--mut);font-weight:600;line-height:1.3}
 .fl-ki{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none}
 .fl-kn{font-size:24px;font-weight:800;margin-top:8px;letter-spacing:-.5px}
 .fl-kd{font-size:11px;font-weight:700;margin-top:1px}
 .fl-tabs{display:flex;gap:8px;margin:16px 0 14px;flex-wrap:wrap}
-.fl-tabs button{display:flex;align-items:center;gap:7px;padding:9px 15px;border-radius:11px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:13.5px;font-weight:700;color:var(--mut);cursor:pointer}
-.fl-tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.fl-tabs button{display:flex;align-items:center;gap:7px;padding:9px 15px;border-radius:11px;border:1px solid var(--line);background:var(--glass-3);font-family:inherit;font-size:13.5px;font-weight:700;color:var(--mut);cursor:pointer}
+.fl-tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .fl-tabs button span{background:rgba(120,130,150,.16);padding:1px 8px;border-radius:20px;font-size:11px}
 .fl-tabs button.on span{background:rgba(255,255,255,.2)}
-.fl-panel{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:0 1px 2px rgba(16,24,40,.05);overflow:hidden}
+.fl-panel{background:var(--glass-3);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-lg);overflow:hidden}
 .fl-ph{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 18px;border-bottom:1px solid var(--line)}
 .fl-ph b{font-size:14.5px;font-weight:800}
 .fl-hint{font-size:11.5px;color:var(--mut)}
 .fl-add{display:flex;align-items:center;gap:6px;background:var(--brand);color:#fff;border:none;padding:8px 13px;border-radius:10px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
 .fl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:13px;padding:16px 18px}
-.fl-card{border:1px solid var(--line);border-radius:14px;padding:14px;background:#fff;display:flex;flex-direction:column;gap:9px}
+.fl-card{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--glass-3);display:flex;flex-direction:column;gap:9px}
 .fl-crow{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .fl-plate{display:flex;align-items:center;gap:9px;color:var(--brand)}
 .fl-plate b{font-size:15px;font-weight:800;color:var(--ink);display:block}
@@ -361,11 +364,11 @@ const CSS=`
 .fl-mi{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);font-weight:600}
 .fl-tags{display:flex;flex-wrap:wrap;gap:6px}
 .fl-tag{display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:8px}
-.fl-tag.y{background:#e7f7ef;color:#087443}.fl-tag.n{background:#f1f5f9;color:#94a3b8}.fl-tag.w{background:#fef3e2;color:#b54708}
+.fl-tag.y{background:var(--ok-bg);color:var(--ok-ink)}.fl-tag.n{background:var(--soft);color:var(--mut-2)}.fl-tag.w{background:var(--warn-bg);color:var(--warn-ink)}
 .fl-note{font-size:11.5px;color:var(--mut);line-height:1.6;margin:0;background:var(--bg);padding:8px 10px;border-radius:9px}
 .fl-act{display:flex;gap:7px;margin-top:2px}
-.fl-act button{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:7px;border-radius:9px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer}
-.fl-act button.d{flex:0 0 40px;color:#b42318}
+.fl-act button{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:7px;border-radius:9px;border:1px solid var(--line);background:var(--glass-3);font-family:inherit;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer}
+.fl-act button.d{flex:0 0 40px;color:var(--bad-ink)}
 .fl-inc{display:flex;flex-direction:column;padding:6px 0}
 .fl-icard{display:flex;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
 .fl-icard:last-child{border-bottom:none}
@@ -377,17 +380,17 @@ const CSS=`
 .fl-chip{display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--mut);background:var(--bg);padding:3px 9px;border-radius:8px}
 .fl-refs{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--mut);margin:4px 0 6px}
 .fl-refs b{color:var(--ink)}
-.fl-p{font-size:12.5px;line-height:1.7;margin:4px 0;color:#334155}.fl-p b{color:var(--ink)}
+.fl-p{font-size:12.5px;line-height:1.7;margin:4px 0;color:var(--ink-2)}.fl-p b{color:var(--ink)}
 .fl-tbl{width:100%;border-collapse:collapse}
-.fl-tbl th{font-size:11px;color:var(--mut);font-weight:700;text-align:right;padding:11px 18px;border-bottom:1px solid var(--line);background:#fafbfc}
+.fl-tbl th{font-size:11px;color:var(--mut);font-weight:700;text-align:right;padding:11px 18px;border-bottom:1px solid var(--line);background:var(--soft)}
 .fl-tbl td{padding:12px 18px;border-bottom:1px solid var(--line);font-size:13px}
 .fl-tbl tr:last-child td{border-bottom:none}
 .fl-kdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-inline-end:8px;vertical-align:middle}
-.fl-kdot.ok{background:#12b76a}.fl-kdot.bad{background:#f79009}
-.fl-recs{font-size:12px;line-height:1.8;color:#334155;padding:14px 18px;background:#fff8f3;border-top:1px solid var(--line)}.fl-recs b{color:var(--brand)}
-.fl-empty{text-align:center;padding:40px;color:#cbd5e1}.fl-empty p{color:#94a3b8;font-size:13px;margin-top:8px}
+.fl-kdot.ok{background:var(--ok)}.fl-kdot.bad{background:var(--warn)}
+.fl-recs{font-size:12px;line-height:1.8;color:var(--ink-2);padding:14px 18px;background:var(--p-50);border-top:1px solid var(--line)}.fl-recs b{color:var(--brand)}
+.fl-empty{text-align:center;padding:40px;color:var(--mut-2)}.fl-empty p{color:var(--mut-2);font-size:13px;margin-top:8px}
 .fl-scrim{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto}
-.fl-modal{background:#fff;border-radius:16px;width:100%;max-width:540px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto}
+.fl-modal{background:var(--glass-3);border-radius:16px;width:100%;max-width:540px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto}
 .fl-mh{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
 .fl-mh b{font-size:15px;font-weight:800}
 .fl-mh button{background:none;border:none;cursor:pointer;color:var(--mut);display:flex}
@@ -395,14 +398,14 @@ const CSS=`
 .fl-2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .fl-fld{display:flex;flex-direction:column;gap:5px}
 .fl-fld>span{font-size:12px;font-weight:700;color:var(--ink)}
-.fl-fld input,.fl-fld select,.fl-fld textarea{border:1px solid #dfe3e8;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;outline:none;background:#fff;width:100%}
+.fl-fld input,.fl-fld select,.fl-fld textarea{border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;outline:none;background:var(--glass-3);width:100%}
 .fl-fld input:focus,.fl-fld select:focus,.fl-fld textarea:focus{border-color:var(--brand)}
 .fl-fld textarea{resize:vertical}
 .fl-chk{display:flex;gap:18px;flex-wrap:wrap}
 .fl-chk label{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer}
 .fl-mf{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid var(--line)}
 .fl-mf button{padding:9px 20px;border-radius:10px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border:1px solid var(--line)}
-.fl-mf button.g{background:#fff;color:var(--mut)}
+.fl-mf button.g{background:var(--glass-3);color:var(--mut)}
 .fl-mf button.p{background:var(--brand);color:#fff;border-color:var(--brand)}
 .fl-mf button.p:disabled{opacity:.6}
 @media(max-width:900px){.fl-kpis{grid-template-columns:1fr 1fr 1fr}.fl-2{grid-template-columns:1fr}}

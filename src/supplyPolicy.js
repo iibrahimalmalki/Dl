@@ -6,11 +6,11 @@ export const CAT_ICON={"معدات غسيل":"bucket","مواد تنظيف":"buc
 
 export const REQ_TYPES=["شراء","صيانة","صرف"]; // صرف = صرف من المخزون بلا شراء
 export const REQ_STATUS={
-  submitted:{ar:"بانتظار الاعتماد",c:"#b54708",bg:"#fef3e2"},
-  approved:{ar:"معتمد",c:"#1d5bbf",bg:"#eef4ff"},
-  rejected:{ar:"مرفوض",c:"#b42318",bg:"#feecea"},
-  received:{ar:"مُستلم",c:"#087443",bg:"#e7f7ef"},
-  closed:{ar:"مغلق",c:"#64748b",bg:"#f4f5f7"},
+  submitted:{ar:"بانتظار الاعتماد",c:"var(--warn-ink)",bg:"var(--warn-bg)"},
+  approved:{ar:"معتمد",c:"var(--info-ink)",bg:"var(--info-bg)"},
+  rejected:{ar:"مرفوض",c:"var(--bad-ink)",bg:"var(--bad-bg)"},
+  received:{ar:"مُستلم",c:"var(--ok-ink)",bg:"var(--ok-bg)"},
+  closed:{ar:"مغلق",c:"var(--mut)",bg:"var(--soft)"},
 };
 
 // حدّ الصلاحية: حتى 500 ﷼ ينفّذها اللوجستي؛ ما فوقها أو الدراجات أو الصيانة تُرفع للرئيس (اعتماد)
