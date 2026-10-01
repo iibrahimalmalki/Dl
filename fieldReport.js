@@ -7,8 +7,8 @@ import QRCode from"qrcode/lib/browser.js";
 export{ITEM_EN};
 
 const SITE=(typeof location!=="undefined"&&location.origin)||"https://db1-sandy.vercel.app";
-// الخط المضمّن (مستضاف مع المنصة في /fonts) — لا اعتماد على خطوط النظام أو خدمات خارجية | self-hosted embedded fonts
-const FONT_BASE=(typeof globalThis!=="undefined"&&globalThis.__DW_FONT_BASE)||`${SITE}/fonts`;
+// الخط المضمّن (مستضاف مع المنصة في public/) — لا اعتماد على خطوط النظام أو خدمات خارجية | self-hosted embedded fonts
+const FONT_BASE=(typeof globalThis!=="undefined"&&globalThis.__DW_FONT_BASE)||SITE;
 function fontFaces(){
   const f=(fam,file,w,range)=>`@font-face{font-family:'${fam}';font-style:normal;font-weight:${w};font-display:block;src:url(${FONT_BASE}/${file}) format('woff2');${range?`unicode-range:${range};`:""}}`;
   const AR="U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0898-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC";
