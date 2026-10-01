@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase";
+import { useToast } from "./ui";
 
 /*  إعلان التوظيف — لوحة الموارد البشرية
     تحرير محتوى صفحة التوظيف العامة (يقرأها RecruitmentAd من جدول job_ad)
@@ -7,37 +8,37 @@ import { supabase } from "./supabase";
 */
 
 const CSS = `
-.ja-wrap{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;direction:rtl;color:#15243a;max-width:820px}
-.ja-card{background:#fff;border:1px solid #eceef1;border-radius:16px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(16,24,40,.05)}
-.ja-card h3{font-size:15px;font-weight:800;color:#CC5200;margin:0 0 4px}
-.ja-card .hint{font-size:12px;color:#64748b;margin:0 0 14px;line-height:1.6}
-.ja-lbl{font-size:12.5px;font-weight:700;color:#334155;margin:12px 0 5px;display:block}
-.ja-in,.ja-ta{width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;background:#fafbfc;box-sizing:border-box}
-.ja-in:focus,.ja-ta:focus{outline:none;border-color:#E8712B}
+.ja-wrap{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;direction:rtl;color:var(--ink);max-width:820px}
+.ja-card{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow)}
+.ja-card h3{font-size:15px;font-weight:800;color:var(--p-700);margin:0 0 4px}
+.ja-card .hint{font-size:12px;color:var(--mut);margin:0 0 14px;line-height:1.6}
+.ja-lbl{font-size:12.5px;font-weight:700;color:var(--ink-2);margin:12px 0 5px;display:block}
+.ja-in,.ja-ta{width:100%;padding:10px 12px;border:1.5px solid var(--line-2);border-radius:10px;font-size:14px;font-family:inherit;background:var(--soft);box-sizing:border-box}
+.ja-in:focus,.ja-ta:focus{outline:none;border-color:var(--p)}
 .ja-ta{min-height:56px;resize:vertical;line-height:1.7}
 .ja-row{display:flex;gap:12px;flex-wrap:wrap}.ja-row>*{flex:1;min-width:180px}
-.ja-switch{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 15px}
+.ja-switch{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--soft);border:1.5px solid var(--line);border-radius:12px;padding:12px 15px}
 .ja-switch .t{font-size:14px;font-weight:800}
-.ja-switch .s{font-size:11.5px;color:#64748b;margin-top:2px}
-.ja-toggle{position:relative;width:52px;height:30px;border-radius:20px;background:#cbd5e1;cursor:pointer;transition:.2s;flex-shrink:0;border:none}
-.ja-toggle.on{background:#16a34a}
-.ja-toggle::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.ja-switch .s{font-size:11.5px;color:var(--mut);margin-top:2px}
+.ja-toggle{position:relative;width:52px;height:30px;border-radius:20px;background:var(--track);cursor:pointer;transition:.2s;flex-shrink:0;border:none}
+.ja-toggle.on{background:var(--ok)}
+.ja-toggle::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:24px;height:24px;border-radius:50%;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .ja-toggle.on::after{inset-inline-start:25px}
 .ja-ben{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-.ja-ben input{padding:9px 10px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:inherit;background:#fafbfc;box-sizing:border-box}
+.ja-ben input{padding:9px 10px;border:1.5px solid var(--line-2);border-radius:9px;font-size:13px;font-family:inherit;background:var(--soft);box-sizing:border-box}
 .ja-ben .ic{width:52px;text-align:center;flex:none}
 .ja-ben .bn{flex:1;min-width:0}.ja-ben .ar{flex:1;min-width:0;direction:rtl}
-.ja-del{width:32px;height:32px;border:none;border-radius:8px;background:#feecea;color:#b42318;font-size:16px;font-weight:800;cursor:pointer;flex:none}
-.ja-add{margin-top:4px;padding:9px 14px;background:#fff4e9;border:1.5px dashed #f0b27f;border-radius:10px;color:#CC5200;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
-.ja-save{padding:12px 22px;background:linear-gradient(135deg,#E8712B,#CC5200);color:#fff;border:none;border-radius:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit}
+.ja-del{width:32px;height:32px;border:none;border-radius:8px;background:var(--bad-bg);color:var(--bad-ink);font-size:16px;font-weight:800;cursor:pointer;flex:none}
+.ja-add{margin-top:4px;padding:9px 14px;background:var(--p-100);border:1.5px dashed var(--warn);border-radius:10px;color:var(--p-700);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+.ja-save{padding:12px 22px;background:linear-gradient(135deg,var(--p),var(--p-700));color:#fff;border:none;border-radius:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit}
 .ja-save:disabled{opacity:.6}
 .ja-msg{margin-top:12px;padding:10px 13px;border-radius:10px;font-size:13px;font-weight:700}
-.ja-ok{background:#e9f7ee;color:#1b7a3d}.ja-err{background:#fdeaea;color:#c0392b}
-.ja-link{display:flex;gap:8px;align-items:center;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:8px 8px 8px 12px;flex-wrap:wrap}
-.ja-link code{flex:1;min-width:160px;font-size:12.5px;color:#334155;direction:ltr;text-align:left;word-break:break-all}
+.ja-ok{background:var(--ok-bg);color:var(--ok-ink)}.ja-err{background:var(--bad-bg);color:var(--bad-ink)}
+.ja-link{display:flex;gap:8px;align-items:center;background:var(--soft);border:1.5px solid var(--line);border-radius:10px;padding:8px 8px 8px 12px;flex-wrap:wrap}
+.ja-link code{flex:1;min-width:160px;font-size:12.5px;color:var(--ink-2);direction:ltr;text-align:left;word-break:break-all}
 .ja-linkbtns{display:flex;gap:7px;flex-wrap:wrap}
 .ja-b{padding:8px 13px;border:none;border-radius:9px;font-weight:800;font-size:12.5px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px}
-.ja-b.copy{background:#15243a;color:#fff}.ja-b.wa{background:#25D366;color:#fff}.ja-b.prev{background:#eef2f7;color:#334155}
+.ja-b.copy{background:var(--ink);color:var(--bg)}.ja-b.wa{background:var(--ok);color:#fff}.ja-b.prev{background:var(--soft);color:var(--ink-2)}
 `;
 
 const BLANK = {
@@ -50,7 +51,10 @@ export default function JobAdManager() {
   const [f, setF] = useState(BLANK);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const toast = useToast();
+  const [msg, setMsgRaw] = useState(null);
+  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
+  const setMsg = (x) => { if (x && x.t === "ok") { toast.ok(x.m); setMsgRaw(null); } else setMsgRaw(x); };
   const [copied, setCopied] = useState(false);
 
   const link = (typeof window !== "undefined" ? window.location.origin : "") + "/?apply=1";
@@ -95,7 +99,7 @@ export default function JobAdManager() {
     window.open("https://wa.me/?text=" + encodeURIComponent(m), "_blank");
   }
 
-  if (loading) return <div className="ja-wrap"><style>{CSS}</style><div className="ja-card">جارٍ التحميل…</div></div>;
+  if (loading) return <div className="ja-wrap"><style>{CSS}</style><div className="ja-card"><div className="g-spin"/></div></div>;
 
   return (
     <div className="ja-wrap">
