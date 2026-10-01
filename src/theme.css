@@ -195,6 +195,11 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-
 kbd.g-kbd{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:3px 6px;border-radius:6px;border:1px solid var(--line-2);background:var(--soft);color:var(--mut)}
 
 /* ── حركات ── */
+/* ── مُحدِّد مقطّع (الفترة المشتركة) ── */
+.g-seg{display:inline-flex;gap:3px;padding:3px;border-radius:12px;background:var(--soft);border:1px solid var(--line)}
+.g-seg-b{min-height:34px;padding:6px 14px;border-radius:9px;border:none;background:transparent;color:var(--mut);font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:background .2s var(--ease),color .2s var(--ease)}
+.g-seg-b:hover{color:var(--ink)}.g-seg-b.on{background:var(--glass-3);color:var(--p-ink);box-shadow:var(--shadow)}
+.g-seg-b:focus-visible{outline:none;box-shadow:var(--glow)}
 /* ── أرقام متحركة ومؤشر دائري ── */
 .g-num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
 .g-gauge{position:relative;display:flex;flex-direction:column;align-items:center;flex:none}
