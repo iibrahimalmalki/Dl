@@ -35,5 +35,6 @@ ok('leadership decisions for supply gap',html.includes('قرارات مطلوب�
 ok('supervisor checklist',html.includes('المتابعة الإشرافية')&&html.includes('معيار الإغلاق')&&html.includes('☐ أُغلق'));
 ok('evidence: gaps before compliant',html.indexOf('تحتاج تصحيحاً')<html.indexOf('evh g'));
 ok('employee page bilingual',html.includes('صفحة الموظف')&&html.includes('ভালো করেছেন')&&html.includes('ليست عليك'));
-ok('PDF capture never zoomed',html.includes('onclone')&&html.includes('if(busy)return'));
+ok('PDF capture never zoomed',html.includes('onclone')&&html.includes('if(busy||'));
+ok('two PDF sizes: mobile + A4',html.includes('id="btn-pdf-m"')&&html.includes('id="btn-pdf"')&&html.includes('m:{w:108,h:234')&&html.includes('a4:{w:210,h:297'));
 fs.rmSync(tmp,{recursive:true,force:true});
