@@ -50,7 +50,7 @@ tr.t td{border-bottom:none;font-weight:700;font-size:14px;color:#CC5200}
 <div class="bd">
   <div class="ks">${k(s.washes,"غسلة صافية",s.workDays?`${s.workDays} يوم · ${s.dailyAvg}/يوم`:"")}${k(s.rating?s.rating.toFixed(2):"—","التقييم","",qc)}${k(s.complaintPct+"%","الشكاوى",s.complaints+" معتمدة",sc)}${k(s.compliance?s.compliance.pct+"%":"—","الالتزام الميداني",s.compliance&&s.compliance.date?s.compliance.date:"")}${k(n2(s.ratePerWash),"أجر الغسلة (ر)","2 + "+s.qR.toFixed(2)+" + "+s.sR.toFixed(2),"#CC5200")}</div>
   <h3>الغسلات اليومية${s.bestDay?` — أفضل يوم ${esc(s.bestDay.date)} (${s.bestDay.n})`:""}</h3>
-  <div class="box">${dailySVG(s.days,s.period,{pal:PAL_PRINT,width:720,height:150,avg:s.dailyAvg||null})}</div>
+  <div class="box">${dailySVG(s.days,s.period,{pal:PAL_PRINT,width:720,height:150,avg:s.dailyAvg||null,tips:false})}</div>
   <div class="g2">
     <div><h3>تفصيل العمولة المتوقعة</h3><div class="box"><table>${rows.map(([l,v])=>`<tr><td>${esc(l)}</td><td class="n">${n2(v)}</td></tr>`).join("")}
       <tr class="t"><td>الإجمالي المتوقع</td><td class="n">${n2(expect)}</td></tr>

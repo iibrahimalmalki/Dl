@@ -5,6 +5,7 @@ import { ThemeToggle, Orbs, useToast } from "./ui";
 import { daysLeft, docStatus, docBn, dayText, dayTextBn, pickContact } from "./renewalsLib";
 import { bikerScore, nextHints } from "./scorecard";
 import { dailySVG } from "./perfCharts";
+import ChartTip from "./ChartTip";
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
     هوية دلو ورغوة (برتقالي) · ثنائية اللغة (عربي + বাংলা)
@@ -372,7 +373,7 @@ function MyPerf({ me }) {
       </div>
       <div className="bp-pf-total"><span>العمولة المتوقعة · <span className="bn">সম্ভাব্য কমিশন</span></span><b>{(s.bonusBase + s.production).toLocaleString("en-US", { maximumFractionDigits: 2 })} ﷼</b></div>
       {i === 0 && s.days.length > 0 && <div className="bp-pf-chart"><div className="bp-note" style={{ marginTop: 0 }}>غسلاتك اليومية · <span className="bn">দৈনিক ওয়াশ</span>{s.bestDay ? ` · أفضل يوم ${s.bestDay.date.slice(8)} (${s.bestDay.n})` : ""}</div>
-        <div dangerouslySetInnerHTML={{ __html: dailySVG(s.days, s.period, { height: 120, width: 520, avg: s.dailyAvg || null }) }} /></div>}
+        <ChartTip label="غسلاتك اليومية"><div dangerouslySetInnerHTML={{ __html: dailySVG(s.days, s.period, { height: 120, width: 520, avg: s.dailyAvg || null }) }} /></ChartTip></div>}
       {i === 0 && hAr.length > 0 && <div className="bp-pf-next"><b>هدفك التالي · <span className="bn">পরবর্তী লক্ষ্য</span></b>{hAr.map((h, k) => <div key={k}>• {h}<div className="bn">{hBn[k]}</div></div>)}</div>}
       {i === 0 && s.compliance && <div className="bp-note">آخر جولة ميدانية · <span className="bn">শেষ পরিদর্শন</span>: {s.compliance.pct}% {s.compliance.date ? "· " + s.compliance.date : ""}</div>}
       {i === 0 && s.fines > 0 && <div className="bp-note" style={{ color: "var(--bad-ink)" }}>غرامات مؤكدة · <span className="bn">জরিমানা</span>: {s.fines} ﷼</div>}

@@ -195,6 +195,14 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-
 kbd.g-kbd{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:3px 6px;border-radius:6px;border:1px solid var(--line-2);background:var(--soft);color:var(--mut)}
 
 /* ── حركات ── */
+/* ── تلميح المخططات باللمس (ChartTip.jsx) ── */
+.g-ctip{position:relative;touch-action:pan-y;outline:none;border-radius:10px}
+.g-ctip:focus-visible{box-shadow:var(--glow)}
+.g-ctip [data-tip]{cursor:pointer}
+.g-ctip rect.ct-hit[data-active]{fill-opacity:.1!important}
+.g-ctip .dh-cf-col[data-active]{background:var(--hover);border-radius:6px}
+.g-ctip-b{position:absolute;transform:translate(-50%,calc(-100% - 10px));z-index:5;pointer-events:none;white-space:nowrap;padding:6px 10px;border-radius:10px;background:var(--glass-3);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line-2);box-shadow:var(--shadow-lg);font-size:12px;font-weight:700;color:var(--ink)}
+@media(prefers-reduced-motion:no-preference){.g-ctip-b{animation:gFade .12s}}
 /* ── شريط التنقّل السفلي للجوال (BottomNav.jsx) ── */
 .g-bnav{display:none}
 @media(max-width:640px){

@@ -5,6 +5,7 @@ import{payoutForBiker}from"./sweaterContract";
 import{bikerScore,trend}from"./scorecard";
 import DashHero from"./DashHero";
 import Assistant from"./Assistant";
+import ChartTip from"./ChartTip";
 import{usePeriod}from"./period";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
@@ -452,11 +453,11 @@ export default function DashboardHome({onNav,theme="light"}){
             daily.length===0?<Empty t="لا بيانات يومية في هذا النطاق" s="العرض اليومي يعتمد على تقارير الحجوزات."/>:
             <>
               <div className="dh-note">الإنتاج والإيراد المُكتسب يومياً (من الحجوزات، {RATE}﷼/غسلة). المصروفات البنكية تبقى شهرية.</div>
-              <div className="dh-cf dh-cf-day">{daily.map((x,i)=>(
-                <div key={i} className="dh-cf-col" title={`${x.day}: ${x.washes} غسلة`}>
+              <ChartTip label="الغسلات اليومية"><div className="dh-cf dh-cf-day">{daily.map((x,i)=>(
+                <div key={i} className="dh-cf-col" data-tip={`${x.day.slice(8)}/${x.day.slice(5,7)}: ${x.washes} غسلة`}>
                   <div className="dh-cf-bars"><div className="dh-cf-in" style={{height:Math.max(2,Math.round(x.washes/dMaxW*46))+"px",width:"100%"}}/></div>
                   {(i===0||i===daily.length-1||i===Math.floor(daily.length/2))&&<span className="dh-cf-m">{x.day.slice(8)}/{x.day.slice(5,7)}</span>}
-                </div>))}</div>
+                </div>))}</div></ChartTip>
               <div className="dh-fin" style={{marginTop:10}}>
                 <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"var(--ok-bg)",color:"var(--ok-ink)"}}><Icon n="operations" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إجمالي الغسلات · {rangeLabel}</div><div style={{fontSize:11,color:"var(--dh-mut2)",fontWeight:600}}>{daily.length} يوم عمل</div></div><b>{dailyWashTot.toLocaleString("en-US")}</b></div>
                 <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"var(--info-bg)",color:"var(--info-ink)"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إيراد مُكتسب تقديري ({RATE}﷼/غسلة)</div></div><b>{money(dailyWashTot*RATE)}</b></div>
@@ -465,14 +466,14 @@ export default function DashboardHome({onNav,theme="light"}){
             </>
           ):(
             finChart.some(x=>x.has)?<>
-              <div className="dh-cf">{finChart.map((x,i)=>(
-                <div key={i} className="dh-cf-col" title={periodAr(x.p)}>
+              <ChartTip label="التدفّق النقدي الشهري"><div className="dh-cf">{finChart.map((x,i)=>(
+                <div key={i} className="dh-cf-col" data-tip={`${periodAr(x.p)}: داخل ${money(x.i)} · خارج ${money(x.o)}`}>
                   <div className="dh-cf-bars">
                     <div className="dh-cf-in" style={{height:Math.max(2,Math.round(x.i/finMax*46))+"px"}}/>
                     <div className="dh-cf-out" style={{height:Math.max(2,Math.round(x.o/finMax*46))+"px"}}/>
                   </div>
                   <span className="dh-cf-m">{periodShort(x.p)}</span>
-                </div>))}</div>
+                </div>))}</div></ChartTip>
               <div className="dh-cf-lg"><span><i style={{background:"var(--ok)"}}/>داخل</span><span><i style={{background:"var(--bad)"}}/>خارج</span></div>
               <div className="dh-fin" style={{marginTop:10}}>
                 <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"var(--ok-bg)",color:"var(--ok-ink)"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الداخل</div><div style={{fontSize:11,color:"var(--dh-mut2)",fontWeight:600}}>سويتر {money(cash.sw)} · تمويل {money(cash.i-cash.sw)}</div></div><b>{money(cash.i)}</b></div>

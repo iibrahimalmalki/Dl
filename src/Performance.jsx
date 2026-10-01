@@ -9,6 +9,7 @@ import{waPhone}from"./renewalsLib";
 import{honorData,honorHTML,shareHonor,downloadHonor,honorPNG,honorFileName}from"./honorCard";
 import{downloadBlob}from"./exportKit";
 import DataTable from"./DataTable";
+import ChartTip from"./ChartTip";
 import{ensureFonts}from"./exportKit";
 
 // لوحة إنتاجية البايكر — بطاقة الأداء الشهرية (HR-POL-003 عبر scorecard.js/payrollEngine.js)
@@ -93,7 +94,7 @@ export default function Performance({opId,onNav}){
         emp:e||null,team:e&&e.team_id?teamName[e.team_id]||"":"",photo:e&&e.applicant_id?D.photos[e.applicant_id]||null:null,
         line:lineBySid[s]||null,violList:vBy[s]||[],tickets:{approved:tk.filter(t=>t.decision==="approved").length,pending:tk.filter(t=>t.decision==="pending").length,rejected:tk.filter(t=>t.decision==="rejected").length},
         prev:byP[D.prevP]?bikerScore(byP[D.prevP]):null,
-        series:{washes:ser.map(x=>x&&x.washes),rating:ser.map(x=>x&&x.rating||null),cpct:ser.map(x=>x&&x.complaintPct)},
+        series:{labels:D.months,washes:ser.map(x=>x&&x.washes),rating:ser.map(x=>x&&x.rating||null),cpct:ser.map(x=>x&&x.complaintPct)},
         tr:trend(ser.map(x=>x&&x.washes))});
     });
     // الأول على فريقه (أو على الجميع إن لم يكن له فريق) — لعبارة بطاقة التكريم
@@ -211,6 +212,7 @@ function Card({s,onRounds}){
   const approved=lc&&lc.bonus_base!=null?Number(lc.bonus_base)+Number(lc.production||0):null;
   const expect=s.bonusBase+s.production;
   const hints=nextHints(s,"ar");
+  const ml=(s.series.labels||[]).map(periodAr);
   const Gauge=({t,v,sub,hint,tone})=><div className="pf-g"><span>{t}</span><b className={tone?"t-"+tone:""}>{v}</b>{sub&&<small>{sub}</small>}{hint&&<em>{hint}</em>}</div>;
   return(<div className="pf-card">
     <div className="pf-ch"><Av s={s} big/><div><div className="pf-cn">{s.name}</div><div className="pf-cm">#{s.sid}{s.team?" · "+s.team:""}</div>
@@ -223,15 +225,15 @@ function Card({s,onRounds}){
     </div>
 
     <div className="pf-sec"><div className="pf-sh"><b>الغسلات اليومية</b><span>{s.workDays} يوم عمل · متوسط {s.dailyAvg}/يوم{s.bestDay?` · أفضل يوم ${s.bestDay.date.slice(8)} (${s.bestDay.n})`:""}{s.zeroDays.length?` · ${s.zeroDays.length} يوم صفر`:""}</span></div>
-      {s.days.length?<div className="pf-chart" dangerouslySetInnerHTML={{__html:dailySVG(s.days,s.period,{avg:s.dailyAvg||null})}}/>:<p className="pf-mut">لا تفصيل يومي في تقرير هذا الشهر.</p>}</div>
+      {s.days.length?<ChartTip label="الغسلات اليومية — الأسهم لاستعراض الأيام"><div className="pf-chart" dangerouslySetInnerHTML={{__html:dailySVG(s.days,s.period,{avg:s.dailyAvg||null})}}/></ChartTip>:<p className="pf-mut">لا تفصيل يومي في تقرير هذا الشهر.</p>}</div>
 
     <div className="pf-2">
       <div className="pf-sec"><div className="pf-sh"><b>اتجاه 6 أشهر</b><span className={"pf-tr "+s.tr.dir}>{TR[s.tr.dir]} {s.tr.pct}%</span></div>
-        <div className="pf-sparks">
-          <div><span>الغسلات</span><i dangerouslySetInnerHTML={{__html:sparkSVG(s.series.washes,{color:"var(--p)"})}}/></div>
-          <div><span>التقييم</span><i dangerouslySetInnerHTML={{__html:sparkSVG(s.series.rating,{color:"var(--ok)"})}}/></div>
-          <div><span>الشكاوى %</span><i dangerouslySetInnerHTML={{__html:sparkSVG(s.series.cpct,{color:"var(--bad)"})}}/></div>
-        </div></div>
+        <ChartTip label="اتجاه 6 أشهر"><div className="pf-sparks">
+          <div><span>الغسلات</span><i dangerouslySetInnerHTML={{__html:sparkSVG(s.series.washes,{color:"var(--p)",labels:ml,fmt:v=>v+" غسلة"})}}/></div>
+          <div><span>التقييم</span><i dangerouslySetInnerHTML={{__html:sparkSVG(s.series.rating,{color:"var(--ok)",labels:ml,fmt:v=>Number(v).toFixed(2)})}}/></div>
+          <div><span>الشكاوى %</span><i dangerouslySetInnerHTML={{__html:sparkSVG(s.series.cpct,{color:"var(--bad)",labels:ml,fmt:v=>v+"%"})}}/></div>
+        </div></ChartTip></div>
       <div className="pf-sec"><div className="pf-sh"><b>تفصيل العمولة</b><span>متوقعة</span></div>
         <table className="pf-calc"><tbody>
           <tr><td>ثابت 2 ر × {s.washes}</td><td>{n2(s.fixed)}</td></tr>
