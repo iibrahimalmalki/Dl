@@ -598,7 +598,7 @@ const CSS=`
 .rp-sec-h{font-size:12.5px;font-weight:800;color:var(--mut);margin:0 2px 9px}
 .rp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:11px}
 .rp-card{display:flex;align-items:center;gap:11px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;font-family:inherit;text-align:right;box-shadow:var(--shadow)}
-.rp-card:hover:not(.soon){border-color:var(--warn);transform:translateY(-1px);transition:.15s}
+.rp-card:hover:not(.soon){border-color:color-mix(in srgb,var(--warn) 35%,transparent);transform:translateY(-1px);transition:.15s}
 .rp-card.soon{opacity:.6;cursor:default}
 .rp-ic{width:40px;height:40px;border-radius:11px;background:var(--p-100);color:var(--brand);display:flex;align-items:center;justify-content:center;flex:none}
 .rp-card b{font-size:13.5px;font-weight:800;display:block}.rp-card small{font-size:11px;color:var(--mut)}

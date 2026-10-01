@@ -8,7 +8,7 @@ import{POSITIONS,POS_BY_KEY,SUPERVISOR_POSITIONS,TEAM_MAX_MEMBERS,SUP_MAX_TEAMS,
 const SC={
   ops:  {head:"var(--ok-ink)",tint:"var(--ok-bg)",bd:"color-mix(in srgb,var(--ok) 35%,transparent)",bar:"var(--ok)",badge:"SECTOR A"},
   strat:{head:"var(--info-ink)",tint:"var(--info-bg)",bd:"color-mix(in srgb,var(--info) 35%,transparent)",bar:"var(--info)",badge:"SECTOR B"},
-  sup:  {head:"var(--warn-ink)",tint:"var(--warn-bg)",bd:"var(--warn)",bar:"var(--warn)",badge:"SECTOR C"},
+  sup:  {head:"var(--warn-ink)",tint:"var(--warn-bg)",bd:"color-mix(in srgb,var(--warn) 35%,transparent)",bar:"var(--warn)",badge:"SECTOR C"},
 };
 
 const SECTORS=[
@@ -66,7 +66,7 @@ const SECTORS=[
 
 const DEPT_INDEX=Object.fromEntries(SECTORS.flatMap(s=>s.depts.map(d=>[d.id,{...d,sector:s.key,sectorAr:s.ar}])));
 
-const AB={r:{c:"var(--ok-ink)",bg:"var(--ok-bg)",bd:"color-mix(in srgb,var(--ok) 35%,transparent)"},d:{c:"var(--warn-ink)",bg:"var(--warn-bg)",bd:"var(--warn)"},c:{c:"var(--info-ink)",bg:"var(--info-bg)",bd:"color-mix(in srgb,var(--info) 35%,transparent)"},i:{c:"var(--mut)",bg:"var(--soft)",bd:"var(--line)"}};
+const AB={r:{c:"var(--ok-ink)",bg:"var(--ok-bg)",bd:"color-mix(in srgb,var(--ok) 35%,transparent)"},d:{c:"var(--warn-ink)",bg:"var(--warn-bg)",bd:"color-mix(in srgb,var(--warn) 35%,transparent)"},c:{c:"var(--info-ink)",bg:"var(--info-bg)",bd:"color-mix(in srgb,var(--info) 35%,transparent)"},i:{c:"var(--mut)",bg:"var(--soft)",bd:"var(--line)"}};
 
 const MATRIX=[
   ["توظيف موظف جديد",[["d","يقرر"]],[["c","يوصي"]],[["c","يوصي"]],"—"],

@@ -270,8 +270,8 @@ const CSS=`
 .hs-miss,.hs-empt{color:var(--bad-ink)}.hs-empt{text-align:center;color:var(--mut-2);padding:20px}
 .hs-tact{display:flex;gap:5px;justify-content:flex-end}
 .hs-tact button{border:1px solid var(--line);background:var(--glass-2);width:28px;height:28px;border-radius:8px;cursor:pointer;color:var(--mut);display:flex;align-items:center;justify-content:center}
-.hs-tact button.ok{color:var(--ok-ink);background:var(--ok-bg);border-color:var(--ok)}
-.hs-tact button.wa{color:var(--ok-ink);background:var(--ok-bg);border-color:var(--ok)}
+.hs-tact button.ok{color:var(--ok-ink);background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.hs-tact button.wa{color:var(--ok-ink);background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
 .hs-tact button.d{color:var(--bad-ink)}
 .hs-recs{font-size:11.5px;color:var(--ink-2);padding:12px 16px;background:var(--p-50);border-top:1px solid var(--line)}
 .hs-violog{display:flex;flex-direction:column;padding:6px 0;border-bottom:1px solid var(--line)}

@@ -177,7 +177,7 @@ const CSS=`
 .vn-msg.ok{background:var(--ok-bg);color:var(--ok-ink)}.vn-msg.err{background:var(--bad-bg);color:var(--bad-ink)}
 .vn-list{display:flex;flex-direction:column;gap:10px}
 .vn-item{display:flex;align-items:center;gap:12px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);cursor:pointer}
-.vn-item:hover{border-color:var(--warn)}
+.vn-item:hover{border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
 .vn-av{width:42px;height:42px;border-radius:12px;background:var(--p-100);color:var(--p);display:flex;align-items:center;justify-content:center;flex:none}
 .vn-name{font-size:14px;font-weight:800;color:var(--ink)}
 .vn-off{font-size:9.5px;font-weight:800;background:var(--bad-bg);color:var(--bad-ink);padding:1px 8px;border-radius:20px;margin-inline-start:6px}

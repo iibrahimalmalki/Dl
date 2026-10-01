@@ -166,7 +166,7 @@ const CSS=`
 .iv-hint{display:flex;align-items:flex-start;gap:7px;background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);color:var(--warn-ink);font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-bottom:14px;line-height:1.6}
 .iv-list{display:flex;flex-direction:column;gap:10px}
 .iv-card{display:flex;align-items:center;gap:12px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);cursor:pointer}
-.iv-card:hover{border-color:var(--warn)}
+.iv-card:hover{border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
 .iv-c-av{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--p),var(--a));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex:none}
 .iv-c-name{font-size:14px;font-weight:800;color:var(--ink)}.iv-c-name small{color:var(--mut-2);font-weight:600;margin-inline-start:6px;font-size:11.5px}
 .iv-c-sub{font-size:11.5px;color:var(--mut);margin-top:2px}

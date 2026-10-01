@@ -131,7 +131,7 @@ const CSS=`
 .ob-track div{height:100%;border-radius:6px;transition:width .2s}
 .ob-items{display:flex;flex-direction:column;gap:7px}
 .ob-item{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);cursor:pointer;text-align:right}
-.ob-item.on{background:var(--ok-bg);border-color:var(--ok);color:var(--ok-ink);font-weight:700}
+.ob-item.on{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok-ink);font-weight:700}
 .ob-chk{width:22px;height:22px;border-radius:7px;background:var(--soft);display:flex;align-items:center;justify-content:center;flex:none}
 .ob-item.on .ob-chk{background:var(--ok);color:#fff}
 .ob-foot{display:flex;gap:8px;margin-top:12px}

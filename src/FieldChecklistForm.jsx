@@ -90,7 +90,7 @@ export const FCF_CSS=`
 .fcf-note input{flex:1;border:1px solid var(--line-2);border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;outline:none;background:var(--soft);color:var(--ink)}
 .fcf-note input:focus{border-color:var(--p);box-shadow:0 0 0 3px rgba(232,113,43,.1);background:var(--glass-3)}
 .fcf-note>svg{color:var(--mut-2);flex:none}
-.fcf-note.hot input{background:var(--p-50);border-color:var(--warn)}
+.fcf-note.hot input{background:var(--p-50);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
 .fcf-note.hot input:focus{border-color:var(--warn-ink);box-shadow:0 0 0 3px rgba(181,71,8,.1)}
 .fcf-note.hot>svg{color:var(--warn-ink)}
 .fcf-parts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px;padding-inline-start:31px}

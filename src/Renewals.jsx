@@ -192,7 +192,7 @@ const CSS=`
 .rn-act button{border:1px solid var(--line-2);background:var(--glass-2);width:30px;height:30px;border-radius:9px;cursor:pointer;color:var(--mut);display:flex;align-items:center;justify-content:center}
 .rn-act button.del{color:var(--bad-ink);background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
 .rn-act button.att{color:var(--info-ink);background:var(--info-bg);border-color:color-mix(in srgb,var(--info) 35%,transparent)}
-.rn-act button.wa{color:var(--ok-ink);background:var(--ok-bg);border-color:var(--ok)}
+.rn-act button.wa{color:var(--ok-ink);background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
 .rn-attach{border:1px dashed var(--line);border-radius:12px;padding:11px 12px;margin-bottom:10px;background:var(--soft)}
 .rn-attach-h{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:var(--ink-2);margin-bottom:8px}
 .rn-attach-hint{font-size:11.5px;color:var(--mut-2)}

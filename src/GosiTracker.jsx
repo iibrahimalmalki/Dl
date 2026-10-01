@@ -15,9 +15,9 @@ const CSS = `
 .gt-kpi .v{font-size:22px;font-weight:800;margin-top:3px}
 .gt-kpi .v.red{color:var(--bad-ink)}.gt-kpi .v.amber{color:var(--warn-ink)}.gt-kpi .v.green{color:var(--ok-ink)}
 .gt-alert{border-radius:10px;padding:12px 15px;font-size:13px;margin-bottom:14px;font-weight:600}
-.gt-a-red{background:var(--bad-bg);color:var(--bad-ink);border:1px solid var(--bad)}
-.gt-a-amber{background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn)}
-.gt-a-green{background:var(--ok-bg);color:var(--ok-ink);border:1px solid var(--ok)}
+.gt-a-red{background:var(--bad-bg);color:var(--bad-ink);border:1px solid color-mix(in srgb,var(--bad) 35%,transparent)}
+.gt-a-amber{background:var(--warn-bg);color:var(--warn-ink);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent)}
+.gt-a-green{background:var(--ok-bg);color:var(--ok-ink);border:1px solid color-mix(in srgb,var(--ok) 35%,transparent)}
 .gt-card{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
 .gt-card h3{font-size:15px;font-weight:800;color:var(--ok-ink);margin:0 0 10px}
 .gt-inst{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}

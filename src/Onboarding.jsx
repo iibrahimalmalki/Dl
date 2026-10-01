@@ -143,7 +143,7 @@ const CSS=`
 .ob-sec-h span{color:var(--mut-2);font-weight:600;font-size:12px}
 .ob-list{display:flex;flex-direction:column;gap:10px}
 .ob-card{display:flex;align-items:center;gap:12px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);cursor:pointer}
-.ob-card:hover{border-color:var(--warn)}
+.ob-card:hover{border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
 .ob-c-av{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--p),var(--a));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex:none}
 .ob-c-name{font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:6px}.ob-c-name small{color:var(--mut-2);font-weight:600;margin-inline-start:6px;font-size:11.5px}
 .ob-c-track{height:7px;background:var(--track);border-radius:5px;overflow:hidden}.ob-c-track div{height:100%;border-radius:5px}
