@@ -2,6 +2,7 @@ import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{payoutForBiker}from"./sweaterContract";
+import{bikerScore,trend}from"./scorecard";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
 const MN=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
@@ -25,6 +26,8 @@ const PRESETS=[
 // لوحة القيادة الشاملة — بيانات حيّة من كل وحدات النظام، مع نطاق زمني وفلاتر ومقارنة
 export default function DashboardHome({onNav,theme="light"}){
   const nav=k=>onNav&&onNav(k);
+  // فتح بطاقة أداء البايكر مباشرة (Performance يقرأ dw:open أو window.__dwLast)
+  const openPerf=sid=>{nav("performance");if(sid)setTimeout(()=>window.dispatchEvent(new CustomEvent("dw:open",{detail:{view:"performance",table:"ops_biker_month",id:sid}})),300);};
   const[d,setD]=useState(null);
   const[preset,setPreset]=useState("this");    // النطاق الزمني
   const[cFrom,setCFrom]=useState("");           // مخصّص — من
@@ -42,7 +45,7 @@ export default function DashboardHome({onNav,theme="light"}){
       q("teams","id,name,supervisor_user_id"),
       q("interview_sessions","status,decision,rating"),
       q("onboarding","progress"),
-      q("ops_biker_month","period,biker_name,net_washes,rating,complaint_pct"),
+      q("ops_biker_month","period,sweater_id,biker_name,net_washes,rating,complaint_pct,approved_complaints"),
       q("payroll_lines","period,role,total"),
       q("violations","status,severity,fine_applied"),
       q("field_rounds","compliance_pct,period,status"),
@@ -121,7 +124,13 @@ export default function DashboardHome({onNav,theme="light"}){
 
     // أعلى البايكرز عبر النطاق
     const bmap={};d.ops.filter(o=>inRange(o.period)&&bikerOf(o)).forEach(o=>{const k=o.biker_name||"—";if(!bmap[k])bmap[k]={biker_name:k,net_washes:0,rs:[]};bmap[k].net_washes+=Number(o.net_washes||0);if(Number(o.rating)>0)bmap[k].rs.push(Number(o.rating));});
-    const topBikers=Object.values(bmap).map(b=>({...b,rating:b.rs.length?b.rs.reduce((a,c)=>a+c,0)/b.rs.length:0})).sort((a,b)=>b.net_washes-a.net_washes).slice(0,6);
+    const topBikers=Object.values(bmap).map(b=>{
+      // أجر الغسلة الحالي (آخر شهر في النطاق) والاتجاه عبر كل الأشهر — scorecard/HR-POL-003
+      const mine=d.ops.filter(o=>(o.biker_name||"—")===b.biker_name&&bikerOf(o)).sort((x,y)=>String(x.period).localeCompare(String(y.period)));
+      const lastIn=mine.filter(o=>inRange(o.period)).slice(-1)[0];
+      const sc=lastIn?bikerScore(lastIn):null;
+      return{...b,rating:b.rs.length?b.rs.reduce((a,c)=>a+c,0)/b.rs.length:0,sid:lastIn&&lastIn.sweater_id!=null?String(lastIn.sweater_id).trim():null,rate:sc?sc.ratePerWash:null,tr:trend(mine.map(o=>Number(o.net_washes)||0))};
+    }).sort((a,b)=>b.net_washes-a.net_washes).slice(0,6);
     const maxW=topBikers.reduce((m,o)=>Math.max(m,o.net_washes),0)||1;
     const nBikers=Object.keys(bmap).length||1;
 
@@ -417,7 +426,7 @@ export default function DashboardHome({onNav,theme="light"}){
         <div className="dw-pb">
           {topBikers.length===0?<Empty t="لا بيانات عمليات بعد" s="ارفع تقارير سويتر الشهرية لتظهر الغسلات هنا."/>:
           <div className="dw-team">{topBikers.map((o,i)=>(
-            <div className="dw-tm" key={i}><div className="dw-tn">{o.biker_name||"—"}<small>{o.rating?`تقييم ${Number(o.rating).toFixed(2)}`:""}</small></div><div className="dw-tbar"><div style={{width:`${Math.round(o.net_washes/maxW*100)}%`,height:"100%",borderRadius:6,background:i===0?"linear-gradient(90deg,var(--ok),color-mix(in srgb,var(--ok) 70%,white))":"linear-gradient(90deg,var(--a),var(--p))"}}/></div><span className="dw-tv">{o.net_washes}</span></div>))}</div>}
+            <div className="dw-tm dw-clk" key={i} role="button" tabIndex={0} title="فتح بطاقة الأداء" onClick={()=>openPerf(o.sid)} onKeyDown={e=>e.key==="Enter"&&openPerf(o.sid)}><div className="dw-tn">{o.biker_name||"—"}<small>{o.rating?`تقييم ${Number(o.rating).toFixed(2)}`:""}{o.rate!=null&&<span className="dw-rate"> · {o.rate.toFixed(2)} ر/غسلة</span>}<span className={"dw-trd "+o.tr.dir} title={`الاتجاه ${o.tr.pct}%`}>{o.tr.dir==="up"?"▲":o.tr.dir==="down"?"▼":"■"}</span></small></div><div className="dw-tbar"><div style={{width:`${Math.round(o.net_washes/maxW*100)}%`,height:"100%",borderRadius:6,background:i===0?"linear-gradient(90deg,var(--ok),color-mix(in srgb,var(--ok) 70%,white))":"linear-gradient(90deg,var(--a),var(--p))"}}/></div><span className="dw-tv">{o.net_washes}</span></div>))}</div>}
         </div>
       </div>
       <div className="dw-panel">
@@ -620,6 +629,7 @@ const CSS=`
 .dh-kl{font-size:11px;color:var(--dh-mut);font-weight:700;line-height:1.3}
 .dh-ki{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;filter:drop-shadow(0 0 6px rgba(0,0,0,.05))}
 .dh-docs{display:inline-flex;gap:4px;flex-wrap:wrap}.dh-docs .g-badge{padding:1px 7px;font-size:10.5px;direction:ltr;unicode-bidi:isolate}
+.dw-rate{color:var(--p-ink);font-weight:700}.dw-trd{margin-inline-start:5px;font-size:10px;font-weight:800}.dw-trd.up{color:var(--ok-ink)}.dw-trd.down{color:var(--bad-ink)}.dw-trd.flat{color:var(--mut-2)}
 .dh-kn{font-size:23px;font-weight:800;margin-top:9px;letter-spacing:-.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(90deg,var(--dh-ink),var(--dh-ink));-webkit-background-clip:text;background-clip:text}
 .dh-kd{font-size:11px;font-weight:700}
 .dh-kfoot{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;margin-top:3px}
