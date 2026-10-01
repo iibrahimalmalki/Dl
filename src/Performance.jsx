@@ -6,6 +6,8 @@ import{bikerScore,rankBikers,trend,teamSummary,monthDelta,nextHints,bikerBrief,L
 import{dailySVG,sparkSVG}from"./perfCharts";
 import{periodAr,downloadCardPdf}from"./perfExport";
 import{waPhone}from"./renewalsLib";
+import{honorData,honorHTML,shareHonor,downloadHonor}from"./honorCard";
+import{ensureFonts}from"./exportKit";
 
 // لوحة إنتاجية البايكر — بطاقة الأداء الشهرية (HR-POL-003 عبر scorecard.js/payrollEngine.js)
 const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
@@ -33,6 +35,7 @@ export default function Performance({opId,onNav}){
   const[sort,setSort]=useState({k:"washes",dir:-1});
   const[openSid,setOpenSid]=useState(null);
   const[busy,setBusy]=useState("");
+  const[honor,setHonor]=useState(null);   // {sid,variant}
   const pendingOpen=useRef(null);
   const opF=useCallback(q=>(opId&&opId!=="all")?q.eq("operator_id",opId):q,[opId]);
 
@@ -95,6 +98,9 @@ export default function Performance({opId,onNav}){
         series:{washes:ser.map(x=>x&&x.washes),rating:ser.map(x=>x&&x.rating||null),cpct:ser.map(x=>x&&x.complaintPct)},
         tr:trend(ser.map(x=>x&&x.washes))});
     });
+    // الأول على فريقه (أو على الجميع إن لم يكن له فريق) — لعبارة بطاقة التكريم
+    const topBy={};cur.forEach(x=>{const k=x.team||"_all";if(!topBy[k]||x.washes>topBy[k].washes)topBy[k]=x;});
+    cur.forEach(x=>{x.isTop=topBy[x.team||"_all"]===x&&x.washes>0;});
     const ranked=rankBikers(cur,"washes");
     return{list:ranked,team:teamSummary(cur),teamPrev:prev.length?teamSummary(prev):null};
   },[D]);
@@ -125,6 +131,14 @@ export default function Performance({opId,onNav}){
   const sendWa=s=>{const m=s.emp&&s.emp.mobile;if(!m){toast.warn("لا يوجد جوال مسجّل لهذا البايكر");return;}window.open("https://wa.me/"+waPhone(m)+"?text="+encodeURIComponent(bikerBrief(s,"both")),"_blank");};
   const copy=async s=>{try{await navigator.clipboard.writeText(bikerBrief(s,"both"));toast.ok("نُسخ الملخص");}catch(_){toast.bad("تعذّر النسخ");}};
   const pdf=async s=>{setBusy("pdf");try{await downloadCardPdf(s,{name:s.name,sid:s.sid,team:s.team,photo:s.photo,line:s.line,violations:s.violList,series:s.series});toast.ok("تم تنزيل بطاقة "+s.name);}catch(e){toast.bad("تعذّر إنشاء PDF",String(e.message||e));}setBusy("");};
+  const hd=(s,variant)=>honorData(s,{name:s.name,nameAr:s.emp&&(s.emp.full_name_ar||s.emp.name_ar),photo:s.photo,prev:s.prev,isTop:s.isTop,variant});
+  const hShare=async(s,v)=>{setBusy("honor");try{const r=await shareHonor(hd(s,v));toast.ok(r==="shared"?"تمت المشاركة":r==="cancelled"?"أُلغيت المشاركة":"تم تنزيل الصورة");}catch(e){toast.bad("تعذّر إنشاء البطاقة",String(e.message||e));}setBusy("");};
+  const hDown=async(s,v)=>{setBusy("honor");try{await downloadHonor(hd(s,v));toast.ok("تم تنزيل بطاقة "+s.name);}catch(e){toast.bad("تعذّر إنشاء البطاقة",String(e.message||e));}setBusy("");};
+  // بطاقات الشهر لكل البايكرز — تنزيل متتابع (JSZip غير مثبّت في المشروع)
+  const allCards=async()=>{if(!M||!M.list.length)return;setBusy("all");
+    try{for(let i=0;i<M.list.length;i++){const s=M.list[i];setBusy(`all:${i+1}/${M.list.length}`);await downloadHonor(hd(s,"honor"));await new Promise(r=>setTimeout(r,450));}
+      toast.ok(`تم تنزيل ${M.list.length} بطاقة`,"قد يطلب المتصفح السماح بتنزيل ملفات متعددة");}
+    catch(e){toast.bad("توقّف التوليد",String(e.message||e));}setBusy("");};
   const goRounds=s=>{onNav&&onNav("field_rounds");setTimeout(()=>window.dispatchEvent(new CustomEvent("dw:open",{detail:{view:"field_rounds",table:"field_rounds",id:s.rounds[0]&&s.rounds[0].id,sweater_id:s.sid}})),300);};
 
   return(<div className="pf">
@@ -133,6 +147,7 @@ export default function Performance({opId,onNav}){
       <label className="pf-month"><Icon n="calendar" s={16}/><input type="month" value={period} onChange={e=>e.target.value&&setPeriod(e.target.value)}/></label>
       <span className="pf-plabel">{periodAr(period)}{opId&&opId!=="all"?" · مشغّل محدّد":""}</span>
       <div style={{flex:1}}/>
+      {M.list.length>0&&<button className="g-btn" onClick={allCards} disabled={!!busy} title="بطاقة تكريم PNG لكل بايكر (تنزيل متتابع)"><Icon n="star" s={15}/> {busy.startsWith("all")?`جارٍ التوليد ${busy.slice(4)}`:"بطاقات الشهر"}</button>}
     </div>
 
     {M.list.length===0?<div className="g-card"><Empty icon={<Icon n="performance" s={26}/>} title={`لا بيانات أداء في ${periodAr(period)}`} text="الأداء يُبنى من تقرير سويتر الشهري (الغسلات والتقييم والشكاوى). ارفع التقرير في العمليات اليومية.">
@@ -170,11 +185,28 @@ export default function Performance({opId,onNav}){
     <Modal open={!!open} onClose={()=>setOpenSid(null)} size="lg" title={open?open.name:""} sub={open?`#${open.sid}${open.team?" · "+open.team:""} · ${periodAr(period)}`:""}
       foot={open&&<>
         <button className="g-btn" onClick={()=>copy(open)}><Icon n="doc" s={15}/> نسخ الملخص</button>
+        <button className="g-btn" onClick={()=>setHonor({sid:open.sid,variant:"honor"})}><Icon n="star" s={15}/> بطاقة تكريم</button>
         <button className="g-btn" onClick={()=>pdf(open)} disabled={busy==="pdf"}><Icon n="download" s={15}/> {busy==="pdf"?"جارٍ الإنشاء…":"تنزيل PDF"}</button>
         <button className="g-btn primary" onClick={()=>sendWa(open)}><Icon n="send" s={15}/> رسالة للبايكر</button></>}>
       {open&&<Card s={open} onRounds={()=>goRounds(open)}/>}
     </Modal>
+
+    {(()=>{const hs=honor&&M.list.find(x=>x.sid===honor.sid);return(
+    <Modal open={!!hs} onClose={()=>setHonor(null)} size="lg" title="بطاقة التكريم" sub={hs?`${hs.name} · ${periodAr(period)} · 1280×720`:""}
+      foot={hs&&<>
+        <button className="g-btn" onClick={()=>hDown(hs,honor.variant)} disabled={busy==="honor"}><Icon n="download" s={15}/> تنزيل PNG</button>
+        <button className="g-btn primary" onClick={()=>hShare(hs,honor.variant)} disabled={busy==="honor"}><Icon n="send" s={15}/> {busy==="honor"?"جارٍ التوليد…":"مشاركة"}</button></>}>
+      {hs&&<><div className="g-tabs" style={{marginBottom:12,display:"inline-flex"}}>{[["honor","تكريم"],["motivate","تحفيز"]].map(([k,ar])=><button key={k} className={"g-tab"+(honor.variant===k?" on":"")} onClick={()=>setHonor({...honor,variant:k})}>{ar}</button>)}</div>
+        <HonorPreview html={honorHTML(hd(hs,honor.variant))}/></>}
+    </Modal>);})()}
   </div>);
+}
+
+// معاينة القالب 1280×720 مصغّراً بعرض الحاوية
+function HonorPreview({html}){
+  const ref=useRef(null);const[k,setK]=useState(0.5);
+  useEffect(()=>{ensureFonts();const el=ref.current;if(!el)return;const f=()=>setK(el.clientWidth/1280);f();const ro=new ResizeObserver(f);ro.observe(el);return()=>ro.disconnect();},[]);
+  return<div ref={ref} className="pf-hp" style={{height:720*k}}><div style={{transform:`scale(${k})`}} dangerouslySetInnerHTML={{__html:html}}/></div>;
 }
 
 function Av({s,big}){return s.photo?<img className={"pf-av"+(big?" big":"")} src={s.photo} alt="" loading="lazy"/>:<span className={"pf-av"+(big?" big":"")}>{(s.name||"?").trim().charAt(0)}</span>;}
@@ -262,6 +294,7 @@ const CSS=`
 .pf-calc{width:100%;font-size:12.5px;border-collapse:collapse}.pf-calc td{padding:5px 2px;border-bottom:1px solid var(--line)}.pf-calc td:last-child{text-align:left;direction:ltr;font-weight:700;font-variant-numeric:tabular-nums}
 .pf-calc tr.t td{color:var(--p-ink);font-size:14px;border-bottom:none}
 .pf-li{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--line)}.pf-li:last-child{border-bottom:none}
+.pf-hp{width:100%;overflow:hidden;border-radius:14px;box-shadow:var(--shadow);position:relative}.pf-hp>div{width:1280px;height:720px;transform-origin:top right;position:absolute;top:0;right:0}
 .pf-next{display:flex;gap:10px;align-items:flex-start;background:var(--p-50);border:1px solid rgba(var(--p-rgb),.3);color:var(--p-ink);border-radius:14px;padding:11px 13px;font-size:12.5px;font-weight:700;line-height:1.8}
 @media(max-width:1100px){.pf-kpis{grid-template-columns:repeat(3,1fr)!important}}
 @media(max-width:720px){.pf-kpis{grid-template-columns:1fr 1fr!important}.pf-gs{grid-template-columns:1fr 1fr}.pf-2{grid-template-columns:1fr}}

@@ -59,4 +59,13 @@ const bn=L.bikerBrief(b,'bn');
 ok('bikerBrief بالبنغالي يحوي الغسلات',bn.includes('205')&&/[ঀ-৿]/.test(bn));
 ok('bikerBrief بالبنغالي يحوي الهدف التالي',bn.includes('আরও 25 টি ওয়াশ')&&bn.includes('50 রিয়াল'));
 ok('bikerBrief عربي + بنغالي',L.bikerBrief(b).includes('أجر الغسلة 3.75')&&L.bikerBrief(b).includes('— دلو ورغوة'));
+
+// بطاقة التكريم: عبارة الإنجاز للحالات الأربع وفرق الشهر السابق
+const hp=(w,r,o)=>L.honorPhrase(S(w,r,0.5),o);
+ok('عبارة: مكافأة الإنتاج',hp(235,4.6,{prevWashes:150}).k==='production'&&hp(235,4.6,{}).bn==='উৎপাদন বোনাস');
+ok('عبارة: شهران متتاليان ≥200 (بلا مكافأة لأن التقييم <4)',hp(210,3.9,{prevWashes:205}).k==='streak');
+ok('عبارة: الأول على الفريق',hp(190,4.5,{prevWashes:120,isTop:true}).k==='top');
+ok('عبارة: تحفيز «باقي N غسلة لمكافأة X»',(x=>x.k==='motivate'&&x.gap===12&&x.bonus===25&&x.ar.includes('باقي 12 غسلة')&&x.bn.includes('12'))(hp(188,4.5,{prevWashes:150})));
+ok('فرق الشهر السابق ▲',(d=>d.diff===22&&d.dir==='up')(L.monthDelta(289,267)));
+ok('فرق الشهر السابق ▼ ولا سابق',L.monthDelta(180,200).dir==='down'&&L.monthDelta(180,200).diff===-20&&L.monthDelta(180,null).diff===null);
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
