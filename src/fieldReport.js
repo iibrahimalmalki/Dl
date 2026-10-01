@@ -181,7 +181,8 @@ function paginate(){
   document.querySelectorAll("[data-toc]").forEach(function(e){var k=e.getAttribute("data-toc");if(!toc[k])return;e.textContent=(k==="2"&&last2>toc[k])?"ص "+toc[k]+"–"+last2:"ص "+toc[k];});
   src.parentNode.removeChild(src);prep.style.display="none";
 }
-function fit(){var w=window.innerWidth-16,sw=MM(210),z=Math.min(1,w/sw);doc.style.zoom=z<1?z:"";}
+var busy=false; /* أثناء التصدير/الطباعة لا يُعاد تطبيق التصغير (حدث resize في iOS كان يخلط النص بالصور) */
+function fit(){if(busy)return;var w=window.innerWidth-16,sw=MM(210),z=Math.min(1,w/sw);doc.style.zoom=z<1?z:"";}
 function ready(){
   var imgs=Array.prototype.slice.call(document.images).map(function(im){return im.complete?Promise.resolve():new Promise(function(r){im.onload=im.onerror=r;});});
   var f=(document.fonts&&document.fonts.ready)?document.fonts.ready:Promise.resolve();
@@ -189,7 +190,7 @@ function ready(){
 }
 function loadScript(u){return new Promise(function(res,rej){var sc=document.createElement("script");sc.src=u;sc.onload=res;sc.onerror=function(){rej(new Error("load "+u));};document.head.appendChild(sc);});}
 function makePdf(){
-  btnPdf.disabled=true;btnPrint.disabled=true;var z=doc.style.zoom;doc.style.zoom="";window.scrollTo(0,0);
+  busy=true;btnPdf.disabled=true;btnPrint.disabled=true;doc.style.zoom="";window.scrollTo(0,0);
   var p=Promise.resolve();
   var V=window.__VENDOR||"";
   if(!window.html2canvas)p=p.then(function(){return loadScript(V+"/html2canvas.min.js").catch(function(){return loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");});});
@@ -198,16 +199,17 @@ function makePdf(){
     var pdf=new window.jspdf.jsPDF({unit:"mm",format:"a4",orientation:"portrait",compress:true});
     var q=Promise.resolve();
     sheets.forEach(function(sh,i){q=q.then(function(){btnPdf.textContent="تجهيز الصفحة "+(i+1)+" من "+sheets.length+"…";
-      return window.html2canvas(sh,{scale:2,backgroundColor:"#ffffff",useCORS:true,logging:false,scrollX:0,scrollY:-window.scrollY}).then(function(cv){
+      doc.style.zoom="";
+      return window.html2canvas(sh,{scale:2,backgroundColor:"#ffffff",useCORS:true,logging:false,scrollX:0,scrollY:-window.scrollY,windowWidth:Math.ceil(MM(210))+40,onclone:function(cd){var d2=cd.getElementById("doc");if(d2)d2.style.zoom="";}}).then(function(cv){
         if(i>0)pdf.addPage();pdf.addImage(cv.toDataURL("image/jpeg",0.86),"JPEG",0,0,210,297,undefined,"FAST");});});});
     return q.then(function(){pdf.setProperties({title:window.__RID||"field-round-report"});pdf.save((window.__RID||"field-round-report")+".pdf");});
   }).catch(function(e){alert("تعذّر إنشاء ملف PDF (تحقق من الاتصال) — استخدم زر الطباعة بدلاً منه.\\n"+(e&&e.message||e));})
-  .then(function(){doc.style.zoom=z;btnPdf.disabled=false;btnPrint.disabled=false;btnPdf.textContent="تنزيل PDF";});
+  .then(function(){busy=false;fit();btnPdf.disabled=false;btnPrint.disabled=false;btnPdf.textContent="تنزيل PDF";});
 }
 ready().then(function(){paginate();fit();btnPdf.disabled=false;btnPrint.disabled=false;});
 window.addEventListener("resize",fit);
 btnPdf.addEventListener("click",makePdf);
-btnPrint.addEventListener("click",function(){var z=doc.style.zoom;doc.style.zoom="";setTimeout(function(){window.print();doc.style.zoom=z;},50);});
+btnPrint.addEventListener("click",function(){busy=true;doc.style.zoom="";setTimeout(function(){window.print();setTimeout(function(){busy=false;fit();},300);},50);});
 })();`;
 
 export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
