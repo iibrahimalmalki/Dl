@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import TOOLREFS from "./toolRefs";
 import { ThemeToggle, Orbs, useToast } from "./ui";
+import { daysLeft, docStatus, docBn, dayText, dayTextBn } from "./renewalsLib";
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
     هوية دلو ورغوة (برتقالي) · ثنائية اللغة (عربي + বাংলা)
@@ -89,6 +90,14 @@ const CSS = `
 .bp-acap input{display:none}
 .bp-athumb{width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--line-2)}
 .bp-done{color:var(--ok-ink)}
+.bp-doc{border:1px solid var(--line);border-radius:14px;padding:12px 13px;margin-bottom:9px;background:var(--glass-2)}
+.bp-doc-h{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px}
+.bp-doc-h .t{font-weight:900;font-size:15px;color:var(--ink)}.bp-doc-h .bn{font-size:12px;color:var(--mut);font-weight:600}
+.bp-dbadge{flex-direction:column;gap:1px;border-radius:12px;padding:5px 11px;flex:none;line-height:1.3}
+.bp-dbadge b{font-weight:800}.bp-doc-h .bp-dbadge .bn{color:inherit;font-size:11px;font-weight:600}
+.bp-doc .m{font-size:12.5px;color:var(--mut)}.bp-doc .m b{color:var(--ink);direction:ltr;unicode-bidi:isolate}
+.bp-btn.bp-call{margin-top:10px;min-height:46px;padding:11px;font-size:14px}
+.bp-ntf.un{border-color:rgba(var(--p-rgb),.45);background:var(--p-50)}
 `;
 
 /* قائمة التحقق الأساسية للدراجة (أفضل الممارسات) */
@@ -291,6 +300,7 @@ function Portal() {
         <button type="button" role="tab" aria-selected={tab === "profile"} className={"bp-tab" + (tab === "profile" ? " on" : "")} onClick={() => setTab("profile")}>ملفي<span className="bn">প্রোফাইল</span></button>
         <button type="button" role="tab" aria-selected={tab === "handover"} className={"bp-tab" + (tab === "handover" ? " on" : "")} onClick={() => setTab("handover")}>الدراجة<span className="bn">বাইক হস্তান্তর</span></button>
         <button type="button" role="tab" aria-selected={tab === "fuel"} className={"bp-tab" + (tab === "fuel" ? " on" : "")} onClick={() => setTab("fuel")}>الوقود<span className="bn">জ্বালানি</span></button>
+        <button type="button" role="tab" aria-selected={tab === "docs"} className={"bp-tab" + (tab === "docs" ? " on" : "")} onClick={() => setTab("docs")}>وثائقي<span className="bn">আমার কাগজপত্র</span></button>
         <button type="button" role="tab" aria-selected={tab === "assets"} className={"bp-tab" + (tab === "assets" ? " on" : "")} onClick={() => setTab("assets")}>العهدة<span className="bn">সরঞ্জাম</span></button>
       </div>
 
@@ -298,6 +308,70 @@ function Portal() {
       {tab === "handover" && <Handover me={me} myBike={myBike} />}
       {tab === "fuel" && <Fuel me={me} myBike={myBike} />}
       {tab === "assets" && <Assets me={me} />}
+      {tab === "docs" && <Docs me={me} />}
+    </div>
+  );
+}
+
+/* ================= وثائقي ================= */
+const ADMIN_WA = "966566884419";
+function Docs({ me }) {
+  const [docs, setDocs] = useState(null);
+  const [notes, setNotes] = useState([]);
+  const [reads, setReads] = useState({});
+  useEffect(() => { (async () => {
+    // RLS (renewal_docs_self_sel) يعيد وثائق هذا البايكر فقط
+    const { data } = await supabase.from("renewal_docs")
+      .select("id,doc_type,subject,end_date,ref_no,active").eq("active", true).order("end_date", { ascending: true });
+    setDocs((data || []).map(d => ({ ...d, _d: daysLeft(d.end_date) })));
+    // آخر 5 إشعارات وثائق خاصة بالبايكر
+    const { data: ns } = await supabase.from("notifications").select("id,title,body,severity,created_at,entity_id")
+      .eq("category", "renewals").eq("audience", "user").eq("user_id", me.uid)
+      .order("created_at", { ascending: false }).limit(5);
+    const list = ns || [];
+    setNotes(list);
+    if (list.length) {
+      // نفس آلية Notifications.jsx: notification_reads(notification_id,user_id,read_at)
+      const { data: rd } = await supabase.from("notification_reads").select("notification_id,read_at")
+        .eq("user_id", me.uid).in("notification_id", list.map(n => n.id));
+      const m = {}; (rd || []).forEach(x => { if (x.read_at) m[x.notification_id] = x.read_at; });
+      setReads(m);
+      const un = list.filter(n => !m[n.id]);
+      if (un.length) {
+        const ts = new Date().toISOString();
+        try { await supabase.from("notification_reads").upsert(un.map(n => ({ notification_id: n.id, user_id: me.uid, read_at: ts })), { onConflict: "notification_id,user_id" }); } catch (e) {}
+      }
+    }
+  })(); }, [me.uid]);
+  const callAdmin = d => {
+    const txt = `السلام عليكم، أنا ${me.name || ""} (رقم ${me.biker_employee_id}). وثيقة ${d.doc_type} تنتهي ${d.end_date || ""} — أحتاج المساعدة في التجديد.\nআমার ${docBn(d.doc_type)} ${d.end_date || ""} তারিখে শেষ হবে — নবায়নে সাহায্য প্রয়োজন।`;
+    window.open("https://wa.me/" + ADMIN_WA + "?text=" + encodeURIComponent(txt), "_blank");
+  };
+  const fmt = d => d ? new Date(d + "T00:00:00").toLocaleDateString("en-GB") : "—";
+  return (
+    <div className="bp-docs">
+      {notes.length > 0 && <div className="bp-card g-card"><div className="bp-sec">
+        <label className="bp-lbl" style={{ marginTop: 0 }}>تنبيهات وثائقي <span className="bn">/ কাগজপত্রের নোটিশ</span></label>
+        {notes.map(n => <div className={"bp-item bp-ntf" + (reads[n.id] ? "" : " un")} key={n.id}>
+          <div className="t"><span className={"g-badge " + (n.severity === "crit" ? "bad" : n.severity === "warn" ? "warn" : "info")}><i />{n.severity === "crit" ? "عاجل · জরুরি" : "تنبيه · সতর্কতা"}</span>{n.title}</div>
+          {n.body && <div className="m" style={{ whiteSpace: "pre-line" }}>{n.body}</div>}
+          <div className="m">{new Date(n.created_at).toLocaleString("ar")}</div>
+        </div>)}
+      </div></div>}
+      <div className="bp-card g-card"><div className="bp-sec">
+        <label className="bp-lbl" style={{ marginTop: 0 }}>وثائقي <span className="bn">/ আমার কাগজপত্র</span></label>
+        {docs === null ? <div style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div>
+        : docs.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا وثائق مسجّلة · <span className="bn">কোনো কাগজপত্র নেই</span></b></div>
+        : docs.map(d => { const st = docStatus(d._d); return (
+          <div className="bp-doc" key={d.id}>
+            <div className="bp-doc-h">
+              <div><div className="t">{d.doc_type}</div><div className="bn">{docBn(d.doc_type)}</div></div>
+              <span className={"g-badge bp-dbadge " + st.tone}><b>{dayText(d._d)}</b><span className="bn">{dayTextBn(d._d)}</span></span>
+            </div>
+            <div className="m">تاريخ الانتهاء · <span className="bn">মেয়াদ শেষ</span>: <b>{fmt(d.end_date)}</b>{d.ref_no ? " · " + d.ref_no : ""}</div>
+            {d._d != null && d._d <= 14 && <button className="bp-btn bp-call" onClick={() => callAdmin(d)}>📞 اتصال بالإدارة · <span className="bn">অফিসে যোগাযোগ</span></button>}
+          </div>); })}
+      </div></div>
     </div>
   );
 }
