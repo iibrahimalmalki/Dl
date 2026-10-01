@@ -91,12 +91,12 @@ async function buildImgMap(photos,extraUrls=[],maxW=1200,q=0.8){
 // ── عناصر رسومية SVG | SVG widgets ──
 function gaugeSVG(pct,color,size=150){
   // نصف دائرة من 180° إلى 0° | semicircle gauge
-  const r=size/2-12,cx=size/2,cy=size/2+4;
+  const r=size/2-10,cx=size/2,cy=size/2+2;
   const arc=(a0,a1)=>{const p=a=>[cx+r*Math.cos(Math.PI*(1-a)),cy-r*Math.sin(Math.PI*(1-a))];const[x0,y0]=p(a0),[x1,y1]=p(a1);return`M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 ${a1-a0>0.5?1:0} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;};
   const v=pct==null?0:Math.max(0.005,Math.min(1,pct/100));
   return`<svg width="${size}" height="${size/2+14}" viewBox="0 0 ${size} ${size/2+14}" aria-hidden="true">
-    <path d="${arc(0,1)}" fill="none" stroke="#e6e9ed" stroke-width="14" stroke-linecap="round"/>
-    <path d="${arc(0,v)}" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"/>
+    <path d="${arc(0,1)}" fill="none" stroke="#e6e9ed" stroke-width="11" stroke-linecap="round"/>
+    <path d="${arc(0,v)}" fill="none" stroke="${color}" stroke-width="11" stroke-linecap="round"/>
   </svg>`;
 }
 function sparkSVG(points,w=230,h=60){
@@ -175,6 +175,8 @@ function paginate(){
   var cl=src.querySelector(".pg.closing");if(cl)flow(cl,true);
   var tpl=document.getElementById("pf-tpl");
   sheets.forEach(function(s,i){var f=tpl.content.firstElementChild.cloneNode(true);f.querySelector(".pno").textContent="صفحة "+(i+1)+" من "+sheets.length;s.appendChild(f);});
+  var toc={},last2=0;sheets.forEach(function(sh,i){sh.querySelectorAll("h2 .n").forEach(function(n){var k=n.textContent.trim();if(!toc[k])toc[k]=i+1;});if(sh.querySelector(".item"))last2=i+1;});
+  document.querySelectorAll("[data-toc]").forEach(function(e){var k=e.getAttribute("data-toc");if(!toc[k])return;e.textContent=(k==="2"&&last2>toc[k])?"ص "+toc[k]+"–"+last2:"ص "+toc[k];});
   src.parentNode.removeChild(src);prep.style.display="none";
 }
 function fit(){var w=window.innerWidth-16,sw=MM(210),z=Math.min(1,w/sw);doc.style.zoom=z<1?z:"";}
@@ -233,6 +235,9 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
 
   // ── الغلاف / صفحة القرار | Cover + executive ──
   const prioLines=(an.priorities||[]).slice(0,3).map(p=>`<tr><td class="pn">#${p.n}</td><td>${esc(p.ar)}</td><td class="pd">${esc(p.deadline||deadline)}</td></tr>`).join("");
+  const passN=bikerItems.filter(i=>results[i.n]==="pass").length;
+  const photoN=Object.values(photos||{}).flat().filter(Boolean).length;
+  const mgmtGap=mgmtItems.filter(i=>results[i.n]==="fail"||results[i.n]==="half").length;
   const cover=`
   <section class="cover">
     <div class="band">
@@ -241,39 +246,57 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
       <div class="sw"><b>سويتر</b><span>Sweater · Partner 47</span></div>
     </div>
     <div class="cv">
-      <div class="cv-biker">
+      <div class="cv-id">
         <div class="avatar">${bikerPhoto?`<img src="${esc(bikerPhoto)}" alt=""/>`:`<span>${esc(initials(round.biker_name))}</span>`}</div>
-        <div class="who"><div class="nm">${esc(round.biker_name||"—")}</div><div class="sid">رقم سويتر #${esc(round.sweater_id||"—")}${extras.team?` · ${esc(extras.team)}`:""}</div></div>
-        <table class="meta">
-          <tr><td>تاريخ الجولة</td><td>${esc(fmtDateAr(round.round_date))}${round.round_time?` · <span style="white-space:nowrap">${esc(fmtTime12(round.round_time))}</span>`:""}</td></tr>
-          <tr><td>منفّذ الجولة</td><td>${esc(inspector||"—")}</td></tr>
-          <tr><td>المشغّل</td><td>${esc(opName||"دلو ورغوة")}</td></tr>
-          <tr><td>الموقع</td><td>${esc(locName||"موقع الخدمة")}${coords?` <small dir="ltr">${esc(coords)}</small>`:""}</td></tr>
-        </table>
+        <div class="who"><div class="nm">${esc(round.biker_name||"—")}</div><div class="sid">رقم سويتر <b dir="ltr">#${esc(round.sweater_id||"—")}</b>${extras.team?` · ${esc(extras.team)}`:""}</div><div class="rid-l">رقم التقرير <b dir="ltr">${rid}</b></div></div>
+        <div class="meta">
+          <div><span>تاريخ الجولة</span><b>${esc(fmtDateAr(round.round_date))}${round.round_time?` · <i>${esc(fmtTime12(round.round_time))}</i>`:""}</b></div>
+          <div><span>منفّذ الجولة</span><b>${esc(inspector||"—")}</b></div>
+          <div><span>المشغّل</span><b>${esc(opName||"دلو ورغوة")}</b></div>
+          <div><span>الموقع</span><b>${esc(locName||"موقع الخدمة")}${coords?` <small dir="ltr">${esc(coords)}</small>`:""}</b></div>
+        </div>
       </div>
-      <div class="cv-scores">
-        <div class="g-main">
-          ${gaugeSVG(pct,eff.color,170)}
-          <div class="g-val" style="color:${eff.color}">${pct!=null?pct+"%":"—"}</div>
+      <div class="cv-stats">
+        <div class="st g-main">
+          <div class="g-wrap">${gaugeSVG(pct,eff.color,150)}<div class="g-val" style="color:${eff.color}">${pct!=null?pct+"%":"—"}</div></div>
           <div class="g-lbl">التزام البايكر</div>
           <div class="g-sub">${comp.denom?`${comp.points} من ${comp.denom} بنود مقيَّمة`:"لا بنود مقيَّمة"}${comp.notAssessed.length?` · ${comp.notAssessed.length} غير مقيَّم`:""}</div>
         </div>
-        <div class="g-side">
+        <div class="st g-side">
           <div class="g-side-v" style="color:${supCol}">${sup.pct!=null?sup.pct+"%":"—"}</div>
           <div class="g-side-l">جاهزية الإمداد</div>
           <div class="g-side-s">${sup.denom?`${sup.points} من ${sup.denom} بنود إدارة`:"—"}</div>
           ${meter(sup.pct,supCol)}
         </div>
+        <div class="st verdict" style="background:${eff.bg};border-color:${eff.color}">
+          <div class="v-l">الحكم</div>
+          <div class="v-v" style="color:${eff.color}">${esc(eff.ar)}</div>
+          <div class="v-f">${esc(eff.fin)}</div>
+        </div>
       </div>
-      <div class="verdict" style="background:${eff.bg};color:${eff.color};border-color:${eff.color}"><b>الحكم:</b> ${esc(eff.ar)}<span class="fin">${esc(eff.fin)}</span></div>
+      <div class="cv-kpis">
+        <div><b style="color:#087443">${passN}</b><span>بنود مطابقة</span></div>
+        <div><b style="color:${weak.length?"#b42318":"#087443"}">${weak.length}</b><span>بنود على البايكر</span></div>
+        <div><b style="color:${mgmtGap?"#b54708":"#087443"}">${mgmtGap}</b><span>نواقص إمداد/إدارة</span></div>
+        <div><b>${photoN}</b><span>صورة توثيق</span></div>
+      </div>
       <div class="cv-grid">
         <div class="cv-box"><div class="bx-h">الاتجاه · آخر ${series.length} جولات</div>${series.length>=2?sparkSVG(series):`<div class="muted">لا توجد جولة سابقة للمقارنة.</div>`}${an.trend?.text?`<div class="tr-txt">${esc(an.trend.text)}</div>`:""}</div>
-        <div class="cv-box"><div class="bx-h">الأولويات التصحيحية</div>${prioLines?`<table class="prio">${prioLines}</table>`:`<div class="muted ok">لا مخالفات على البايكر في هذه الجولة.</div>`}</div>
+        <div class="cv-box"><div class="bx-h">الأولويات التصحيحية</div>${prioLines?`<table class="prio">${prioLines}</table>`:`<div class="muted ok">لا مخالفات على البايكر في هذه الجولة.</div>`}${an.rootCause&&prioLines?`<div class="tr-txt"><b>السبب الجذري:</b> ${esc(an.rootCause)}</div>`:""}</div>
+      </div>
+      <div class="cv-toc">
+        <div class="bx-h">محتويات التقرير</div>
+        <ol>
+          <li><span>الملخص التحليلي · المحاور وخطة التصحيح</span><i data-toc="1">ص 2</i></li>
+          <li><span>البنود بالتفصيل والأدلة المصورة</span><i data-toc="2">ص 3</i></li>
+          <li><span>طلب دعم سويتر (الإمداد)</span><i data-toc="3"></i></li>
+          <li><span>ملخص للبايكر · বাইকারের জন্য সারসংক্ষেপ</span><i data-toc="4"></i></li>
+          <li><span>التوقيعات والاعتماد</span><i data-toc="5"></i></li>
+        </ol>
       </div>
       <div class="cv-foot">
-        <div><b>رقم التقرير</b> ${rid}</div>
-        <div><b>الإصدار</b> ${esc(issued.ar)}</div>
-        <div class="qr">${qr}</div>
+        <div class="cf-t"><div><b>الإصدار</b> ${esc(issued.ar)}</div><div><b>الاعتماد</b> ${esc(approver)}</div><div class="muted">تُعتمد الصور المرفقة دليلاً أساسياً · يُراجع أي اعتراض خلال 48 ساعة من الإصدار</div></div>
+        <div class="qr">${qr}<small>سجل الجولة في المنصة</small></div>
       </div>
     </div>
   </section>`;
@@ -374,37 +397,50 @@ small{font-size:8.5pt;color:var(--muted)}
 .tag.r{color:var(--red);background:var(--red-soft)}.tag.a{color:var(--amber);background:var(--amber-soft)}
 .meter{height:6pt;background:var(--surface);border-radius:4pt;overflow:hidden;margin-top:3pt}.meter i{display:block;height:100%;border-radius:4pt}
 /* ── الغلاف ── */
-.cover{position:relative}
-.band{background:linear-gradient(135deg,var(--navy),var(--navy-2));color:#fff;height:34mm;padding:0 13mm;display:flex;align-items:center;justify-content:space-between;gap:6mm}
+.cover{display:flex;flex-direction:column;height:100%}
+.band{background:linear-gradient(135deg,var(--navy),var(--navy-2));color:#fff;height:30mm;padding:0 13mm;display:flex;align-items:center;justify-content:space-between;gap:6mm;flex:none}
 .brand{display:flex;align-items:center;gap:4mm;flex:1}
-.brand .logo{width:14mm;height:14mm;border-radius:3.5mm;background:#fff;display:flex;align-items:center;justify-content:center;flex:none}
-.brand .logo img{width:10mm;height:10mm;object-fit:contain}
-.brand b{display:block;font-size:12.5pt;font-weight:700;line-height:1.3;white-space:nowrap}.brand span{font-size:8.5pt;color:#cbd5e1;white-space:nowrap}
+.brand .logo{width:13mm;height:13mm;border-radius:3.2mm;background:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.brand .logo img{width:9.5mm;height:9.5mm;object-fit:contain}
+.brand b{display:block;font-size:12pt;font-weight:700;line-height:1.3;white-space:nowrap}.brand span{font-size:8.5pt;color:#cbd5e1;white-space:nowrap}
 .ttl{text-align:center;flex:none}.ttl b{display:block;font-size:15pt;font-weight:700;white-space:nowrap}.ttl span{font-size:8.5pt;color:#cbd5e1;direction:ltr;display:block;white-space:nowrap}
 .sw{flex:none;text-align:center;border:1px solid rgba(255,255,255,.35);border-radius:3mm;padding:2mm 4mm;min-width:26mm}
 .sw b{display:block;font-size:12pt}.sw span{font-size:8.5pt;color:#cbd5e1;direction:ltr;display:block}
-.cv{padding:9mm 13mm 8mm}
-.cv-biker{display:grid;grid-template-columns:34mm 1fr 1.2fr;gap:6mm;align-items:center;margin-bottom:7mm}
-.avatar{width:34mm;height:34mm;border-radius:50%;background:var(--surface);border:1.2mm solid var(--orange);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:20pt;font-weight:700;color:var(--orange-deep)}
+.cv{flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:4mm;padding:7mm 13mm 14mm}
+.cv-id{display:grid;grid-template-columns:30mm 1fr 1.45fr;gap:6mm;align-items:center;border:1px solid var(--line);border-radius:4mm;padding:5mm 6mm;background:var(--surface-2)}
+.avatar{width:30mm;height:30mm;border-radius:50%;background:#fff;border:1.2mm solid var(--orange);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:19pt;font-weight:700;color:var(--orange-deep)}
 .avatar img{width:100%;height:100%;object-fit:cover}
-.who .nm{font-size:18pt;font-weight:700;line-height:1.3}.who .sid{font-size:10.5pt;color:var(--muted)}
-.meta{border-collapse:collapse;width:100%}.meta td{padding:1.5pt 4pt;font-size:10pt;vertical-align:top}.meta td:first-child{color:var(--muted);white-space:nowrap;width:26mm}.meta td small{direction:ltr;unicode-bidi:embed;color:var(--muted)}
-.cv-scores{display:grid;grid-template-columns:1.3fr 1fr;gap:6mm;align-items:stretch;margin-bottom:5mm}
-.g-main{text-align:center;background:var(--surface-2);border:1px solid var(--line);border-radius:4mm;padding:4mm 4mm 3mm;position:relative}
-.g-val{font-size:30pt;font-weight:700;line-height:1;margin-top:-13mm}
-.g-lbl{font-size:11pt;font-weight:700;margin-top:2pt}.g-sub{font-size:9.5pt;color:var(--muted)}
-.g-side{background:var(--surface-2);border:1px solid var(--line);border-radius:4mm;padding:5mm 5mm;display:flex;flex-direction:column;justify-content:center}
-.g-side-v{font-size:22pt;font-weight:700;line-height:1.1}.g-side-l{font-size:11pt;font-weight:700}.g-side-s{font-size:9.5pt;color:var(--muted);margin-bottom:2pt}
-.verdict{border:1px solid;border-right-width:5pt;border-radius:3mm;padding:3mm 4mm;font-size:12pt;font-weight:700;margin-bottom:5mm}
-.verdict .fin{display:block;font-size:9.5pt;font-weight:400;margin-top:1pt;color:var(--ink)}
-.cv-grid{display:grid;grid-template-columns:1fr 1fr;gap:5mm;margin-bottom:6mm}
+.who .nm{font-size:18pt;font-weight:700;line-height:1.25}.who .sid{font-size:10.5pt;color:var(--muted);margin-top:1pt}.who .sid b{color:var(--ink);font-weight:700}
+.who .rid-l{font-size:9.5pt;color:var(--muted);margin-top:4pt}.who .rid-l b{color:var(--ink);font-weight:700}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:3mm 5mm}
+.meta div{min-width:0}.meta span{display:block;font-size:8.5pt;color:var(--muted)}.meta b{display:block;font-size:10pt;font-weight:700;line-height:1.5}.meta b i{font-style:normal;white-space:nowrap}.meta b small{display:block;direction:ltr;text-align:right;color:var(--muted);font-weight:400;font-size:8pt}
+.cv-stats{display:grid;grid-template-columns:1.25fr 1fr 1.15fr;gap:5mm;align-items:stretch}
+.st{border:1px solid var(--line);border-radius:4mm;background:var(--surface-2);padding:4mm 4mm 3mm}
+.g-main{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.g-wrap{position:relative;width:150px;margin:0 auto}.g-wrap svg{display:block}
+.g-val{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:26pt;font-weight:700;line-height:1}
+.g-lbl{font-size:11pt;font-weight:700;margin-top:3pt}.g-sub{font-size:9pt;color:var(--muted)}
+.g-side{display:flex;flex-direction:column;justify-content:center}
+.g-side-v{font-size:26pt;font-weight:700;line-height:1.1}.g-side-l{font-size:11pt;font-weight:700;margin-top:2pt}.g-side-s{font-size:9pt;color:var(--muted);margin-bottom:3pt}
+.verdict{border-width:1px;border-right-width:5pt;display:flex;flex-direction:column;justify-content:center}
+.verdict .v-l{font-size:9pt;color:var(--muted);font-weight:700}.verdict .v-v{font-size:13.5pt;font-weight:700;line-height:1.35;margin:1pt 0 2pt}.verdict .v-f{font-size:9pt;color:var(--ink);line-height:1.55}
+.cv-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm}
+.cv-kpis div{border:1px solid var(--line);border-radius:3mm;padding:3mm 2mm;text-align:center;background:#fff}
+.cv-kpis b{display:block;font-size:19pt;font-weight:700;line-height:1.1}.cv-kpis span{display:block;font-size:9pt;color:var(--muted);margin-top:1pt}
+.cv-grid{display:grid;grid-template-columns:1fr 1fr;gap:5mm;align-items:stretch}
 .cv-box,.box{border:1px solid var(--line);border-radius:3mm;padding:3mm 4mm;background:#fff}
 .bx-h{font-size:10pt;font-weight:700;color:var(--muted);margin-bottom:2pt}
-.tr-txt{font-size:9.5pt;margin-top:2pt}
+.tr-txt{font-size:9.5pt;margin-top:3pt;line-height:1.6}.tr-txt b{color:var(--ink)}
 .prio{border-collapse:collapse;width:100%}.prio td{padding:2pt 3pt;font-size:10pt;border-bottom:1px dashed var(--line);vertical-align:top}.prio tr:last-child td{border-bottom:none}
 .pn{color:var(--blue);font-weight:700;white-space:nowrap;width:9mm}.pd{white-space:nowrap;color:var(--muted);direction:ltr;text-align:right}
-.cv-foot{display:flex;align-items:center;gap:8mm;border-top:1px solid var(--line);padding-top:4mm;font-size:9.5pt;color:var(--muted)}
-.cv-foot b{color:var(--ink);margin-left:3pt}.cv-foot .qr{margin-right:auto;width:20mm;height:20mm}.cv-foot .qr svg{width:20mm;height:20mm;display:block}
+.cv-toc{border:1px solid var(--line);border-radius:3mm;padding:3mm 4mm;background:#fff}
+.cv-toc ol{margin:0;padding:0;list-style:none;counter-reset:toc;display:grid;grid-template-columns:1fr 1fr;gap:1pt 8mm}
+.cv-toc li{counter-increment:toc;display:flex;align-items:baseline;gap:5pt;font-size:9.5pt;padding:2pt 0;border-bottom:1px dotted var(--line)}
+.cv-toc li::before{content:counter(toc);background:var(--navy);color:#fff;font-size:8pt;width:14pt;height:14pt;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none;position:relative;top:2pt}
+.cv-toc li span{flex:1}.cv-toc li i{font-style:normal;color:var(--muted);font-size:9pt;white-space:nowrap}
+.cv-foot{display:flex;align-items:center;gap:8mm;border-top:1px solid var(--line);padding-top:3.5mm;font-size:9.5pt;color:var(--muted)}
+.cf-t{flex:1;display:flex;flex-direction:column;gap:2pt}.cf-t b{color:var(--ink);margin-left:3pt}.cf-t .muted{font-size:8.5pt}
+.cv-foot .qr{flex:none;text-align:center}.cv-foot .qr svg{width:19mm;height:19mm;display:block;margin:0 auto}.cv-foot .qr small{display:block;font-size:7.5pt;color:var(--muted);margin-top:1pt;white-space:nowrap}
 /* ── الصفحات ── */
 .pg{padding:0}
 /* ── الصفحات الفعلية A4 (تُبنى بالـ JS) ── */
