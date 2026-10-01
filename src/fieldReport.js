@@ -159,6 +159,7 @@ function splitTable(s,b){ /* يقسم الجدول على صفحتين مع تك
 function flowBlocks(blocks,s){
   var i=0;
   while(i<blocks.length){var b=blocks[i];s.appendChild(b);
+    if(overflows(s,b)&&b.classList.contains("opt")){b.parentNode.removeChild(b);blocks.splice(i,1);continue;}
     if(overflows(s,b)){
       var tail=s.children.length>1?(b.classList.contains("item")?trySplit(s,b):splitTable(s,b)):null;
       if(tail){blocks.splice(i+1,0,tail);}
@@ -183,7 +184,7 @@ function balanceGal(){ /* يوزّع الصور بالتساوي: لا صورة 
 }
 function labelCells(){ /* في الجوال تتحول الجداول إلى بطاقات: كل خلية تحمل اسم عمودها */
   slice(src.querySelectorAll("table.tbl.plan,table.tbl.supt")).forEach(function(t){t.classList.add("cards");var hs=t.tHead?slice(t.tHead.rows[0].cells).map(function(c){return c.textContent.trim();}):[];
-    slice(t.tBodies[0]?t.tBodies[0].rows:[]).forEach(function(r){slice(r.cells).forEach(function(c,i){if(hs[i]&&!c.classList.contains("pn"))c.setAttribute("data-l",hs[i]);});});});
+    slice(t.tBodies[0]?t.tBodies[0].rows:[]).forEach(function(r){slice(r.cells).forEach(function(c,i){if(i===1)c.classList.add("ct");else if(hs[i]&&!c.classList.contains("pn"))c.setAttribute("data-l",hs[i]);});});});
 }
 function paginate(){
   var cover=src.querySelector(".cover");
@@ -200,14 +201,14 @@ function paginate(){
 }
 function build(m){ /* يعيد ترتيب الصفحات من المصدر الأصلي بالمقاس المطلوب */
   if(m===mode)return Promise.resolve();
-  mode=m;var S=SIZES[m];W=S.w;H=MM(S.h);PB=MM(S.pb);
+  mode=m;building=true;var S=SIZES[m];W=S.w;H=MM(S.h);PB=MM(S.pb);
   document.documentElement.classList.toggle("m",m==="m");
-  doc.innerHTML="";sheets=[];src.innerHTML=SRC_HTML;src.style.display="";
+  doc.style.zoom="";doc.innerHTML="";sheets=[];src.innerHTML=SRC_HTML;src.style.display=""; /* القياس دائماً بلا تصغير */
   if(m==="m")labelCells();
-  return ready().then(function(){paginate();src.style.display="none";prep.style.display="none";fit();});
+  return ready().then(function(){doc.style.zoom="";paginate();src.style.display="none";prep.style.display="none";building=false;fit();});
 }
-var busy=false; /* أثناء التصدير/الطباعة لا يُعاد تطبيق التصغير (حدث resize في iOS كان يخلط النص بالصور) */
-function fit(){if(busy||!W)return;var w=window.innerWidth-16,sw=MM(W),z=Math.min(1,w/sw);doc.style.zoom=z<1?z:"";}
+var building=false,busy=false; /* أثناء التصدير/الطباعة لا يُعاد تطبيق التصغير (حدث resize في iOS كان يخلط النص بالصور) */
+function fit(){if(busy||building||!W)return;var w=window.innerWidth-16,sw=MM(W),z=Math.min(1,w/sw);doc.style.zoom=z<1?z:"";}
 function ready(){
   var imgs=slice(document.images).map(function(im){return im.complete?Promise.resolve():new Promise(function(r){im.onload=im.onerror=r;});});
   var f=(document.fonts&&document.fonts.ready)?document.fonts.ready:Promise.resolve();
@@ -221,7 +222,7 @@ function makePdf(m,btn){
   var V=window.__VENDOR||"";
   if(!window.html2canvas)p=p.then(function(){return loadScript(V+"/html2canvas.min.js").catch(function(){return loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");});});
   if(!window.jspdf)p=p.then(function(){return loadScript(V+"/jspdf.umd.min.js").catch(function(){return loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js");});});
-  p.then(function(){busy=false;return build(m);}).then(function(){
+  p.then(function(){return build(m);}).then(function(){
     busy=true;doc.style.zoom="";window.scrollTo(0,0);
     var S=SIZES[m];
     var pdf=new window.jspdf.jsPDF({unit:"mm",format:[S.w,S.h],orientation:"portrait",compress:true});
@@ -254,6 +255,8 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
   const now=new Date();const issued=fmtBoth(now);
   const weak=bikerItems.filter(i=>results[i.n]==="fail"||results[i.n]==="half");
   const deadline=(an.priorities&&an.priorities[0]&&an.priorities[0].deadline)||"";
+  const dS=iso=>{const d=new Date(String(iso||"")+"T00:00:00");return isNaN(d)?(iso||"—"):`${DAY_AR[d.getDay()]} ${d.getDate()} ${MON_AR[d.getMonth()]}`;};
+  const dl=deadline?dS(deadline):"—";
   const hist=(extras.history||[]).filter(h=>h.round_date&&h.compliance_pct!=null);
   const series=[...hist.filter(h=>h.round_date!==round.round_date).sort((a,b)=>a.round_date<b.round_date?-1:1).slice(-2).map(h=>({label:shortDate(h.round_date),pct:Number(h.compliance_pct)})),{label:shortDate(round.round_date),pct:pct}];
   const prevRound=hist.filter(h=>h.round_date&&h.round_date<round.round_date).sort((a,b)=>a.round_date<b.round_date?1:-1)[0]||null;
@@ -293,6 +296,8 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
   const headline=(!weak.length&&!mgmtGap)
     ?`${name} اجتاز الجولة دون أي ملاحظة: ${pct!=null?pct+"%":"—"}.`
     :`${name} حقق ${pct!=null?pct+"%":"—"} — النتيجة: ${effShort}.`;
+  const hlTitle={ok:(weak.length||mgmtGap)?"مطابق مع ملاحظات":"مطابق بالكامل",warn:"تنبيه رسمي + خطة تحسين",deduct:"خصم من محور الجودة",none:"جولة غير مكتملة"}[eff.key]||eff.ar;
+  const hlCol={ok:"#4ade80",warn:"#fbbf24",deduct:"#f87171",none:"#cbd5e1"}[eff.key]||"#fff";
   const subline=[
     weak.length?`على البايكر ${cnt(weak.length,BUND)}${rootShort?`، سببها ${rootShort}`:""}`:"لا ملاحظات على البايكر",
     mgmtGap?`وعلى الإدارة/سويتر ${cnt(mgmtGap,NAQS)} إمداد لا تُحتسب عليه`:"ولا نواقص إمداد",
@@ -300,7 +305,7 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
   const read=[
     ["ماذا وجدنا",`قُيِّم ${assessedN} من ${ITEMS.length} بنداً وطابق ${passN} من ${bikerItems.length} بنود البايكر${weakAx?`. أضعف محور ${AXES[weakAx].ar} (${byAxis[weakAx].pct}%)`:""}${fullAx.length?`، ومكتمل: ${fullAx.join("، ")}`:""}. التوثيق: ${photoN} صورة.`],
     ["لماذا",(weak.length?(rootShort?`${rootShort}.`:"أسباب متفرقة — التفاصيل في الخطة التنفيذية."):"لا مخالفات على البايكر.")+(mgmtGap?` نواقص الإمداد (${supplyParts.slice(0,4).join("، ")}${supplyParts.length>4?"…":""}) مسؤولية الإدارة/سويتر.`:"")],
-    ["ماذا بعد",[weak.length?`${an.recommendation||"تصحيح البنود وتوثيقها بالصور"} — جولة متابعة قبل ${deadline||"الموعد"}`:"استمرار الجولات الدورية",
+    ["ماذا بعد",[weak.length?`${an.recommendation||"تصحيح البنود وتوثيقها بالصور"} — جولة متابعة قبل ${dl}`:"استمرار الجولات الدورية",
       mgmtGap?(sr?`طلب الإمداد ${sr.ref} (${srStatus})`:"رفع طلب دعم إمداد لسويتر"):""].filter(Boolean).join("، و")+"."],
     ["المقارنة",firstRound?"أول جولة موثقة لهذا البايكر — تُعتمد خط أساس للجولات القادمة."
       :`${delta>0?"تحسّن":delta<0?"تراجع":"ثبات"}${delta?` ${Math.abs(delta)} نقطة`:""} عن الجولة السابقة (${prevPct}%).${recurringNs.length?` تكرار في ${recurringNs.map(n=>"#"+n).join("، ")}.`:""}`],
@@ -328,10 +333,10 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
         <div class="idm"><span>منفّذ الجولة</span><b>${esc(inspector||"—")}</b><small>${esc(locName||opName||"موقع الخدمة")}</small></div>
         <div class="idm"><span>رقم التقرير</span><b dir="ltr">${rid}</b><small>${esc(issued.ar)}</small></div>
       </div>
-      <div class="hl" style="border-color:${eff.color}">
+      <div class="hl">
         <div class="hl-k">الملخص التنفيذي · للقيادة العليا</div>
-        <div class="hl-t">${esc(headline)}</div>
-        <div class="hl-s">${esc(subline)}</div>
+        <div class="hl-r"><span class="hl-t">${esc(hlTitle)}</span><span class="hl-p" style="color:${hlCol}">${pct!=null?pct+"%":"—"}</span></div>
+        <div class="hl-s"><bdi>${esc(name)}</bdi>: ${esc(subline)}</div>
       </div>
       <div class="cv-stats">
         <div class="st g-main">
@@ -376,10 +381,10 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
   // ── ص2: الخطة التنفيذية (الإدارة التنفيذية / مدير العمليات) ──
   const axesRows=Object.keys(AXES).map(ax=>{const a=byAxis[ax];const c=axisColor(a.pct);const items=bikerItems.filter(i=>i.axis===ax);const mg=mgmtItems.filter(i=>i.axis===ax).length;
     return`<tr><td><b>${esc(AXES[ax].ar)}</b><span class="en">${AXES_EN[ax]}</span></td><td class="c">${items.length}${mg?` <small>+${mg} إدارة</small>`:""}</td><td class="c">${a.denom?`${a.points}/${a.denom}`:"—"}</td><td class="c" style="color:${c};font-weight:800">${a.pct!=null?a.pct+"%":"—"}</td><td class="mt">${meter(a.pct,c)}</td></tr>`;}).join("");
-  const accBiker=weak.length?`<ul class="acc">${weak.map(i=>`<li><span class="pn">#${i.n}</span>${esc(i.ar)} <span class="tag r">${esc((RES_LBL[results[i.n]]||[""])[0])}</span>${recurringSet.has(i.n)?` <span class="tag r">متكرر</span>`:""}</li>`).join("")}</ul>`:`<div class="muted ok">لا شيء — كل بنود البايكر مطابقة أو معفاة.</div>`;
-  const accMgmt=mgmtGap?`<ul class="acc">${mgmtGapItems.map(i=>{const p=(iparts[i.n]||[]).filter(Boolean);return`<li><span class="pn">#${i.n}</span>${esc(i.ar)}${p.length?`<span class="en">${esc(p.join("، "))}</span>`:""}</li>`;}).join("")}</ul>`:`<div class="muted ok">لا نواقص إمداد.</div>`;
+  const accBiker=weak.length?`<ul class="acc">${weak.map(i=>`<li><span class="pn">#${i.n}</span><span class="t">${esc(i.ar)}</span><span class="tag r">${esc((RES_LBL[results[i.n]]||[""])[0])}</span>${recurringSet.has(i.n)?` <span class="tag r">متكرر</span>`:""}</li>`).join("")}</ul>`:`<div class="muted ok">لا شيء — كل بنود البايكر مطابقة أو معفاة.</div>`;
+  const accMgmt=mgmtGap?`<ul class="acc">${mgmtGapItems.map(i=>{const p=(iparts[i.n]||[]).filter(Boolean);return`<li><span class="pn">#${i.n}</span><span class="t">${esc(i.ar)}${p.length?`<span class="en">${esc(p.join("، "))}</span>`:""}</span></li>`;}).join("")}</ul>`:`<div class="muted ok">لا نواقص إمداد.</div>`;
   const actionRows=weak.map(i=>{const rec=(an.recommendation&&an.rootCause&&an.rootCause.includes("#"+i.n))?an.recommendation:(notes[i.n]||"تصحيح البند وتوثيقه بصورة قبل الموعد.");
-    return`<tr><td class="pn">#${i.n}</td><td>${esc(i.ar)}${recurringSet.has(i.n)?` <span class="tag r">متكرر</span>`:""}</td><td>${esc(rec)}</td><td>البايكر · يتحقق ${esc(OPS_MANAGER)}</td><td class="pd">${esc(deadline||"—")}</td></tr>`;}).join("");
+    return`<tr><td class="pn">#${i.n}</td><td>${esc(i.ar)}${recurringSet.has(i.n)?` <span class="tag r">متكرر</span>`:""}</td><td>${esc(rec)}</td><td>البايكر · يتحقق ${esc(OPS_MANAGER)}</td><td class="pd">${esc(dl)}</td></tr>`;}).join("");
   const mgmtRows=mgmtGapItems.map(i=>{const parts=(iparts[i.n]||[]).filter(Boolean);
     return`<tr><td class="pn">#${i.n}</td><td>${esc(i.ar)}${recurringSet.has(i.n)?` <span class="tag a">متكرر</span>`:""}${parts.length?`<span class="en">${esc(parts.join("، "))}</span>`:""}</td><td>${esc(notes[i.n]||"توفير/استبدال عبر طلب دعم سويتر")}</td><td>الإدارة / سويتر</td><td class="pd">${sr?.created_at?esc(fmtBoth(new Date(sr.created_at)).ar.split(" · ")[0]):"عند إنشاء الطلب"}</td></tr>`;}).join("");
   const srItems=sr&&sr.items&&sr.items.length?sr.items:null;
@@ -389,7 +394,7 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
   const execPg=`
   <section class="pg exec" data-new>
     <h2><span class="n">1</span>الخطة التنفيذية<em>للإدارة التنفيذية · مدير العمليات</em></h2>
-    <p class="lead">${esc(headline)} ${esc(subline)}</p>
+    <p class="lead"><b>${esc(hlTitle)} · ${pct!=null?pct+"%":"—"}</b> — <bdi>${esc(name)}</bdi>: ${esc(subline)}</p>
     <table class="tbl axes"><thead><tr><th>المحور</th><th class="c">بنود البايكر</th><th class="c">النقاط</th><th class="c">النسبة</th><th></th></tr></thead><tbody>${axesRows}</tbody></table>
     <div class="two">
       <div class="box acc-b"><div class="bx-h">على البايكر <span class="tag r">${weak.length}</span></div>${accBiker}</div>
@@ -420,13 +425,13 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
   const supPg=`
   <section class="pg sup" data-new>
     <h2><span class="n">2</span>المتابعة الإشرافية<em>للمشرف</em></h2>
-    <p class="lead">جولة المتابعة قبل <b dir="ltr">${esc(deadline||"—")}</b>. لا يُغلق أي بند إلا بصورة جديدة تثبت التصحيح.</p>
+    <p class="lead">جولة المتابعة قبل <b>${esc(dl)}</b>. لا يُغلق أي بند إلا بصورة جديدة تثبت التصحيح.</p>
     ${supRows?`<table class="tbl supt"><thead><tr><th>البند</th><th>الملاحظة</th><th>ماذا يُصوَّر</th><th>معيار الإغلاق</th><th class="c">النتيجة</th></tr></thead><tbody>${supRows}</tbody></table>`:`<div class="muted ok">لا بنود مفتوحة للمتابعة.</div>`}
     <h3>تعليمات للمشرف</h3>
-    <ul class="tips">${supTips.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>
+    <ul class="ls tips">${supTips.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>
     <h3>متابعة إجراءات الجولة السابقة${prevRound?` <small>(${esc(shortDate(prevRound.round_date))}/${esc(String(prevRound.round_date).slice(0,4))} · ${prevRound.compliance_pct}%)</small>`:""}</h3>
     ${paRows?`<table class="tbl prev"><thead><tr><th>البند</th><th>الملاحظة السابقة</th><th class="c">الحالة الآن</th></tr></thead><tbody>${paRows}</tbody></table>`:`<div class="muted">${prevRound?"لم تكن هناك مخالفات في الجولة السابقة.":"لا توجد جولة سابقة — هذه الجولة خط الأساس."}</div>`}
-    <div class="notes"><div class="bx-h">ملاحظات المشرف في جولة المتابعة</div><i></i><i></i><i></i></div>
+    <div class="notes opt"><div class="bx-h">ملاحظات المشرف في جولة المتابعة</div><i></i><i></i><i></i></div>
   </section>`;
 
   // ── الأدلة المصورة: ما يحتاج تصحيحاً أولاً بصور كاملة، ثم المطابق مختصراً ──
@@ -461,16 +466,18 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
   // ── الصفحة الأخيرة: للموظف (عربي + বাংলা) — قابلة للفصل والإرسال ──
   const goodIts=bikerItems.filter(i=>results[i.n]==="pass");
   const empAr=`
-      <div class="emp-h">${esc(name)}، نتيجتك في جولة ${esc(fmtDateAr(round.round_date))}: <b style="color:${eff.color}">${pct!=null?pct+"%":"—"}</b> — ${esc(effShort)}.</div>
+      <div class="emp-h"><bdi>${esc(name)}</bdi>، هذه نتيجتك في جولة ${esc(fmtDateAr(round.round_date))}</div>
+      <div class="emp-r"><span class="emp-p" style="color:${eff.color}">${pct!=null?pct+"%":"—"}</span><span class="emp-t" style="color:${eff.color}">${esc(effShort)}</span></div>
       <p class="emp-f">${esc(eff.fin)}</p>
-      ${goodIts.length?`<div class="emp-b ok"><b>أحسنت في</b><ul>${goodIts.map(i=>`<li>${esc(i.ar)}</li>`).join("")}</ul></div>`:""}
-      ${weak.length?`<div class="emp-b bad"><b>المطلوب منك قبل ${esc(deadline||"—")}</b><ul>${weak.map(i=>`<li>${esc(i.ar)}</li>`).join("")}</ul></div>`:`<div class="emp-b ok"><b>لا شيء مطلوب منك — استمر بنفس المستوى.</b></div>`}
+      ${goodIts.length?`<div class="emp-b ok"><b>أحسنت في</b><ul class="ls">${goodIts.map(i=>`<li>${esc(i.ar)}</li>`).join("")}</ul></div>`:""}
+      ${weak.length?`<div class="emp-b bad"><b>المطلوب منك قبل ${esc(dl)}</b><ul class="ls">${weak.map(i=>`<li>${esc(i.ar)}</li>`).join("")}</ul></div>`:`<div class="emp-b ok"><b>لا شيء مطلوب منك — استمر بنفس المستوى.</b></div>`}
       ${mgmtGap?`<div class="emp-b amb"><b>ليست عليك — مسؤولية الإدارة</b><p class="emp-l">${esc(supplyParts.join("، "))}</p></div>`:""}`;
   const empBn=`
-      <div class="emp-h">${esc(name)}, ${esc(round.round_date||"")} রাউন্ডে আপনার ফলাফল: <b style="color:${eff.color}">${pct!=null?pct+"%":"—"}</b>। ${EFFECT_BN[eff.key]||""}</div>
-      ${goodIts.length?`<div class="emp-b ok"><b>ভালো করেছেন</b><ul>${goodIts.map(i=>`<li>${ITEM_BN[i.n]||ITEM_EN[i.n]||"#"+i.n}</li>`).join("")}</ul></div>`:""}
-      ${weak.length?`<div class="emp-b bad"><b>${esc(deadline||"—")} এর মধ্যে আপনার করণীয়</b><ul>${weak.map(i=>`<li>${ITEM_BN[i.n]||ITEM_EN[i.n]||"#"+i.n}</li>`).join("")}</ul></div>`:`<div class="emp-b ok"><b>আপনার কোনো করণীয় নেই — এভাবেই চালিয়ে যান।</b></div>`}
-      ${mgmtGap?`<div class="emp-b amb"><b>আপনার দায়িত্ব নয় — ব্যবস্থাপনার দায়িত্ব</b><ul>${mgmtGapItems.map(i=>`<li>${ITEM_BN[i.n]||ITEM_EN[i.n]||"#"+i.n}</li>`).join("")}</ul></div>`:""}`;
+      <div class="emp-h">${esc(name)}, <bdi>${esc(round.round_date||"")}</bdi> রাউন্ডে আপনার ফলাফল</div>
+      <div class="emp-r"><span class="emp-p" style="color:${eff.color}">${pct!=null?pct+"%":"—"}</span><span class="emp-t">${EFFECT_BN[eff.key]||""}</span></div>
+      ${goodIts.length?`<div class="emp-b ok"><b>ভালো করেছেন</b><ul class="ls">${goodIts.map(i=>`<li>${ITEM_BN[i.n]||ITEM_EN[i.n]||"#"+i.n}</li>`).join("")}</ul></div>`:""}
+      ${weak.length?`<div class="emp-b bad"><b><bdi>${esc(deadline||"—")}</bdi> এর মধ্যে আপনার করণীয়</b><ul class="ls">${weak.map(i=>`<li>${ITEM_BN[i.n]||ITEM_EN[i.n]||"#"+i.n}</li>`).join("")}</ul></div>`:`<div class="emp-b ok"><b>আপনার কোনো করণীয় নেই — এভাবেই চালিয়ে যান।</b></div>`}
+      ${mgmtGap?`<div class="emp-b amb"><b>আপনার দায়িত্ব নয় — ব্যবস্থাপনার দায়িত্ব</b><ul class="ls">${mgmtGapItems.map(i=>`<li>${ITEM_BN[i.n]||ITEM_EN[i.n]||"#"+i.n}</li>`).join("")}</ul></div>`:""}`;
   const sig=(t,n)=>`<div><div class="line"></div><b>${t}</b><span>${esc(n||"—")}</span><small>التاريخ: <span dir="ltr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/ ${now.getFullYear()}</span></small></div>`;
   const empPg=`
   <section class="pg emp" data-new>
@@ -621,6 +628,54 @@ h2 em{font-style:normal;font-size:9pt;font-weight:500;color:var(--muted);margin-
 .sign .line{border-top:1.2pt solid var(--ink);margin-bottom:4pt}
 .sign b{display:block;font-size:10pt}.sign span{display:block;font-size:10pt}.sign small{display:block;margin-top:2pt}
 .limits{margin-top:8mm;font-size:8.5pt;color:var(--muted);border-top:1px solid var(--line);padding-top:3mm}
+/* ═══ نظام موحّد للتنسيق: عناوين · بطاقات · قوائم · ألوان الحالة (يتغلب على ما سبقه) ═══ */
+h2{border-right:none;padding:0 0 2.2mm;margin:0 0 3.5mm;border-bottom:1.4pt solid var(--navy);font-size:14pt;gap:6pt}
+h2 .n{background:var(--orange);width:19pt;height:19pt;font-size:10pt}
+h2 em{font-size:8.5pt;padding:1pt 9pt;background:var(--surface);color:var(--muted);border-radius:20pt}
+h3{display:flex;align-items:center;gap:6pt;font-size:11.5pt;margin:5mm 0 2.5mm}
+h3::before{content:"";width:3pt;height:11pt;border-radius:2pt;background:var(--orange);flex:none}
+.lead{font-size:10pt;line-height:1.7;color:#475569;margin-bottom:3.5mm}.lead b{color:var(--ink)}
+.box,.cv-box,.rd,.notes,.emp-c{border:1px solid var(--line);border-radius:3mm;padding:3.5mm 4mm;background:#fff}
+.bx-h{display:flex;align-items:center;gap:5pt;font-size:9.5pt;font-weight:700;color:var(--ink);margin:0 0 2.2mm;padding-bottom:1.8mm;border-bottom:1px solid var(--line)}
+.bx-h .tag{margin-right:auto}
+.acc-b,.acc-m{border-right:1px solid var(--line)}
+.acc li{display:flex;align-items:flex-start;gap:5pt}.acc li .t{flex:1;min-width:0}.acc li .tag{flex:none;margin-top:2pt}.acc li .pn{flex:none;width:auto;min-width:7mm}
+.two{gap:4mm;margin-bottom:0}.two+.two{margin-top:4mm}.two+h3,.tbl+h3{margin-top:5mm}
+.verdict{border-width:1px;border-right-width:1px}
+.hl{background:linear-gradient(135deg,var(--navy),var(--navy-2));border:none;color:#fff;border-radius:4mm;padding:4mm 5mm}
+.hl-k{color:#fdba74;font-size:8.5pt;font-weight:700}
+.hl-r{display:flex;align-items:baseline;gap:8pt;margin:1.5pt 0 2pt}
+.hl-t{font-size:17pt;font-weight:700;line-height:1.35}
+.hl-p{font-size:17pt;font-weight:700;direction:ltr;unicode-bidi:isolate;margin-right:auto}
+.hl-s{font-size:10pt;line-height:1.7;color:#e2e8f0}
+.rd th{color:var(--orange-deep);font-size:9pt}
+.pd{direction:rtl;text-align:right;color:var(--muted);white-space:nowrap}
+ul.ls,ol.dec{list-style:none;margin:0;padding:0}
+ul.ls li,ol.dec li{position:relative;padding-right:13pt;margin-bottom:2pt;line-height:1.6}
+ul.ls li::before{content:"";position:absolute;right:2pt;top:.62em;width:4.5pt;height:4.5pt;border-radius:50%;background:var(--orange)}
+ol.dec{counter-reset:d}ol.dec li{counter-increment:d;padding-right:17pt}
+ol.dec li::before{content:counter(d);position:absolute;right:0;top:.15em;width:13pt;height:13pt;border-radius:50%;background:var(--navy);color:#fff;font-size:8pt;display:flex;align-items:center;justify-content:center;line-height:1}
+[lang=bn] ul.ls li{padding-right:0;padding-left:13pt}[lang=bn] ul.ls li::before{right:auto;left:2pt}
+.tips{font-size:10pt}
+.evh{background:none;border:none;padding:0;margin:5mm 0 2.5mm;font-size:11.5pt}
+.evh.r::before{background:var(--red)}.evh.g::before{background:var(--green)}.evh.n::before{background:#94a3b8}
+.note{border-right-width:2pt}
+.emp-c{background:#fff}
+.emp-h{font-size:11pt;font-weight:700;margin-bottom:1mm}
+.emp-r{display:flex;align-items:baseline;gap:7pt;padding:2mm 0 2.5mm;margin-bottom:2mm;border-bottom:1px solid var(--line)}
+.emp-p{font-size:20pt;font-weight:700;direction:ltr;unicode-bidi:isolate;line-height:1.1}.emp-t{font-size:10.5pt;font-weight:700}
+.emp-f{margin-bottom:2mm}
+.emp-b{border:none;border-radius:2.5mm;padding:2.5mm 3.5mm;margin-top:2.5mm}
+.emp-b>b{display:block;font-size:10pt;margin-bottom:1.2mm}
+.emp-b.ok{background:var(--green-soft)}.emp-b.ok>b{color:#087443}.emp-b.ok ul.ls li::before{background:#12b76a}
+.emp-b.bad{background:var(--red-soft)}.emp-b.bad>b{color:var(--red)}.emp-b.bad ul.ls li::before{background:var(--red)}
+.emp-b.amb{background:var(--amber-soft)}.emp-b.amb>b{color:var(--amber)}.emp-b.amb ul.ls li::before{background:var(--amber)}
+.emp-b ul{padding:0;font-size:10pt}
+.notes .bx-h{margin-bottom:0}.notes i{height:7.5mm}
+.limits{display:none}
+.item{margin-bottom:2.5mm}.item.cmp{padding:2.2mm 3.5mm 2mm}.item.cmp .it-h .badge{padding:1pt 8pt;font-size:9pt}
+.gal.sm{margin-top:2pt}.gal.sm .ph{height:19mm}
+.emp .sign{margin-top:5mm}
 /* ── نسخة الجوال (html.m): صفحة 108×234mm، عمود واحد، الجداول بطاقات ── */
 .m .src{width:108mm}.m .src .pg{padding:0 7mm}
 .m .sheet{width:108mm;height:234mm;padding:8mm 7mm 13mm}
@@ -635,7 +690,7 @@ h2 em{font-style:normal;font-size:9pt;font-weight:500;color:var(--muted);margin-
 .m .avatar{width:13mm;height:13mm;font-size:11pt}.m .who{grid-column:span 2}.m .who .nm{font-size:13pt}
 .m .idm{border:none;padding:0}.m .idm b{white-space:normal;font-size:9pt}
 .m .idr>div:nth-of-type(3){grid-column:1/span 2}.m .idr>div:nth-of-type(4){grid-column:3}.m .idr>div:nth-of-type(5){grid-column:1/span 3;border-top:1px dashed var(--line);padding-top:2mm}
-.m .hl{padding:3mm 4mm}.m .hl-t{font-size:13.5pt}.m .hl-s{font-size:10pt}
+.m .hl{padding:3.5mm 4mm}.m .hl-t,.m .hl-p{font-size:14pt}.m .hl-s{font-size:9.5pt}
 .m .cv-stats{grid-template-columns:1fr 1fr;gap:3mm}.m .verdict{grid-column:span 2}
 .m .g-wrap,.m .g-wrap svg{width:82px;height:82px}.m .g-val{font-size:15pt}.m .g-side-v{font-size:21pt}
 .m .rd th{display:block;width:auto;padding:3pt 0 0}.m .rd td{display:block;padding:0 0 3pt}.m .rd tr{display:block;border-bottom:1px dashed var(--line)}.m .rd td{border:none}
@@ -645,20 +700,22 @@ h2 em{font-style:normal;font-size:9pt;font-weight:500;color:var(--muted);margin-
 .m .two,.m .emp-g{grid-template-columns:1fr;gap:3mm}
 .m .tbl.cards thead{display:none}
 .m .tbl.cards,.m .tbl.cards tbody{display:block}
-.m .tbl.cards tr{display:block;border:1px solid var(--line);border-radius:2mm;margin-bottom:2mm;padding:2mm 3mm;background:#fff}
-.m .tbl.cards td{display:block;border:none;padding:1pt 0;font-size:10pt;background:none!important}
-.m .tbl.cards td.c{text-align:right}.m .tbl.cards td.mt{width:auto}
-.m .tbl.cards td.pn{display:inline-block;width:auto;background:var(--blue-soft)!important;border-radius:2mm;padding:0 5pt;font-size:9pt}
-.m .tbl.cards td[data-l]::before{content:attr(data-l) " · ";color:var(--muted);font-size:8.5pt;font-weight:500}
-.m .tbl.cards td:first-child:not(.pn){font-size:10.5pt}
+.m .tbl.cards tr{display:grid;grid-template-columns:auto 1fr;column-gap:2.5mm;row-gap:1.4mm;border:1px solid var(--line);border-radius:3mm;margin-bottom:2.5mm;padding:3mm 3.5mm;background:#fff}
+.m .tbl.cards td{grid-column:1/-1;display:block;border:none;padding:0;font-size:9.5pt;background:none!important;text-align:right}
+.m .tbl.cards td.pn{grid-column:1;align-self:start;width:auto;background:var(--blue-soft)!important;border-radius:2mm;padding:0 5pt;font-size:9pt}
+.m .tbl.cards td.ct{grid-column:2;font-weight:700;font-size:10.5pt;line-height:1.5;padding-bottom:1.8mm;border-bottom:1px dashed var(--line)}
+.m .tbl.cards td.ct .en{font-weight:400}
+.m .tbl.cards td[data-l]{display:grid;grid-template-columns:19mm 1fr;column-gap:2mm}
+.m .tbl.cards td[data-l]::before{content:attr(data-l);color:var(--muted);font-size:8.5pt;font-weight:500;padding-top:.5pt}
+.m .tbl.cards td.chk{display:flex;gap:9pt}.m .tbl.cards td.chk::before{width:19mm;flex:none}
 .m .tbl th,.m .tbl td{font-size:9pt;padding:3pt 4pt}.m .axes .mt,.m .axes th:last-child{display:none}.m .tbl .en{font-size:8pt}
 .m .map{display:none}
-.m .supt .chk span{display:inline-block;margin-left:8pt}
 .m .gal{grid-template-columns:repeat(2,1fr)!important;gap:2.5mm}.m .gal .ph{height:34mm}
 .m .gal.sm{grid-template-columns:repeat(3,1fr)!important}.m .gal.sm .ph{height:20mm}
 .m .it-t .ar{font-size:11pt}.m .item{padding:3mm 3mm 2.5mm}
 .m .sign{gap:3mm;margin-top:5mm}.m .sign b,.m .sign span{font-size:8.5pt}
 .m .meta2 td{display:inline-block}
+.m .limits{display:none}
 /* ── الشاشة ── */
 @media screen{
   body{background:#e9edf2;padding:12px 0 80px}

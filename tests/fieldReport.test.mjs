@@ -30,7 +30,7 @@ ok('photo caption with time',/أمام · \d{2}:\d{2}/.test(html));
 // v3: أقسام الجمهور بالترتيب + السرد الذكي
 const order=['class="cover"','class="pg exec"','class="pg sup"','class="pg ev"','class="pg emp"'].map(k=>html.indexOf(k));
 ok('audience sections in order',order.every((v,i)=>v>0&&(i===0||v>order[i-1])));
-ok('executive summary headline + reading',html.includes('الملخص التنفيذي')&&html.includes('Midul Hassan حقق 85.7%')&&html.includes('ماذا وجدنا')&&html.includes('ماذا بعد'));
+ok('executive summary headline + reading',html.includes('الملخص التنفيذي')&&html.includes('مطابق مع ملاحظات')&&html.includes('<bdi>Midul Hassan</bdi>')&&html.includes('ماذا وجدنا')&&html.includes('ماذا بعد'));
 ok('leadership decisions for supply gap',html.includes('قرارات مطلوبة من القيادة')&&html.includes('اعتماد توفير'));
 ok('supervisor checklist',html.includes('المتابعة الإشرافية')&&html.includes('معيار الإغلاق')&&html.includes('☐ أُغلق'));
 ok('evidence: gaps before compliant',html.indexOf('تحتاج تصحيحاً')<html.indexOf('evh g'));
