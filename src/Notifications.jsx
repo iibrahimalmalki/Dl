@@ -73,7 +73,9 @@ export default function Notifications({me,onNav}){
     if(uid&&un.length)await supabase.from("notification_reads").upsert(un.map(n=>({notification_id:n.id,user_id:uid,read_at:ts})),{onConflict:"notification_id,user_id"});};
   const ack=(n,e)=>{e&&e.stopPropagation();const ts=new Date().toISOString();upsert(n.id,{read_at:ts,ack_at:ts});};
   const snooze=(n,hrs,e)=>{e&&e.stopPropagation();upsert(n.id,{snooze_until:new Date(Date.now()+hrs*3600000).toISOString()});if(toast&&toast.id===n.id)setToast(null);};
-  const go=n=>{markRead(n);setOpen(false);setToast(null);if(n.module&&onNav)onNav(n.module);};
+  const go=n=>{markRead(n);setOpen(false);setToast(null);if(n.module&&onNav)onNav(n.module);
+    // إشعار وثيقة ← فتح صفحة الوثائق وتمييز الوثيقة نفسها
+    if(n.module==="renewals"&&n.entity_id)setTimeout(()=>window.dispatchEvent(new CustomEvent("dw:open",{detail:{view:"renewals",table:"renewal_docs",id:n.entity_id}})),300);};
   const waLink=n=>`https://wa.me/${OWNER_WA}?text=`+encodeURIComponent(`🔴 تنبيه حرِج — دلو ورغوة\n${n.title}\n${n.body||""}`);
 
   const savePrefs=async(np)=>{setPrefs(np);if(uid)await supabase.from("notification_prefs").upsert({user_id:uid,muted_categories:np.muted_categories,quiet_start:np.quiet_start,quiet_end:np.quiet_end,sound_enabled:np.sound_enabled,updated_at:new Date().toISOString()},{onConflict:"user_id"});};
