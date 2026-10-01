@@ -118,15 +118,15 @@ function MarginReport({period}){
     const fines=d.viol.reduce((a,v)=>a+Number(v.fine_applied||0),0);
     const costs=payroll+vendors+housing+fines;return{revenue,revSettled,payroll,vendors,housing,fines,costs,margin:revenue-costs};
   },[d,period]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
   const rows=[{label:"رواتب",val:s.payroll},{label:"موردون",val:s.vendors},{label:"إيجار السكن",val:s.housing},{label:"غرامات",val:s.fines}];
   const max=Math.max(...rows.map(r=>r.val),1);
   const wa=`تقرير الهامش — ${periodAr(period)}\nالإيراد: ${money(s.revenue)}\nالتكاليف: ${money(s.costs)}\nالهامش: ${money(s.margin)}`;
   return(<div className="rp-body">
     <div className="rp-kpis">
-      <Kpi l={s.revSettled?"الإيراد (تسوية معتمدة)":"الإيراد التقديري"} n={money(s.revenue)} c="#087443" sub={s.revSettled?"من تسوية سويتر":null}/>
-      <Kpi l="إجمالي التكاليف" n={money(s.costs)} c="#b42318"/>
-      <Kpi l="الهامش" n={money(s.margin)} c={s.margin>=0?"#087443":"#b42318"}/>
+      <Kpi l={s.revSettled?"الإيراد (تسوية معتمدة)":"الإيراد التقديري"} n={money(s.revenue)} c="var(--ok-ink)" sub={s.revSettled?"من تسوية سويتر":null}/>
+      <Kpi l="إجمالي التكاليف" n={money(s.costs)} c="var(--bad-ink)"/>
+      <Kpi l="الهامش" n={money(s.margin)} c={s.margin>=0?"var(--ok-ink)":"var(--bad-ink)"}/>
       <Kpi l="نسبة الهامش" n={s.revenue?Math.round(s.margin/s.revenue*100)+"%":"—"}/>
     </div>
     <div className="rp-panel"><div className="rp-ph">توزيع التكاليف</div>
@@ -149,14 +149,14 @@ function PayrollReport({period}){
     const total=list.reduce((a,x)=>a+x.total,0);
     return{list,base,bonus,total,count:list.length};
   },[rows,period]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
   const max=Math.max(...s.list.map(x=>x.total),1);
   const wa=`مسير الرواتب — ${periodAr(period)}\nالموظفون: ${s.count}\nالأساسي: ${money(s.base)}\nالحوافز: ${money(s.bonus)}\nالإجمالي: ${money(s.total)}`;
   return(<div className="rp-body">
     <div className="rp-kpis">
-      <Kpi l="إجمالي المسير" n={money(s.total)} c="#b42318"/>
+      <Kpi l="إجمالي المسير" n={money(s.total)} c="var(--bad-ink)"/>
       <Kpi l="الأساسي" n={money(s.base)}/>
-      <Kpi l="الحوافز الصافية" n={money(s.bonus)} c="#087443"/>
+      <Kpi l="الحوافز الصافية" n={money(s.bonus)} c="var(--ok-ink)"/>
       <Kpi l="عدد الموظفين" n={int(s.count)}/>
     </div>
     <div className="rp-panel"><div className="rp-ph">توزيع المسير حسب الموظف</div>
@@ -188,7 +188,7 @@ function ExpensesReport({period}){
     const list=rows.map(e=>({date:e.exp_date,vendor:vmap[e.vendor_id]?.name||"—",cat:vmap[e.vendor_id]?.category||"أخرى",title:e.title,amount:Number(e.amount||0)})).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     return{cats,total,list};
   },[d,scope,period]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
   return(<div className="rp-body">
     <div className="rp-scope">
       <button className={scope==="all"?"on":""} onClick={()=>setScope("all")}>الكل</button>
@@ -223,12 +223,12 @@ function ComplianceReport(){
     const mism=d.emps.filter(e=>e.profession_ok===false);
     return{docs,mism,exp:docs.filter(x=>x.days<0).length,d30:docs.filter(x=>x.days>=0&&x.days<=30).length,d90:docs.filter(x=>x.days>=0&&x.days<=90).length};
   },[d]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
-  const band=dd=>dd<0?["منتهية","#b42318","#feecea"]:dd<=30?["عاجلة","#c2410c","#ffedd5"]:dd<=90?["مراقبة","#1d5bbf","#eef4ff"]:["سارية","#087443","#e7f7ef"];
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
+  const band=dd=>dd<0?["منتهية","var(--bad-ink)","var(--bad-bg)"]:dd<=30?["عاجلة","var(--p-700)","var(--p-100)"]:dd<=90?["مراقبة","var(--info-ink)","var(--info-bg)"]:["سارية","var(--ok-ink)","var(--ok-bg)"];
   return(<div className="rp-body">
     <div className="rp-kpis">
-      <Kpi l="منتهية" n={s.exp} c="#b42318"/><Kpi l="عاجلة ≤30" n={s.d30} c="#c2410c"/>
-      <Kpi l="خلال 90 يوماً" n={s.d90} c="#1d5bbf"/><Kpi l="مهن غير مطابقة" n={s.mism.length} c={s.mism.length?"#b54708":"#087443"}/>
+      <Kpi l="منتهية" n={s.exp} c="var(--bad-ink)"/><Kpi l="عاجلة ≤30" n={s.d30} c="var(--p-700)"/>
+      <Kpi l="خلال 90 يوماً" n={s.d90} c="var(--info-ink)"/><Kpi l="مهن غير مطابقة" n={s.mism.length} c={s.mism.length?"var(--warn-ink)":"var(--ok-ink)"}/>
     </div>
     <div className="rp-panel"><div className="rp-ph">وثائق الأفراد ({s.docs.length})</div>
       <div className="rp-tblwrap"><table className="rp-tbl">
@@ -239,7 +239,7 @@ function ComplianceReport(){
     </div>
     {s.mism.length>0&&<div className="rp-panel"><div className="rp-ph">مهن غير مطابقة للنشاط</div>
       <div className="rp-tblwrap"><table className="rp-tbl"><thead><tr><th>الموظف</th><th>المهنة المسجّلة</th></tr></thead>
-      <tbody>{s.mism.map((e,i)=>(<tr key={i}><td>{e.full_name}{e.employee_id?" ("+e.employee_id+")":""}</td><td style={{color:"#b54708",fontWeight:700}}>{e.profession||"—"}</td></tr>))}</tbody></table></div>
+      <tbody>{s.mism.map((e,i)=>(<tr key={i}><td>{e.full_name}{e.employee_id?" ("+e.employee_id+")":""}</td><td style={{color:"var(--warn-ink)",fontWeight:700}}>{e.profession||"—"}</td></tr>))}</tbody></table></div>
     </div>}
     <ExportBar onCsv={()=>downloadCsv("compliance",["النوع","الموظف","الانتهاء","المتبقّي"],s.docs.map(x=>[x.doc_type,x.subject,fmtD(x.end_date),x.days]))}/>
   </div>);
@@ -250,7 +250,7 @@ function BikerReport({period}){
   const[rows,setRows]=useState(null);
   useEffect(()=>{q("ops_biker_month","period,biker_name,net_washes,rating,complaint_pct").then(d=>setRows(d));},[]);
   const s=useMemo(()=>{if(!rows)return null;const r=rows.filter(o=>o.period===period).sort((a,b)=>Number(b.net_washes||0)-Number(a.net_washes||0));return r;},[rows,period]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
   const total=s.reduce((a,o)=>a+Number(o.net_washes||0),0);
   const max=Math.max(...s.map(o=>Number(o.net_washes||0)),1);
   return(<div className="rp-body">
@@ -285,7 +285,7 @@ function SLAReport({period}){
     const fieldComp=rd.length?rd.reduce((a,x)=>a+Number(x.compliance_pct||0),0)/rd.length:null;
     return{washes,cAdmin,compl,fulfil,avgRating,complPct,fieldComp,hasData:o.length>0,rounds:rd.length};
   },[d,period]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
   const C=SSP_CONTRACT;
   // مؤشر: {الاسم، القيمة، الهدف، اتجاه (≥/≤)، صيغة}
   const pf=(val,target,dir)=>val==null?null:(dir==="ge"?val>=target:val<=target);
@@ -297,22 +297,22 @@ function SLAReport({period}){
   ];
   const met=rows.filter(r=>pf(r.val,r.target,r.dir)===true).length;
   const measured=rows.filter(r=>r.val!=null).length;
-  const stColor=r=>{const p=pf(r.val,r.target,r.dir);return p==null?"#94a3b8":p?"#087443":"#b42318";};
-  const stBg=r=>{const p=pf(r.val,r.target,r.dir);return p==null?"#f1f3f5":p?"#e7f7ef":"#feecea";};
+  const stColor=r=>{const p=pf(r.val,r.target,r.dir);return p==null?"var(--mut-2)":p?"var(--ok-ink)":"var(--bad-ink)";};
+  const stBg=r=>{const p=pf(r.val,r.target,r.dir);return p==null?"var(--soft)":p?"var(--ok-bg)":"var(--bad-bg)";};
   const stTxt=r=>{const p=pf(r.val,r.target,r.dir);return p==null?"لا بيانات":p?"مُحقّق":"دون الهدف";};
   const wa=`مؤشرات العقد SLA — ${periodAr(period)}\nمُحقّق: ${met}/${measured}\n`+rows.map(r=>`${r.l}: ${r.fmt(r.val)} (هدف ${r.dir==="ge"?"≥":"≤"}${r.target})`).join("\n");
   return(<div className="rp-body">
     <div className="rp-kpis">
-      <Kpi l="مؤشرات مُحقّقة" n={measured?met+" / "+measured:"—"} c={met===measured&&measured?"#087443":"#c2410c"}/>
-      <Kpi l="نسبة التنفيذ" n={s.fulfil!=null?s.fulfil.toFixed(1)+"%":"—"} c={s.fulfil==null?null:s.fulfil>=99?"#087443":"#b42318"} sub={"هدف ≥"+C.sla.orders_fulfilled_pct+"%"}/>
-      <Kpi l="متوسط التقييم" n={s.avgRating!=null?s.avgRating.toFixed(2):"—"} c={s.avgRating==null?null:s.avgRating>=4.75?"#087443":"#c2410c"} sub="هدف ≥4.75"/>
-      <Kpi l="الشكاوى" n={s.complPct!=null?s.complPct.toFixed(2)+"%":"—"} c={s.complPct==null?null:s.complPct<=1?"#087443":"#b42318"} sub="هدف ≤1%"/>
+      <Kpi l="مؤشرات مُحقّقة" n={measured?met+" / "+measured:"—"} c={met===measured&&measured?"var(--ok-ink)":"var(--p-700)"}/>
+      <Kpi l="نسبة التنفيذ" n={s.fulfil!=null?s.fulfil.toFixed(1)+"%":"—"} c={s.fulfil==null?null:s.fulfil>=99?"var(--ok-ink)":"var(--bad-ink)"} sub={"هدف ≥"+C.sla.orders_fulfilled_pct+"%"}/>
+      <Kpi l="متوسط التقييم" n={s.avgRating!=null?s.avgRating.toFixed(2):"—"} c={s.avgRating==null?null:s.avgRating>=4.75?"var(--ok-ink)":"var(--p-700)"} sub="هدف ≥4.75"/>
+      <Kpi l="الشكاوى" n={s.complPct!=null?s.complPct.toFixed(2)+"%":"—"} c={s.complPct==null?null:s.complPct<=1?"var(--ok-ink)":"var(--bad-ink)"} sub="هدف ≤1%"/>
     </div>
     <div className="rp-panel"><div className="rp-ph">الأداء مقابل التزامات العقد — {periodAr(period)}</div>
       {!s.hasData?<Empty t="لا بيانات عمليات لهذا الشهر — تُدخَل من العمليات/تسوية سويتر."/>:
       <div className="rp-tblwrap"><table className="rp-tbl">
         <thead><tr><th>المؤشر</th><th>القيمة</th><th>الهدف</th><th>الحالة</th></tr></thead>
-        <tbody>{rows.map(r=>(<tr key={r.k}><td>{r.l}<br/><small style={{color:"#94a3b8"}}>{r.note}</small></td><td style={{fontWeight:800}}>{r.fmt(r.val)}</td><td>{(r.dir==="ge"?"≥":"≤")+r.target+(r.k==="rating"?"":"%")}</td><td><span className="rp-badge" style={{color:stColor(r),background:stBg(r)}}>{stTxt(r)}</span></td></tr>))}</tbody>
+        <tbody>{rows.map(r=>(<tr key={r.k}><td>{r.l}<br/><small style={{color:"var(--mut-2)"}}>{r.note}</small></td><td style={{fontWeight:800}}>{r.fmt(r.val)}</td><td>{(r.dir==="ge"?"≥":"≤")+r.target+(r.k==="rating"?"":"%")}</td><td><span className="rp-badge" style={{color:stColor(r),background:stBg(r)}}>{stTxt(r)}</span></td></tr>))}</tbody>
       </table></div>}
     </div>
     <p className="rp-note">مؤشّرا «الالتزام بمواعيد التسليم» و«الوصول للموقع» (هدف ≥{C.sla.on_time_pct}% و≥{C.sla.arrival_pct}%) غير مُلتقَطة آلياً بعد — تُضاف عند ربط بيانات التتبّع من بوّابة سويتر.</p>
@@ -322,7 +322,7 @@ function SLAReport({period}){
 
 // ── قمع التوظيف ──
 const stName=x=>x==="accepted"?"مقبول":x==="rejected"?"مرفوض":"معلّق";
-const stBand=x=>x==="accepted"?["#087443","#e7f7ef"]:x==="rejected"?["#b42318","#feecea"]:["#c2410c","#fff5e8"];
+const stBand=x=>x==="accepted"?["var(--ok-ink)","var(--ok-bg)"]:x==="rejected"?["var(--bad-ink)","var(--bad-bg)"]:["var(--p-700)","var(--p-100)"];
 const clsAr=c=>{const s=String(c||"").toLowerCase();if(/strong|قوي|excellent|ممتاز/.test(s))return"مرشّح قوي";if(/good|جيد|moderate|متوسط/.test(s))return"جيد";if(/weak|ضعيف|poor/.test(s))return"ضعيف";return c||"غير مصنّف";};
 function FunnelReport(){
   const[d,setD]=useState(null);
@@ -350,16 +350,16 @@ function FunnelReport(){
       .map(a=>({name:a.full_name||"—",num:a.application_number||"—",loc:a.saudi_city||a.location||a.bangladesh_district||"—",score:a.ai_score_total,cls:clsAr(a.ai_classification),status:a.status,date:a.submitted_at}));
     return{t0,steps,total:A.length,accepted,rejected,pending,conv,cls,strong,avgScore,recent,submits};
   },[d]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
   return(<div className="rp-body">
     <div className="rp-kpis">
-      <Kpi l="إجمالي المتقدّمين" n={int(s.total)} c="#1d5bbf"/>
-      <Kpi l="مقبول" n={int(s.accepted)} c="#087443"/>
-      <Kpi l="قيد المراجعة" n={int(s.pending)} c="#c2410c"/>
-      <Kpi l="مرفوض" n={int(s.rejected)} c="#b42318"/>
+      <Kpi l="إجمالي المتقدّمين" n={int(s.total)} c="var(--info-ink)"/>
+      <Kpi l="مقبول" n={int(s.accepted)} c="var(--ok-ink)"/>
+      <Kpi l="قيد المراجعة" n={int(s.pending)} c="var(--p-700)"/>
+      <Kpi l="مرفوض" n={int(s.rejected)} c="var(--bad-ink)"/>
     </div>
     <div className="rp-kpis">
-      <Kpi l="مرشّحون أقوياء (AI)" n={int(s.strong)} c="#7c3aed"/>
+      <Kpi l="مرشّحون أقوياء (AI)" n={int(s.strong)} c="var(--info)"/>
       <Kpi l="متوسط درجة AI" n={s.avgScore!=null?s.avgScore:"—"}/>
       <Kpi l="زوّار وصلوا للتقديم" n={int(s.submits)}/>
       <Kpi l="تحوّل الزيارة→تقديم" n={s.conv!=null?s.conv+"%":"—"} sub="من ضغط زر التقديم"/>
@@ -426,23 +426,23 @@ function CashflowReport({period}){
     const tcap=rows.reduce((a,r)=>a+r.capital,0);
     return{rows,tin,tout,tnet:tin-tout,cats,tsweater,tfund,tcap,housM,anyActual:rows.some(r=>r.actual)};
   },[d,period]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
   const maxAbs=Math.max(...s.rows.map(r=>Math.abs(r.net)),1);
   const maxCat=Math.max(...s.cats.map(c=>c.v),1);
   const wa=`تدفّق النقد — 6 أشهر حتى ${periodAr(period)}\nداخل: ${money(s.tin)} (سويتر ${money(s.tsweater)} · تمويل ${money(s.tfund)})\nخارج: ${money(s.tout)}\nصافي: ${money(s.tnet)}`;
   return(<div className="rp-body">
     <div className="rp-kpis">
-      <Kpi l="النقد الداخل (6 أشهر)" n={money(s.tin)} c="#087443"/>
-      <Kpi l="النقد الخارج" n={money(s.tout)} c="#b42318"/>
-      <Kpi l="صافي التدفّق" n={money(s.tnet)} c={s.tnet>=0?"#087443":"#b42318"}/>
+      <Kpi l="النقد الداخل (6 أشهر)" n={money(s.tin)} c="var(--ok-ink)"/>
+      <Kpi l="النقد الخارج" n={money(s.tout)} c="var(--bad-ink)"/>
+      <Kpi l="صافي التدفّق" n={money(s.tnet)} c={s.tnet>=0?"var(--ok-ink)":"var(--bad-ink)"}/>
       <Kpi l="متوسط شهري" n={money(Math.round(s.tnet/6))}/>
     </div>
-    {s.anyActual&&<div className="rp-panel" style={{background:"linear-gradient(135deg,#fffbeb,#fff)",borderColor:"#fde9c8"}}>
-      <div className="rp-ph" style={{color:"#92600e"}}>مصدر النقد الداخل — إيراد فعلي مقابل تمويل</div>
+    {s.anyActual&&<div className="rp-panel" style={{background:"linear-gradient(135deg,var(--warn-bg),var(--glass-3))",borderColor:"color-mix(in srgb,var(--warn) 35%,transparent)"}}>
+      <div className="rp-ph" style={{color:"var(--warn-ink)"}}>مصدر النقد الداخل — إيراد فعلي مقابل تمويل</div>
       <div className="rp-tblwrap"><table className="rp-tbl">
         <tbody>
-          <tr><td>إيراد سويتر الفعلي</td><td style={{fontWeight:800,color:"#087443"}}>{money(s.tsweater)}</td><td>{s.tin>0?Math.round(s.tsweater/s.tin*100):0}%</td></tr>
-          <tr><td>تمويل / تحويلات داخلية</td><td style={{fontWeight:800,color:"#b54708"}}>{money(s.tfund)}</td><td>{s.tin>0?Math.round(s.tfund/s.tin*100):0}%</td></tr>
+          <tr><td>إيراد سويتر الفعلي</td><td style={{fontWeight:800,color:"var(--ok-ink)"}}>{money(s.tsweater)}</td><td>{s.tin>0?Math.round(s.tsweater/s.tin*100):0}%</td></tr>
+          <tr><td>تمويل / تحويلات داخلية</td><td style={{fontWeight:800,color:"var(--warn-ink)"}}>{money(s.tfund)}</td><td>{s.tin>0?Math.round(s.tfund/s.tin*100):0}%</td></tr>
         </tbody>
       </table></div>
       <p className="rp-note" style={{margin:"8px 0 0"}}>إيراد سويتر يغطّي {s.tout>0?Math.round(s.tsweater/s.tout*100):0}% فقط من المصروف؛ الباقي يُموَّل داخلياً — مؤشّر عجز نقدي هيكلي.</p>
@@ -450,21 +450,21 @@ function CashflowReport({period}){
     <div className="rp-panel"><div className="rp-ph">صافي التدفّق الشهري</div>
       <div className="rp-bars">{s.rows.map((r,i)=>(<div className="rp-brow" key={i}>
         <span className="rp-bl">{shortMonth(r.p)}{r.actual?"":" ~"}</span>
-        <div className="rp-bt"><div style={{width:Math.max(2,Math.round(Math.abs(r.net)/maxAbs*100))+"%",background:r.net>=0?"linear-gradient(90deg,#087443,#32d583)":"linear-gradient(90deg,#b42318,#f97066)"}}/></div>
-        <span className="rp-bv" style={{color:r.net>=0?"#087443":"#b42318"}}>{money(r.net)}</span>
+        <div className="rp-bt"><div style={{width:Math.max(2,Math.round(Math.abs(r.net)/maxAbs*100))+"%",background:r.net>=0?"linear-gradient(90deg,var(--ok-ink),var(--ok))":"linear-gradient(90deg,var(--bad-ink),var(--bad))"}}/></div>
+        <span className="rp-bv" style={{color:r.net>=0?"var(--ok-ink)":"var(--bad-ink)"}}>{money(r.net)}</span>
       </div>))}</div>
     </div>
     {s.cats.length>0&&<div className="rp-panel"><div className="rp-ph">المصروف حسب الفئة (فعلي — 6 أشهر)</div>
       <div className="rp-bars">{s.cats.slice(0,10).map((c,i)=>(<div className="rp-brow" key={i}>
         <span className="rp-bl" style={{minWidth:120,textAlign:"start"}}>{c.k}</span>
-        <div className="rp-bt"><div style={{width:Math.max(2,Math.round(c.v/maxCat*100))+"%",background:"linear-gradient(90deg,#b54708,#f79009)"}}/></div>
+        <div className="rp-bt"><div style={{width:Math.max(2,Math.round(c.v/maxCat*100))+"%",background:"linear-gradient(90deg,var(--warn),var(--warn))"}}/></div>
         <span className="rp-bv">{money(c.v)}</span>
       </div>))}</div>
     </div>}
     <div className="rp-panel"><div className="rp-ph">التفصيل الشهري</div>
       <div className="rp-tblwrap"><table className="rp-tbl">
         <thead><tr><th>الشهر</th><th>داخل</th><th>خارج</th><th>صافي</th><th>تراكمي</th></tr></thead>
-        <tbody>{s.rows.map((r,i)=>(<tr key={i}><td>{periodAr(r.p)}{r.actual&&<span style={{fontSize:9,color:"#087443",marginInlineStart:4}}>●فعلي</span>}</td><td style={{color:"#087443"}}>{money(r.inflow)}</td><td style={{color:"#b42318"}}>{money(r.outflow)}</td><td style={{fontWeight:800,color:r.net>=0?"#087443":"#b42318"}}>{money(r.net)}</td><td style={{fontWeight:700}}>{money(r.cum)}</td></tr>))}</tbody>
+        <tbody>{s.rows.map((r,i)=>(<tr key={i}><td>{periodAr(r.p)}{r.actual&&<span style={{fontSize:9,color:"var(--ok-ink)",marginInlineStart:4}}>●فعلي</span>}</td><td style={{color:"var(--ok-ink)"}}>{money(r.inflow)}</td><td style={{color:"var(--bad-ink)"}}>{money(r.outflow)}</td><td style={{fontWeight:800,color:r.net>=0?"var(--ok-ink)":"var(--bad-ink)"}}>{money(r.net)}</td><td style={{fontWeight:700}}>{money(r.cum)}</td></tr>))}</tbody>
       </table></div>
     </div>
     <p className="rp-note">الأشهر المعلّمة «●فعلي» مبنية على كشف الحساب البنكي المصنّف (داخل/خارج فعلي)؛ غيرها تقديري من العمليات (مُعلّم بـ«~»). شراء الأصول (دراجات) مستبعد من المصروف التشغيلي{s.tcap>0?` (${money(s.tcap)} رأسمالي)`:""}.</p>
@@ -499,7 +499,7 @@ function CompareReport({period}){
     };
     return{cur:calc(period),prv:calc(prev)};
   },[d,period,prev]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
   const M=[
     {k:"revenue",l:"الإيراد التقديري",cur:s.cur.revenue,prv:s.prv.revenue,fmt:money,up:true},
     {k:"costs",l:"التكاليف",cur:s.cur.costs,prv:s.prv.costs,fmt:money,up:false},
@@ -515,7 +515,7 @@ function CompareReport({period}){
     <div className="rp-panel"><div className="rp-ph">المؤشرات — تغيّر الشهر عن سابقه</div>
       <div className="rp-tblwrap"><table className="rp-tbl">
         <thead><tr><th>المؤشر</th><th>{periodAr(prev)}</th><th>{periodAr(period)}</th><th>التغيّر</th></tr></thead>
-        <tbody>{M.map(m=>{const dv=delta(m.cur,m.prv);const good=dv==null?null:(m.up?dv>=0:dv<=0);const c=dv==null||dv===0?"#64748b":good?"#087443":"#b42318";
+        <tbody>{M.map(m=>{const dv=delta(m.cur,m.prv);const good=dv==null?null:(m.up?dv>=0:dv<=0);const c=dv==null||dv===0?"var(--mut)":good?"var(--ok-ink)":"var(--bad-ink)";
           return(<tr key={m.k}><td>{m.l}</td><td>{m.fmt(m.prv)}</td><td style={{fontWeight:800}}>{m.fmt(m.cur)}</td>
           <td style={{color:c,fontWeight:800}}>{dv==null?"—":(dv>0?"▲ +":dv<0?"▼ ":"")+dv+"%"}</td></tr>);})}</tbody>
       </table></div>
@@ -557,14 +557,14 @@ function ExecReport({period}){
     const mism=d.emps.filter(e=>e.profession_ok===false).length;
     return{washes,revenue,payroll,vendors,housM,costs,costActual,finFund,margin:revenue-costs,rating,comp,appsN,accepted,bikers:o.length,mism};
   },[d,period]);
-  if(!s)return<div className="dw-skel" style={{height:200}}/>;
+  if(!s)return<div className="g-skel" style={{height:200}}/>;
   const marginPct=s.revenue?Math.round(s.margin/s.revenue*100):null;
   return(<div className="rp-body">
-    <div className="rp-sec-t">المالية{s.costActual&&<span style={{fontSize:10,color:"#087443",fontWeight:700,marginInlineStart:6}}>● تكاليف فعلية من البنك</span>}</div>
+    <div className="rp-sec-t">المالية{s.costActual&&<span style={{fontSize:10,color:"var(--ok-ink)",fontWeight:700,marginInlineStart:6}}>● تكاليف فعلية من البنك</span>}</div>
     <div className="rp-kpis">
-      <Kpi l="الإيراد (سويتر)" n={money(s.revenue)} c="#087443"/>
-      <Kpi l={s.costActual?"التكاليف الفعلية":"التكاليف التقديرية"} n={money(s.costs)} c="#b42318"/>
-      <Kpi l="الهامش" n={money(s.margin)} c={s.margin>=0?"#087443":"#b42318"}/>
+      <Kpi l="الإيراد (سويتر)" n={money(s.revenue)} c="var(--ok-ink)"/>
+      <Kpi l={s.costActual?"التكاليف الفعلية":"التكاليف التقديرية"} n={money(s.costs)} c="var(--bad-ink)"/>
+      <Kpi l="الهامش" n={money(s.margin)} c={s.margin>=0?"var(--ok-ink)":"var(--bad-ink)"}/>
       <Kpi l="نسبة الهامش" n={marginPct!=null?marginPct+"%":"—"}/>
     </div>
     {s.costActual&&s.finFund>0&&<p className="rp-note" style={{marginTop:0}}>تنبيه: مُوِّل هذا الشهر بـ{money(s.finFund)} من تحويلات داخلية لتغطية العجز التشغيلي.</p>}
@@ -572,14 +572,14 @@ function ExecReport({period}){
     <div className="rp-kpis">
       <Kpi l="عدد البايكرز" n={int(s.bikers)}/>
       <Kpi l="إجمالي الغسلات" n={int(s.washes)}/>
-      <Kpi l="متوسط التقييم" n={s.rating!=null?s.rating.toFixed(2):"—"} c={s.rating==null?null:s.rating>=4.75?"#087443":"#c2410c"}/>
-      <Kpi l="الامتثال الميداني" n={s.comp!=null?s.comp+"%":"—"} c={s.comp==null?null:s.comp>=95?"#087443":"#c2410c"}/>
+      <Kpi l="متوسط التقييم" n={s.rating!=null?s.rating.toFixed(2):"—"} c={s.rating==null?null:s.rating>=4.75?"var(--ok-ink)":"var(--p-700)"}/>
+      <Kpi l="الامتثال الميداني" n={s.comp!=null?s.comp+"%":"—"} c={s.comp==null?null:s.comp>=95?"var(--ok-ink)":"var(--p-700)"}/>
     </div>
     <div className="rp-sec-t">الموارد البشرية والحوكمة</div>
     <div className="rp-kpis">
       <Kpi l="متقدّمون هذا الشهر" n={int(s.appsN)}/>
-      <Kpi l="مقبولون" n={int(s.accepted)} c="#087443"/>
-      <Kpi l="مهن غير مطابقة" n={int(s.mism)} c={s.mism?"#b54708":"#087443"}/>
+      <Kpi l="مقبولون" n={int(s.accepted)} c="var(--ok-ink)"/>
+      <Kpi l="مهن غير مطابقة" n={int(s.mism)} c={s.mism?"var(--warn-ink)":"var(--ok-ink)"}/>
       <Kpi l="حصّة إيجار شهرية" n={money(Math.round(s.housM))}/>
     </div>
     <p className="rp-note">تقرير تنفيذي مختصر لفترة {periodAr(period)} — الأرقام المالية تقديرية من العمليات والمصروفات المسجّلة. للتفاصيل راجع التقارير المتخصّصة.</p>
@@ -590,54 +590,54 @@ function ExecReport({period}){
 }
 
 const CSS=`
-.rp{--brand:#E8712B;--ink:#0f172a;--mut:#64748b;--line:#eceef1}
+.rp{--brand:var(--p)}
 .rp *{box-sizing:border-box}
-.rp-intro{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:14px}
+.rp-intro{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:14px}
 .rp-intro b{font-size:15px;font-weight:800;display:block}.rp-intro span{font-size:12px;color:var(--mut)}
 .rp-sec{margin-bottom:16px}
 .rp-sec-h{font-size:12.5px;font-weight:800;color:var(--mut);margin:0 2px 9px}
 .rp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:11px}
-.rp-card{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;font-family:inherit;text-align:right;box-shadow:0 1px 2px rgba(16,24,40,.05)}
-.rp-card:hover:not(.soon){border-color:#f5c9a8;transform:translateY(-1px);transition:.15s}
+.rp-card{display:flex;align-items:center;gap:11px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;font-family:inherit;text-align:right;box-shadow:var(--shadow)}
+.rp-card:hover:not(.soon){border-color:var(--warn);transform:translateY(-1px);transition:.15s}
 .rp-card.soon{opacity:.6;cursor:default}
-.rp-ic{width:40px;height:40px;border-radius:11px;background:#fff2e8;color:var(--brand);display:flex;align-items:center;justify-content:center;flex:none}
+.rp-ic{width:40px;height:40px;border-radius:11px;background:var(--p-100);color:var(--brand);display:flex;align-items:center;justify-content:center;flex:none}
 .rp-card b{font-size:13.5px;font-weight:800;display:block}.rp-card small{font-size:11px;color:var(--mut)}
 .rp-card>div{flex:1;min-width:0}
-.rp-soon{font-size:10px;font-weight:800;background:#f1f3f5;color:#94a3b8;padding:2px 8px;border-radius:20px}
+.rp-soon{font-size:10px;font-weight:800;background:var(--soft);color:var(--mut-2);padding:2px 8px;border-radius:20px}
 .rp-bar{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-.rp-back{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-family:inherit;font-size:12.5px;font-weight:700;color:#334155;cursor:pointer}
+.rp-back{display:inline-flex;align-items:center;gap:5px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--ink-2);cursor:pointer}
 .rp-title{font-size:16px;font-weight:800;flex:1}
-.rp-per{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-weight:700;font-size:12.5px}
+.rp-per{display:flex;align-items:center;gap:7px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-weight:700;font-size:12.5px}
 .rp-per input{border:none;font-family:inherit;font-weight:700;outline:none}.rp-per span{color:var(--mut)}
 .rp-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:14px}
-.rp-kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 15px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.rp-kpi{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:13px 15px;box-shadow:var(--shadow)}
 .rp-kpi span{font-size:11.5px;color:var(--mut);font-weight:700;display:block}
 .rp-kpi b{font-size:20px;font-weight:800;margin-top:5px;display:block;letter-spacing:-.5px}
 .rp-kpi small{font-size:10.5px;color:var(--mut)}
-.rp-panel{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(16,24,40,.05);margin-bottom:14px;overflow:hidden}
+.rp-panel{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
 .rp-ph{font-size:13.5px;font-weight:800;padding:13px 16px;border-bottom:1px solid var(--line)}
 .rp-bars{display:flex;flex-direction:column;gap:9px;padding:15px 16px}
 .rp-brow{display:grid;grid-template-columns:150px 1fr 90px;align-items:center;gap:10px;font-size:12px}
-.rp-bl{color:#334155;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rp-bt{height:22px;background:#f1f3f5;border-radius:7px;overflow:hidden}
-.rp-bt div{height:100%;border-radius:7px;background:linear-gradient(90deg,var(--brand),#f5a35f)}
-.rp-bv{font-weight:800;text-align:left;color:#0f172a}
+.rp-bl{color:var(--ink-2);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-bt{height:22px;background:var(--soft);border-radius:7px;overflow:hidden}
+.rp-bt div{height:100%;border-radius:7px;background:linear-gradient(90deg,var(--brand),var(--a))}
+.rp-bv{font-weight:800;text-align:left;color:var(--ink)}
 .rp-tblwrap{overflow-x:auto}
 .rp-tbl{width:100%;border-collapse:collapse;min-width:520px}
-.rp-tbl th{font-size:11px;color:var(--mut);font-weight:700;text-align:right;padding:10px 14px;border-bottom:2px solid var(--line);background:#fafbfc;white-space:nowrap}
-.rp-tbl td{padding:10px 14px;border-bottom:1px solid #f1f3f5;font-size:12.5px}
+.rp-tbl th{font-size:11px;color:var(--mut);font-weight:700;text-align:right;padding:10px 14px;border-bottom:2px solid var(--line);background:var(--soft);white-space:nowrap}
+.rp-tbl td{padding:10px 14px;border-bottom:1px solid var(--line);font-size:12.5px}
 .rp-tbl tr:last-child td{border-bottom:none}
 .rp-badge{font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:20px}
-.rp-empt{text-align:center;color:#94a3b8;padding:20px}
-.rp-empty{text-align:center;color:#cbd5e1;padding:32px}.rp-empty p{color:#94a3b8;font-size:13px;margin-top:8px}
+.rp-empt{text-align:center;color:var(--mut-2);padding:20px}
+.rp-empty{text-align:center;color:var(--mut-2);padding:32px}.rp-empty p{color:var(--mut-2);font-size:13px;margin-top:8px}
 .rp-scope{display:flex;align-items:center;gap:8px;margin-bottom:12px}
-.rp-scope button{background:#fff;border:1px solid var(--line);border-radius:20px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:700;color:var(--mut);cursor:pointer}
-.rp-scope button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.rp-scope button{background:var(--glass-2);border:1px solid var(--line);border-radius:20px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:700;color:var(--mut);cursor:pointer}
+.rp-scope button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .rp-scope b{font-size:13px}
 .rp-exp{display:flex;gap:8px;flex-wrap:wrap}
-.rp-exp button{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12.5px;font-weight:700;color:#334155;cursor:pointer}
-.rp-note{font-size:11.5px;color:#94a3b8;margin:0 2px 14px;line-height:1.7}
-.rp-cmp-h{display:flex;align-items:center;gap:10px;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:14px;font-size:13px;font-weight:700}
+.rp-exp button{display:inline-flex;align-items:center;gap:6px;background:var(--glass-2);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--ink-2);cursor:pointer}
+.rp-note{font-size:11.5px;color:var(--mut-2);margin:0 2px 14px;line-height:1.7}
+.rp-cmp-h{display:flex;align-items:center;gap:10px;justify-content:center;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:14px;font-size:13px;font-weight:700}
 .rp-cmp-h span{color:var(--mut)}.rp-cmp-h b{font-size:14px;color:var(--brand)}
 .rp-sec-t{font-size:12.5px;font-weight:800;color:var(--brand);margin:4px 2px 10px;padding-inline-start:8px;border-inline-start:3px solid var(--brand)}
 @media(max-width:820px){.rp-kpis{grid-template-columns:1fr 1fr}.rp-brow{grid-template-columns:110px 1fr 70px}}
