@@ -40,9 +40,6 @@ const GosiTracker=lazy(()=>import("./GosiTracker"));
 const JobAdManager=lazy(()=>import("./JobAdManager"));
 const BikerPortal=lazy(()=>import("./BikerPortal"));
 const SUPERVISOR_POS=["sec_ops","ops1","field_sup"];
-// الصفحات المنقولة إلى نظام التصميم الزجاجي (تتبع الوضع الداكن). غير المنقولة تُعرض كجزيرة فاتحة حتى نقلها.
-// migrated pages follow the theme; others render inside a light island until migrated (Phase 1/2)
-const GLASS_READY=new Set(["dashboard","field_rounds","supply_requests","complaints","payroll","operations","employees","recruitment","supply","renewals","fleet","housing","custody","performance","settlement","reconciliation","reports","vendors","damage_claims","incidents","onboarding","offboarding","interviews","sourcing","org","myteam","job_ad","users","gosi","pricing","audit","tma"]);
 
 const NAV=[
   {g:"الرئيسية"},
@@ -135,7 +132,7 @@ export default function Shell({onLogout,me}){
           {menu&&<div className="sh-menu">{owner&&<div className="sh-mi" onClick={()=>{setMenu(false);go("users");}}><Icon n="users" s={16}/> المستخدمون</div>}<div className="sh-mi" onClick={onLogout}><Icon n="logout" s={16}/> تسجيل الخروج</div></div>}
         </div>
       </header>
-      <div className={"sh-content"+(GLASS_READY.has(view)?" g-ready":"")}>
+      <div className="sh-content">
         {view==="dashboard"&&<DashboardHome onNav={go} theme={sbTheme}/>}
         {view==="job_ad"&&<Suspense fallback={<Sk/>}><JobAdManager/></Suspense>}
         {view==="recruitment"&&<Suspense fallback={<Sk/>}><AdminDashboard embedded section="applicants" onLogout={onLogout}/></Suspense>}
@@ -213,8 +210,6 @@ const CSS=`
 .sh-content{padding:20px;max-width:1200px;width:100%;margin:0 auto}
 .sh-embed{margin:-20px;}
 /* جزيرة فاتحة للصفحات غير المنقولة بعد — تُحذف هذه القاعدة عند اكتمال النقل */
-.sh-content:not(.g-ready){--bg:#f4f5f7;--bg-2:#eceef1;--panel:#fff;--ink:#0f172a;--ink-2:#1e293b;--mut:#64748b;--mut-2:#94a3b8;--line:#eceef1;--line-2:#e6e9ee;--line2:#e6e9ee;--track:#eef0f3;--soft:#f4f5f7;--hover:#fafbfc;--glass:#fff;--glass-2:#fff;--glass-3:#fff;--p-100:#FFE6D6;--p-50:#FFF4EC;--ok-bg:#e7f7ef;--ok-ink:#087443;--warn-bg:#fff3e2;--warn-ink:#b54708;--bad-bg:#feecea;--bad-ink:#b42318;--info-bg:#eef4ff;--info-ink:#1d5bbf;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);color:var(--ink);color-scheme:light}
-:root[data-theme=dark] .sh-content:not(.g-ready){background:var(--bg);border-radius:var(--r-lg);box-shadow:0 0 0 1px rgba(255,255,255,.08);margin:12px auto;padding:20px;max-width:calc(1200px - 24px)}
 .sh-soonbox{background:var(--glass);backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:var(--r);padding:48px 24px;text-align:center;box-shadow:var(--shadow)}
 .sh-soonic{width:64px;height:64px;border-radius:18px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;background:var(--p-100);color:var(--brand)}
 .sh-soonbox h2{font-size:18px;margin:0 0 8px}.sh-soonbox p{color:var(--mut);font-size:13px;max-width:420px;margin:0 auto;line-height:1.7}
