@@ -6,7 +6,8 @@ import{bikerScore,rankBikers,trend,teamSummary,monthDelta,nextHints,bikerBrief,L
 import{dailySVG,sparkSVG}from"./perfCharts";
 import{periodAr,downloadCardPdf}from"./perfExport";
 import{waPhone}from"./renewalsLib";
-import{honorData,honorHTML,shareHonor,downloadHonor}from"./honorCard";
+import{honorData,honorHTML,shareHonor,downloadHonor,honorPNG,honorFileName}from"./honorCard";
+import{downloadBlob}from"./exportKit";
 import{ensureFonts}from"./exportKit";
 
 // لوحة إنتاجية البايكر — بطاقة الأداء الشهرية (HR-POL-003 عبر scorecard.js/payrollEngine.js)
@@ -54,20 +55,22 @@ export default function Performance({opId,onNav}){
     const prevP=shift(period,-1);
     let emps=await safe(supabase.from("employees").select("id,full_name,employee_id,team_id,staff_role,mobile,applicant_id").not("employee_id","is",null));
     if(emps.error)emps=await safe(supabase.from("employees").select("id,full_name,employee_id,team_id,mobile").not("employee_id","is",null));
-    const[teams,ops,rounds,viol,tickets,runs,settle]=await Promise.all([
+    const[teams,ops,rounds,viol,tickets,runs]=await Promise.all([
       safe(supabase.from("teams").select("id,name")),
       safe(opF(supabase.from("ops_biker_month").select("*").in("period",months))),
       safe(opF(supabase.from("field_rounds").select("id,sweater_id,round_date,compliance_pct,effect,status")).gte("round_date",months[0]+"-01").lte("round_date",monthEnd(period)).order("round_date",{ascending:false})),
       safe(opF(supabase.from("violations").select("id,sweater_id,period,status,fine_applied,code")).eq("period",period).eq("status","confirmed")),
       safe(opF(supabase.from("ops_tickets").select("sweater_id,ticket_date,decision")).gte("ticket_date",period+"-01").lte("ticket_date",monthEnd(period))),
       safe(opF(supabase.from("payroll_runs").select("id").eq("period",period)).limit(1)),
-      safe(opF(supabase.from("sweater_settlement_lines").select("*").eq("period",period))),
     ]);
+    // تسوية سويتر للشهر من العرض settlement_lines_v (period + sweater_id للبايكرز الظاهرين)
+    const sids=[...new Set((ops.data||[]).filter(o=>o.period===period&&o.sweater_id!=null).map(o=>sidOf(o.sweater_id)))];
+    const settle=sids.length?await safe(supabase.from("settlement_lines_v").select("period,sweater_id,employee_id,biker_name,orders,rating,tier,unit_price,base_amount,incentive,deduction,net,settlement_status").eq("period",period).in("sweater_id",sids)):{data:[]};
     let lines=[];if(runs.data&&runs.data[0]){const r=await safe(supabase.from("payroll_lines").select("*").eq("run_id",runs.data[0].id));lines=r.data||[];}
     const photos={};const appIds=(emps.data||[]).map(e=>e.applicant_id).filter(Boolean);
     if(appIds.length){const a=await safe(supabase.from("applicants").select("id,personal_photo_url").in("id",appIds));(a.data||[]).forEach(x=>{if(x.personal_photo_url)photos[x.id]=x.personal_photo_url;});}
     setD({period,prevP,months,emps:emps.data||[],teams:teams.data||[],ops:ops.data||[],rounds:rounds.data||[],viol:viol.data||[],tickets:tickets.data||[],lines,settle:settle.data||[],photos,
-      missing:[["ops_tickets",tickets.error],["sweater_settlement_lines",settle.error],["applicants",null]].filter(x=>x[1]).map(x=>x[0])});
+      missing:[["ops_tickets",tickets.error],["settlement_lines_v",settle.error],["applicants",null]].filter(x=>x[1]).map(x=>x[0])});
     setLoading(false);
   })();},[period,opF]);
 
@@ -77,7 +80,7 @@ export default function Performance({opId,onNav}){
     const empBySid={};D.emps.forEach(e=>{empBySid[sidOf(e.employee_id)]=e;});
     const teamName={};D.teams.forEach(t=>{teamName[t.id]=t.name;});
     const lineBySid={};D.lines.filter(l=>!l.role||l.role==="biker").forEach(l=>{const c=l.computed||{};const k=sidOf(l.biker_id||c.biker_id);if(k)lineBySid[k]=l;});
-    const setBySid={};D.settle.forEach(x=>{const k=sidOf(x.sweater_id||x.biker_id||x.employee_id);if(k)setBySid[k]=x;});
+    const setBySid={};D.settle.forEach(x=>{const k=sidOf(x.sweater_id);if(k)setBySid[k]=x;});
     const by=(arr,k)=>{const m={};arr.forEach(x=>{const s=sidOf(x[k]);if(!s)return;(m[s]=m[s]||[]).push(x);});return m;};
     const rBy=by(D.rounds,"sweater_id"),vBy=by(D.viol,"sweater_id"),tBy=by(D.tickets,"sweater_id");
     const opsBy={};D.ops.forEach(o=>{const s=sidOf(o.sweater_id);if(!s)return;(opsBy[s]=opsBy[s]||{})[o.period]=o;});
@@ -134,10 +137,12 @@ export default function Performance({opId,onNav}){
   const hd=(s,variant)=>honorData(s,{name:s.name,nameAr:s.emp&&(s.emp.full_name_ar||s.emp.name_ar),photo:s.photo,prev:s.prev,isTop:s.isTop,variant});
   const hShare=async(s,v)=>{setBusy("honor");try{const r=await shareHonor(hd(s,v));toast.ok(r==="shared"?"تمت المشاركة":r==="cancelled"?"أُلغيت المشاركة":"تم تنزيل الصورة");}catch(e){toast.bad("تعذّر إنشاء البطاقة",String(e.message||e));}setBusy("");};
   const hDown=async(s,v)=>{setBusy("honor");try{await downloadHonor(hd(s,v));toast.ok("تم تنزيل بطاقة "+s.name);}catch(e){toast.bad("تعذّر إنشاء البطاقة",String(e.message||e));}setBusy("");};
-  // بطاقات الشهر لكل البايكرز — تنزيل متتابع (JSZip غير مثبّت في المشروع)
+  // بطاقات الشهر لكل البايكرز — ملف zip واحد (JSZip يُحمَّل عند الحاجة)
   const allCards=async()=>{if(!M||!M.list.length)return;setBusy("all");
-    try{for(let i=0;i<M.list.length;i++){const s=M.list[i];setBusy(`all:${i+1}/${M.list.length}`);await downloadHonor(hd(s,"honor"));await new Promise(r=>setTimeout(r,450));}
-      toast.ok(`تم تنزيل ${M.list.length} بطاقة`,"قد يطلب المتصفح السماح بتنزيل ملفات متعددة");}
+    try{const{default:JSZip}=await import("jszip");const zip=new JSZip();
+      for(let i=0;i<M.list.length;i++){const s=M.list[i];setBusy(`all:${i+1}/${M.list.length}`);const d=hd(s,"honor");zip.file(honorFileName(d),await honorPNG(d));}
+      setBusy("all:zip");const blob=await zip.generateAsync({type:"blob",compression:"STORE"});
+      downloadBlob(blob,`honor-cards-${period}.zip`);toast.ok(`تم تنزيل ${M.list.length} بطاقة في ملف واحد`);}
     catch(e){toast.bad("توقّف التوليد",String(e.message||e));}setBusy("");};
   const goRounds=s=>{onNav&&onNav("field_rounds");setTimeout(()=>window.dispatchEvent(new CustomEvent("dw:open",{detail:{view:"field_rounds",table:"field_rounds",id:s.rounds[0]&&s.rounds[0].id,sweater_id:s.sid}})),300);};
 
@@ -147,7 +152,7 @@ export default function Performance({opId,onNav}){
       <label className="pf-month"><Icon n="calendar" s={16}/><input type="month" value={period} onChange={e=>e.target.value&&setPeriod(e.target.value)}/></label>
       <span className="pf-plabel">{periodAr(period)}{opId&&opId!=="all"?" · مشغّل محدّد":""}</span>
       <div style={{flex:1}}/>
-      {M.list.length>0&&<button className="g-btn" onClick={allCards} disabled={!!busy} title="بطاقة تكريم PNG لكل بايكر (تنزيل متتابع)"><Icon n="star" s={15}/> {busy.startsWith("all")?`جارٍ التوليد ${busy.slice(4)}`:"بطاقات الشهر"}</button>}
+      {M.list.length>0&&<button className="g-btn" onClick={allCards} disabled={!!busy} title="بطاقة تكريم PNG لكل بايكر في ملف zip واحد"><Icon n="star" s={15}/> {busy==="all:zip"?"جارٍ الضغط…":busy.startsWith("all")?`جارٍ التوليد ${busy.slice(4)}`:"بطاقات الشهر"}</button>}
     </div>
 
     {M.list.length===0?<div className="g-card"><Empty icon={<Icon n="performance" s={26}/>} title={`لا بيانات أداء في ${periodAr(period)}`} text="الأداء يُبنى من تقرير سويتر الشهري (الغسلات والتقييم والشكاوى). ارفع التقرير في العمليات اليومية.">
