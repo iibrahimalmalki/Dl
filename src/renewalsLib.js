@@ -82,3 +82,18 @@ export function buildICS(docs,{today=new Date(),horizon=120}={}){
   L.push("END:VCALENDAR");
   return L.map(fold).join("\r\n")+"\r\n";
 }
+
+// ── توجيه رسائل الوثائق حسب تسلسل الصلاحيات (orgRoles.js) ──
+// الوثائق الشخصية ← مدير الموارد البشرية (su1)؛ المركبات وغيرها ← مدير الدعم اللوجستي (su2، صاحب صلاحية «الوثائق»)
+// ثم مدير الخدمات المساندة (sec_sup)، وأخيراً المالك.
+export const PERSONAL_DOCS=["إقامة","رخصة عمل","جواز سفر","تأمين صحي","رخصة قيادة"];
+export const ROUTE_DEPT={su1:{ar:"الموارد البشرية",bn:"এইচআর"},su2:{ar:"الدعم اللوجستي",bn:"লজিস্টিক"},sec_sup:{ar:"الخدمات المساندة",bn:"সাপোর্ট সার্ভিস"},owner:{ar:"الإدارة",bn:"অফিস"}};
+export const routeFor=docType=>PERSONAL_DOCS.includes(docType)?["su1","sec_sup"]:["su2","sec_sup"];
+// holders: [{position,display_name,mobile}] — أول منصب في السلسلة له جوال، وإلا المالك
+export function pickContact(docType,holders,ownerWa){
+  for(const pos of routeFor(docType)){
+    const h=(holders||[]).find(x=>x.position===pos&&waPhone(x.mobile));
+    if(h)return{pos,name:h.display_name||"",wa:waPhone(h.mobile),dept:ROUTE_DEPT[pos]};
+  }
+  return{pos:"owner",name:"",wa:ownerWa,dept:ROUTE_DEPT.owner};
+}

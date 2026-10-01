@@ -43,4 +43,12 @@ ok('حدث يوم كامل',ics.includes('DTSTART;VALUE=DATE:20261020')&&ics.inc
 ok('العنوان «انتهاء النوع — الموضوع»',ics.replace(/\r\n /g,'').includes('SUMMARY:انتهاء إقامة — Rahim Uddin'));
 ok('هروب الفواصل',ics.replace(/\r\n /g,'').includes('Karim\\, Ali\\; X'));
 ok('أسطر CRLF ≤75 بايت',ics.split('\r\n').every(l=>new TextEncoder().encode(l).length<=75));
+
+// توجيه الرسالة حسب تسلسل الصلاحيات
+const H=[{position:'su1',display_name:'مدير HR',mobile:'0550000001'},{position:'su2',display_name:'مدير اللوجستي',mobile:''},{position:'sec_sup',display_name:'مدير المساندة',mobile:'0550000003'}];
+const OW='966566884419';
+ok('الإقامة ← الموارد البشرية',L.pickContact('إقامة',H,OW).pos==='su1'&&L.pickContact('إقامة',H,OW).wa==='966550000001');
+ok('رخصة العمل ← الموارد البشرية',L.pickContact('رخصة عمل',H,OW).pos==='su1');
+ok('تأمين مركبة بلا جوال للوجستي ← الخدمات المساندة',L.pickContact('تأمين مركبة',H,OW).pos==='sec_sup');
+ok('لا أحد ← المالك',L.pickContact('إقامة',[],OW).pos==='owner'&&L.pickContact('إقامة',[],OW).wa===OW);
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

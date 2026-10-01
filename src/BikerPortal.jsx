@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import TOOLREFS from "./toolRefs";
 import { ThemeToggle, Orbs, useToast } from "./ui";
-import { daysLeft, docStatus, docBn, dayText, dayTextBn } from "./renewalsLib";
+import { daysLeft, docStatus, docBn, dayText, dayTextBn, pickContact } from "./renewalsLib";
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
     هوية دلو ورغوة (برتقالي) · ثنائية اللغة (عربي + বাংলা)
@@ -97,6 +97,8 @@ const CSS = `
 .bp-dbadge b{font-weight:800}.bp-doc-h .bp-dbadge .bn{color:inherit;font-size:11px;font-weight:600}
 .bp-doc .m{font-size:12.5px;color:var(--mut)}.bp-doc .m b{color:var(--ink);direction:ltr;unicode-bidi:isolate}
 .bp-btn.bp-call{margin-top:10px;min-height:46px;padding:11px;font-size:14px}
+.bp-btn.bp-wa{background:linear-gradient(135deg,#128C7E,#075E54);box-shadow:0 8px 20px -10px rgba(7,94,84,.9)}
+.bp-btn.bp-wa small{display:block;font-size:11.5px;font-weight:700;margin-top:2px}
 .bp-ntf.un{border-color:rgba(var(--p-rgb),.45);background:var(--p-50)}
 `;
 
@@ -319,7 +321,16 @@ function Docs({ me }) {
   const [docs, setDocs] = useState(null);
   const [notes, setNotes] = useState([]);
   const [reads, setReads] = useState({});
+  const [holders, setHolders] = useState([]);
   useEffect(() => { (async () => {
+    // أصحاب المناصب المسؤولة (الموارد البشرية/الدعم اللوجستي/الخدمات المساندة) وجوالاتهم — لتوجيه رسالة واتساب
+    try {
+      const { data: us } = await supabase.from("app_users").select("id,display_name,position")
+        .in("position", ["su1", "su2", "sec_sup"]).eq("active", true);
+      const ids = (us || []).map(u => u.id);
+      const { data: em } = ids.length ? await supabase.from("employees").select("user_id,mobile").in("user_id", ids) : { data: [] };
+      setHolders((us || []).map(u => ({ ...u, mobile: ((em || []).find(e => e.user_id === u.id) || {}).mobile })));
+    } catch (e) {}
     // RLS (renewal_docs_self_sel) يعيد وثائق هذا البايكر فقط
     const { data } = await supabase.from("renewal_docs")
       .select("id,doc_type,subject,end_date,ref_no,active").eq("active", true).order("end_date", { ascending: true });
@@ -343,9 +354,12 @@ function Docs({ me }) {
       }
     }
   })(); }, [me.uid]);
-  const callAdmin = d => {
-    const txt = `السلام عليكم، أنا ${me.name || ""} (رقم ${me.biker_employee_id}). وثيقة ${d.doc_type} تنتهي ${d.end_date || ""} — أحتاج المساعدة في التجديد.\nআমার ${docBn(d.doc_type)} ${d.end_date || ""} তারিখে শেষ হবে — নবায়নে সাহায্য প্রয়োজন।`;
-    window.open("https://wa.me/" + ADMIN_WA + "?text=" + encodeURIComponent(txt), "_blank");
+  // رسالة واتساب تُوجَّه حسب تسلسل الصلاحيات: الوثائق الشخصية ← الموارد البشرية، وغيرها ← الدعم اللوجستي، ثم الخدمات المساندة، ثم المالك
+  const msgFor = d => {
+    const c = pickContact(d.doc_type, holders, ADMIN_WA);
+    const txt = `السلام عليكم ${c.name ? "أ. " + c.name : ""} — ${c.dept.ar}\nأنا ${me.name || ""} (رقم البايكر ${me.biker_employee_id}). وثيقة ${d.doc_type} تنتهي بتاريخ ${d.end_date || ""} (${dayText(d._d)}). أرجو توجيهي لإجراءات التجديد.\n` +
+      `আসসালামু আলাইকুম। আমি ${me.name || ""} (নম্বর ${me.biker_employee_id})। আমার ${docBn(d.doc_type)} ${d.end_date || ""} তারিখে শেষ হবে (${dayTextBn(d._d)})। নবায়নের জন্য নির্দেশনা দিন।`;
+    window.open("https://wa.me/" + c.wa + "?text=" + encodeURIComponent(txt), "_blank");
   };
   const fmt = d => d ? new Date(d + "T00:00:00").toLocaleDateString("en-GB") : "—";
   return (
@@ -369,7 +383,8 @@ function Docs({ me }) {
               <span className={"g-badge bp-dbadge " + st.tone}><b>{dayText(d._d)}</b><span className="bn">{dayTextBn(d._d)}</span></span>
             </div>
             <div className="m">تاريخ الانتهاء · <span className="bn">মেয়াদ শেষ</span>: <b>{fmt(d.end_date)}</b>{d.ref_no ? " · " + d.ref_no : ""}</div>
-            {d._d != null && d._d <= 14 && <button className="bp-btn bp-call" onClick={() => callAdmin(d)}>📞 اتصال بالإدارة · <span className="bn">অফিসে যোগাযোগ</span></button>}
+            {d._d != null && d._d <= 14 && (() => { const c = pickContact(d.doc_type, holders, ADMIN_WA); return (
+              <button className="bp-btn bp-call bp-wa" onClick={() => msgFor(d)}>💬 رسالة واتساب إلى {c.dept.ar} · <span className="bn">{c.dept.bn}-কে হোয়াটসঅ্যাপ</span>{c.name && <small>{c.name}</small>}</button>); })()}
           </div>); })}
       </div></div>
     </div>
