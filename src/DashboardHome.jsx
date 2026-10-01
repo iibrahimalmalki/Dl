@@ -3,6 +3,8 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{payoutForBiker}from"./sweaterContract";
 import{bikerScore,trend}from"./scorecard";
+import DashHero from"./DashHero";
+import{usePeriod}from"./period";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
 const MN=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
@@ -35,6 +37,9 @@ export default function DashboardHome({onNav,theme="light"}){
   const[gran,setGran]=useState("month");        // شهري/يومي (اللوحة المالية)
   const[fBiker,setFBiker]=useState("");         // فلتر البايكر
   const[fCat,setFCat]=useState("");             // فلتر الفئة المالية
+  const[period,setPeriod]=usePeriod();          // الفترة المشتركة (البطل والمساعد)
+  // مزامنة نطاق اللوحات التفصيلية مع الفترة المشتركة: الربع ← آخر 3 أشهر، وغيره ← الشهر الحالي
+  useEffect(()=>{setPreset(period==="quarter"?"m3":"this");},[period]);
 
   useEffect(()=>{(async()=>{
     const q=(t,c)=>supabase.from(t).select(c).then(({data})=>data||[]).then(x=>x,()=>[]);
@@ -48,7 +53,7 @@ export default function DashboardHome({onNav,theme="light"}){
       q("ops_biker_month","period,sweater_id,biker_name,net_washes,rating,complaint_pct,approved_complaints"),
       q("payroll_lines","period,role,total"),
       q("violations","status,severity,fine_applied"),
-      q("field_rounds","compliance_pct,period,status"),
+      q("field_rounds","compliance_pct,period,status,round_date"),
       q("vendor_expenses","exp_date,amount"),
       q("renewal_docs","doc_type,subject,end_date,active"),
       q("fleet_vehicles","plate,status,has_gps,has_camera,active"),
@@ -279,6 +284,9 @@ export default function DashboardHome({onNav,theme="light"}){
   return(<div className="dh" data-theme={theme}>
     <style>{CSS}</style>
     <div className="dh-orbs" aria-hidden><span className="dh-orb a"/><span className="dh-orb b"/><span className="dh-orb c"/></div>
+
+    {/* البطل: الغسلات + الالتزام + المؤشرات الأساسية للفترة المشتركة */}
+    <DashHero d={d} period={period} onPeriod={setPeriod} onNav={nav}/>
 
     {/* شريط النطاق الزمني + الفلاتر */}
     <div className="dh-period">
@@ -554,6 +562,26 @@ function Leg({c,t,v}){return(<div style={{display:"flex",alignItems:"center",gap
 // ── التصميم الزجاجي (Glass) — فاتح افتراضياً، داكن عبر data-theme="dark" ──
 // كل الألوان عبر رموز --dh-* حتى تعمل البطاقات في السمتين. الهوية: برتقالي #E8712B/#F59E0B، وردي #FB7185، navy #0A0E27.
 const CSS=`
+/* ── البطل ── */
+.dh-hero{padding:18px 20px;margin-bottom:14px}
+.dh-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.dh-hero-k{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:var(--ink-2)}
+.dh-hero-r{font-size:12px;color:var(--mut);margin-top:3px}.dh-hero-r span{color:var(--mut-2)}
+.dh-hero-na{color:var(--mut);font-size:13px;margin:8px 0 2px}
+.dh-hero-body{display:grid;grid-template-columns:minmax(0,1.3fr) auto minmax(0,1.5fr);gap:22px;align-items:center}
+.dh-hero-n{font-size:clamp(48px,7vw,76px);font-weight:800;line-height:1;letter-spacing:-2px;background:linear-gradient(135deg,var(--a),var(--p));-webkit-background-clip:text;background-clip:text;color:transparent}
+.dh-hd{display:inline-block;margin-top:8px;font-size:12px;font-weight:800}.dh-hd.up{color:var(--ok-ink)}.dh-hd.down{color:var(--bad-ink)}.dh-hd.n{color:var(--mut)}
+.dh-hero-g{background:none;border:none;padding:0;cursor:pointer;border-radius:50%;font-family:inherit;color:inherit}
+.dh-hero-g:focus-visible,.dh-hm-i:focus-visible{outline:none;box-shadow:var(--glow)}
+.dh-hero-mini{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.dh-hm-i{display:flex;flex-direction:column;gap:3px;text-align:start;background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit;color:var(--ink);transition:transform .2s var(--ease),border-color .2s var(--ease)}
+.dh-hm-i:hover{transform:translateY(-2px);border-color:rgba(var(--p-rgb),.35)}
+.dh-hm-l{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--mut)}
+.dh-hm-i b{font-size:21px;font-weight:800;letter-spacing:-.4px}.dh-hm-i b.t-ok{color:var(--ok-ink)}.dh-hm-i b.t-warn{color:var(--warn-ink)}.dh-hm-i b.t-bad{color:var(--bad-ink)}
+.dh-hm-i small{font-size:11px;color:var(--mut)}.dh-hm-i .dh-hd{margin-top:0;font-size:11px}
+@media(max-width:1000px){.dh-hero-body{grid-template-columns:1fr auto}.dh-hero-mini{grid-column:1/-1}}
+@media(max-width:560px){.dh-hero{padding:15px}.dh-hero-body{grid-template-columns:1fr;justify-items:center;text-align:center;gap:14px}.dh-hero-mini{grid-template-columns:1fr 1fr 1fr;gap:7px}.dh-hm-i{padding:9px 8px}.dh-hm-i b{font-size:17px}.dh-hero-top{justify-content:center;text-align:center}}
+
 .dh{position:relative;overflow-x:clip;max-width:100%;--dh-bg:#F5F6FA;--dh-glass:rgba(255,255,255,.66);--dh-glass2:rgba(255,255,255,.82);--dh-line:rgba(15,23,42,.09);--dh-ink:#0F172A;--dh-mut:#64748B;--dh-mut2:#94A3B8;--dh-track:#EEF1F4;--dh-soft:rgba(15,23,42,.04);--dh-hero:linear-gradient(135deg,#0f2a43,#1a3f5f);--dh-shadow:0 10px 30px -18px rgba(15,23,42,.25);--p:#E8712B;--p-rgb:232,113,43;--a:#F59E0B;--s:#FB7185;color:var(--dh-ink)}
 .dh[data-theme=dark]{--dh-bg:#0A0E27;--dh-glass:rgba(255,255,255,.07);--dh-glass2:rgba(255,255,255,.10);--dh-line:rgba(255,255,255,.13);--dh-ink:#F8FAFC;--dh-mut:#A3AFC2;--dh-mut2:#7C8AA0;--dh-track:rgba(255,255,255,.10);--dh-soft:rgba(255,255,255,.06);--dh-hero:linear-gradient(135deg,rgba(15,23,42,.9),rgba(23,33,52,.9));--dh-shadow:0 10px 40px -18px rgba(0,0,0,.7)}
 /* الكرات الضبابية خلف اللوحة */
