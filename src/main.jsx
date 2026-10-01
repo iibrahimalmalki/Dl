@@ -1,6 +1,9 @@
 import React,{useState,useEffect,lazy,Suspense}from"react";
 import ReactDOM from"react-dom/client";
+import"./theme.css";
 import{supabase}from"./supabase";
+import{ThemeProvider}from"./theme";
+import{ToastProvider,ThemeToggle}from"./ui";
 import LandingPage from"./LandingPage";
 import EmployeePage from"./EmployeePage";
 import RecruitmentAd from"./RecruitmentAd";
@@ -9,7 +12,7 @@ const InterviewPage=lazy(()=>import("./InterviewPage"));
 const TMAQuestionnaire=lazy(()=>import("./TMAQuestionnaire"));
 const Shell=lazy(()=>import("./Shell"));
 const BikerPortal=lazy(()=>import("./BikerPortal"));
-const Spin=()=><div style={{minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:40,height:40,border:"3px solid #fed7aa",borderTopColor:"#E8712B",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/></div>;
+const Spin=()=><div style={{minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--bg)"}}><div className="g-spin" style={{width:40,height:40}}/></div>;
 
 // ═══ تسجيل الدخول عبر Supabase Auth (بريد + كلمة مرور) — استبدل كلمة المرور المكتوبة ═══
 function Login(){
@@ -20,8 +23,11 @@ function Login(){
     setBusy(false);
     if(error)setErr("بيانات الدخول غير صحيحة");
   };
-  const inp={width:"100%",padding:"13px 16px",border:"2px solid #e2e8f0",borderRadius:14,fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:10,direction:"ltr",textAlign:"left"};
-  return(<div style={{minHeight:"100dvh",background:"linear-gradient(160deg,#fff7ed,#fff)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Tahoma,sans-serif"}}><div style={{background:"#fff",borderRadius:24,padding:"40px 32px",width:"100%",maxWidth:360,boxShadow:"0 8px 40px rgba(232,113,43,0.15)",textAlign:"center"}}><img src="/brand-logo.png" alt="دلو ورغوة" style={{width:180,maxWidth:"70%",height:"auto",margin:"0 auto 14px",display:"block"}}/><div style={{color:"#1e293b",fontSize:18,fontWeight:900,marginBottom:18}}>لوحة التحكم</div><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="البريد الإلكتروني" style={inp}/><input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} placeholder="كلمة المرور" style={inp}/>{err&&<div style={{color:"#dc2626",fontSize:12,marginBottom:8}}>{err}</div>}<button onClick={go} disabled={busy} style={{width:"100%",padding:13,background:"linear-gradient(135deg,#E8712B,#CC5200)",border:"none",borderRadius:14,color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer",opacity:busy?.6:1}}>{busy?"جاري الدخول...":"دخول →"}</button></div></div>);
+  const inp={padding:"13px 16px",fontSize:15,marginBottom:10,direction:"ltr",textAlign:"left"};
+  return(<div style={{minHeight:"100dvh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font)",position:"relative",padding:16}}>
+    <div className="g-orbs" aria-hidden><span className="g-orb a"/><span className="g-orb b"/><span className="g-orb c"/></div>
+    <div style={{position:"absolute",top:14,insetInlineStart:14,zIndex:2}}><ThemeToggle/></div>
+    <div className="g-card pad" style={{borderRadius:24,padding:"40px 32px",width:"100%",maxWidth:360,textAlign:"center",position:"relative",zIndex:1}}><img src="/brand-logo.png" alt="دلو ورغوة" style={{width:180,maxWidth:"70%",height:"auto",margin:"0 auto 14px",display:"block"}}/><div style={{color:"var(--ink)",fontSize:18,fontWeight:900,marginBottom:4}}>لوحة التحكم</div><div style={{color:"var(--mut)",fontSize:12,marginBottom:18}}>المنصة التشغيلية · دلو ورغوة</div><input className="g-input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="البريد الإلكتروني" style={inp}/><input className="g-input" type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} placeholder="كلمة المرور" style={inp}/>{err&&<div style={{color:"var(--bad-ink)",fontSize:12,marginBottom:8}}>{err}</div>}<button className="g-btn primary block" onClick={go} disabled={busy} style={{padding:13,fontSize:14,fontWeight:800}}>{busy?"جاري الدخول...":"دخول →"}</button></div></div>);
 }
 
 function App(){
@@ -79,4 +85,6 @@ function App(){
     {page==="admin"&&adminView()}
   </Suspense>);
 }
-ReactDOM.createRoot(document.getElementById("root")).render(<React.StrictMode><App/></React.StrictMode>);
+ReactDOM.createRoot(document.getElementById("root")).render(<React.StrictMode><ThemeProvider><ToastProvider><App/></ToastProvider></ThemeProvider></React.StrictMode>);
+// ═══ PWA: تسجيل عامل الخدمة في الإنتاج فقط (تثبيت المنصة على الجوال + كاش الأصول) ═══
+if(import.meta.env.PROD&&"serviceWorker"in navigator){window.addEventListener("load",()=>{navigator.serviceWorker.register("/sw.js").catch(()=>{});});}

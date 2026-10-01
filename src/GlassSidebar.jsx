@@ -26,7 +26,7 @@ const readStored=()=>{try{const v=localStorage.getItem(STORE);return v==null?nul
 const writeStored=v=>{try{localStorage.setItem(STORE,v?"1":"0");}catch(_){}};
 const initials=n=>String(n||"").trim().split(/\s+/).slice(0,2).map(s=>s[0]||"").join("")||"—";
 
-export default function GlassSidebar({items,active,onGo,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
+export default function GlassSidebar({items,active,onGo,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,onSearch,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
   const bp=useBreakpoint();const reduce=useReducedMotion();
   const[collapsed,setCollapsed]=useState(()=>readStored()??false);
   const[openState,setOpenState]=useState(false);
@@ -43,10 +43,10 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
   useEffect(()=>{
     const onKey=e=>{
       if(e.key==="Escape"&&open){setOpen(false);return;}
-      if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();if(isDocked&&collapsed)setCollapsed(false);setTimeout(()=>searchRef.current&&searchRef.current.focus(),50);}
+      if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();if(onSearch){onSearch();return;}if(isDocked&&collapsed)setCollapsed(false);setTimeout(()=>searchRef.current&&searchRef.current.focus(),50);}
     };
     window.addEventListener("keydown",onKey);return()=>window.removeEventListener("keydown",onKey);
-  },[open,isDocked,collapsed,setOpen]);
+  },[open,isDocked,collapsed,setOpen,onSearch]);
   const onNavKey=e=>{
     const list=Array.from((navRef.current&&navRef.current.querySelectorAll("button[data-nav]:not([disabled])"))||[]);
     const i=list.indexOf(document.activeElement);if(!list.length)return;
@@ -102,8 +102,8 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
         </div>
         <div className={"gs-srch"+(showLabels?"":" c")}>
           {showLabels
-            ?<label className="gs-sbox"><Search size={16} aria-hidden/><input ref={searchRef} id={`${uid}-search`} value={query} onChange={e=>setQuery(e.target.value)} placeholder="ابحث في القائمة…" aria-label="بحث في القائمة"/><kbd dir="ltr">⌘K</kbd></label>
-            :<button type="button" aria-label="بحث" className="gs-sbtn" onClick={()=>{setCollapsed(false);setTimeout(()=>searchRef.current&&searchRef.current.focus(),60);}}><Search size={18}/></button>}
+            ?<label className="gs-sbox"><Search size={16} aria-hidden/><input ref={searchRef} id={`${uid}-search`} value={query} onChange={e=>setQuery(e.target.value)} placeholder="ابحث في القائمة…" aria-label="بحث في القائمة"/><kbd dir="ltr" onClick={onSearch} style={onSearch?{cursor:"pointer"}:undefined}>⌘K</kbd></label>
+            :<button type="button" aria-label="بحث" className="gs-sbtn" onClick={()=>{if(onSearch){onSearch();return;}setCollapsed(false);setTimeout(()=>searchRef.current&&searchRef.current.focus(),60);}}><Search size={18}/></button>}
         </div>
         <nav ref={navRef} aria-label="القائمة الرئيسية" onKeyDown={onNavKey} className="gs-nav">
           {groups.length===0&&<div className="gs-empty">لا نتائج لـ «{query}»</div>}
