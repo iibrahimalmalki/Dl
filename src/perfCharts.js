@@ -11,7 +11,7 @@ export function dailySVG(days,period,{pal=PAL_UI,width=640,height=150,avg=null}=
   const n=daysInMonth(period);const map={};(days||[]).forEach(d=>{map[Number(String(d.date).slice(8,10))]=d.n;});
   const max=Math.max(1,...Object.values(map));const best=Object.entries(map).reduce((m,[k,v])=>v>(m?m[1]:0)?[k,v]:m,null);
   const padL=24,padB=18,padT=12,W=width-padL-4,H=height-padB-padT,bw=W/n;
-  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" style="display:block;font-family:inherit" role="img" aria-label="الغسلات اليومية">`;
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" style="display:block;width:100%;height:auto;font-family:inherit" role="img" aria-label="الغسلات اليومية">`;
   [0,0.5,1].forEach(f=>{const y=padT+H-H*f;s+=`<line x1="${padL}" x2="${width-4}" y1="${y}" y2="${y}" style="stroke:${pal.grid}" stroke-width="1"/><text x="${padL-4}" y="${y+3}" font-size="9" text-anchor="end" style="fill:${pal.txt}">${Math.round(max*f)}</text>`;});
   for(let d=1;d<=n;d++){
     const v=map[d];const x=padL+(d-1)*bw+bw*0.15,w=bw*0.7;

@@ -3,6 +3,8 @@ import { supabase } from "./supabase";
 import TOOLREFS from "./toolRefs";
 import { ThemeToggle, Orbs, useToast } from "./ui";
 import { daysLeft, docStatus, docBn, dayText, dayTextBn, pickContact } from "./renewalsLib";
+import { bikerScore, nextHints } from "./scorecard";
+import { dailySVG } from "./perfCharts";
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
     هوية دلو ورغوة (برتقالي) · ثنائية اللغة (عربي + বাংলা)
@@ -90,6 +92,18 @@ const CSS = `
 .bp-acap input{display:none}
 .bp-athumb{width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--line-2)}
 .bp-done{color:var(--ok-ink)}
+.bp-pf-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.bp-pf-grid div{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:9px 4px;text-align:center}
+.bp-pf-grid b{display:block;font-size:19px;font-weight:900;color:var(--ink)}.bp-pf-grid b.o{color:var(--p-ink)}
+.bp-pf-grid span{font-size:10.5px;color:var(--mut);font-weight:700}.bp-pf-grid .bn,.bp-pf-row .bn,.bp-pf-total .bn{font-size:inherit}
+.bp-pf-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.bp-pf-total{display:flex;justify-content:space-between;align-items:center;background:var(--p-50);border:1px solid rgba(var(--p-rgb),.3);border-radius:12px;padding:10px 13px;font-size:12.5px;font-weight:700;color:var(--ink-2)}
+.bp-pf-total b{font-size:18px;color:var(--p-ink)}
+.bp-pf-chart{margin-top:12px;overflow:hidden}
+.bp-pf-next{margin-top:12px;font-size:12.5px;line-height:1.7;color:var(--ink-2);border:1px dashed rgba(var(--p-rgb),.45);border-radius:12px;padding:10px 12px}
+.bp-pf-next b{display:block;color:var(--p-ink);margin-bottom:2px}.bp-pf-next .bn{color:var(--mut);font-size:11.5px}
+.bp-tabs{overflow-x:auto;scrollbar-width:none}.bp-tabs::-webkit-scrollbar{display:none}.bp-tab{min-width:62px}
+@media(max-width:400px){.bp-pf-grid{grid-template-columns:1fr 1fr}}
 .bp-doc{border:1px solid var(--line);border-radius:14px;padding:12px 13px;margin-bottom:9px;background:var(--glass-2)}
 .bp-doc-h{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px}
 .bp-doc-h .t{font-weight:900;font-size:15px;color:var(--ink)}.bp-doc-h .bn{font-size:12px;color:var(--mut);font-weight:600}
@@ -302,6 +316,7 @@ function Portal() {
         <button type="button" role="tab" aria-selected={tab === "profile"} className={"bp-tab" + (tab === "profile" ? " on" : "")} onClick={() => setTab("profile")}>ملفي<span className="bn">প্রোফাইল</span></button>
         <button type="button" role="tab" aria-selected={tab === "handover"} className={"bp-tab" + (tab === "handover" ? " on" : "")} onClick={() => setTab("handover")}>الدراجة<span className="bn">বাইক হস্তান্তর</span></button>
         <button type="button" role="tab" aria-selected={tab === "fuel"} className={"bp-tab" + (tab === "fuel" ? " on" : "")} onClick={() => setTab("fuel")}>الوقود<span className="bn">জ্বালানি</span></button>
+        <button type="button" role="tab" aria-selected={tab === "perf"} className={"bp-tab" + (tab === "perf" ? " on" : "")} onClick={() => setTab("perf")}>أدائي<span className="bn">আমার কাজ</span></button>
         <button type="button" role="tab" aria-selected={tab === "docs"} className={"bp-tab" + (tab === "docs" ? " on" : "")} onClick={() => setTab("docs")}>وثائقي<span className="bn">আমার কাগজপত্র</span></button>
         <button type="button" role="tab" aria-selected={tab === "assets"} className={"bp-tab" + (tab === "assets" ? " on" : "")} onClick={() => setTab("assets")}>العهدة<span className="bn">সরঞ্জাম</span></button>
       </div>
@@ -311,8 +326,59 @@ function Portal() {
       {tab === "fuel" && <Fuel me={me} myBike={myBike} />}
       {tab === "assets" && <Assets me={me} />}
       {tab === "docs" && <Docs me={me} />}
+      {tab === "perf" && <MyPerf me={me} />}
     </div>
   );
+}
+
+/* ================= أدائي ================= */
+const PM = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+const PMB = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+const pLabel = p => { const [y, m] = String(p).split("-"); return { ar: (PM[+m - 1] || m) + " " + y, bn: (PMB[+m - 1] || m) + " " + y }; };
+const rt = v => v >= 0.75 ? "ok" : v >= 0.25 ? "warn" : "bad";
+function MyPerf({ me }) {
+  const [st, setSt] = useState({ loading: true });
+  useEffect(() => { (async () => {
+    const sid = String(me.biker_employee_id || "").trim();
+    const denied = [];
+    const run = async (t, q) => { try { const r = await q; if (r.error) { denied.push(t); return []; } return r.data || []; } catch (e) { denied.push(t); return []; } };
+    // RLS: يُفترض أن تعيد صفوف هذا البايكر فقط؛ نقيّد بالرقم أيضاً
+    const ops = await run("ops_biker_month", supabase.from("ops_biker_month").select("period,sweater_id,biker_name,net_washes,rating,approved_complaints,complaint_pct,daily").eq("sweater_id", sid).order("period", { ascending: false }).limit(2));
+    const periods = ops.map(o => o.period);
+    const [rounds, viol] = await Promise.all([
+      run("field_rounds", supabase.from("field_rounds").select("round_date,compliance_pct,effect,status").eq("sweater_id", sid).order("round_date", { ascending: false }).limit(6)),
+      periods.length ? run("violations", supabase.from("violations").select("period,status,fine_applied,code").eq("sweater_id", sid).in("period", periods).eq("status", "confirmed")) : [],
+    ]);
+    const scores = ops.map(o => bikerScore(o, { rounds: rounds.filter(r => String(r.round_date || "").slice(0, 7) <= o.period), violations: viol.filter(v => v.period === o.period) }));
+    if (denied.length) console.warn("BikerPortal/أدائي — رُفضت القراءة من:", denied.join(", "));
+    setSt({ loading: false, scores, denied });
+  })(); }, [me.biker_employee_id]);
+  if (st.loading) return <div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div>;
+  if (st.denied.includes("ops_biker_month")) return <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>سيُفعَّل قريباً · <span className="bn">শীঘ্রই চালু হবে</span></b><p>صفحة أدائك قيد التفعيل. · আপনার কাজের পাতা শীঘ্রই চালু হবে।</p></div></div></div>;
+  if (!st.scores.length) return <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>لا بيانات أداء بعد · <span className="bn">এখনও কোনো তথ্য নেই</span></b><p>تظهر أرقامك بعد رفع تقرير سويتر الشهري. · মাসিক রিপোর্ট আপলোডের পর আপনার তথ্য দেখা যাবে।</p></div></div></div>;
+  return (<>{st.scores.map((s, i) => { const L = pLabel(s.period); const hAr = nextHints(s, "ar"), hBn = nextHints(s, "bn"); return (
+    <div className="bp-card g-card" key={s.period}><div className="bp-sec">
+      <label className="bp-lbl" style={{ marginTop: 0 }}>{i === 0 ? "آخر شهر" : "الشهر الذي قبله"} · {L.ar} <span className="bn">/ {L.bn}</span></label>
+      <div className="bp-pf-grid">
+        <div><b>{s.washes}</b><span>غسلة · <span className="bn">ওয়াশ</span></span></div>
+        <div><b>{s.rating ? s.rating.toFixed(2) : "—"}</b><span>التقييم · <span className="bn">রেটিং</span></span></div>
+        <div><b>{s.complaintPct}%</b><span>الشكاوى · <span className="bn">অভিযোগ</span></span></div>
+        <div><b className="o">{s.ratePerWash.toFixed(2)}</b><span>ريال/غسلة · <span className="bn">প্রতি ওয়াশ</span></span></div>
+      </div>
+      <div className="bp-pf-row">
+        <span className={"g-badge " + rt(s.qR)}>الجودة · <span className="bn">কোয়ালিটি</span> {s.qR.toFixed(2)}</span>
+        <span className={"g-badge " + rt(s.sR)}>السلامة · <span className="bn">সেফটি</span> {s.sR.toFixed(2)}</span>
+        {s.production ? <span className="g-badge brand">مكافأة الإنتاج · <span className="bn">বোনাস</span> +{s.production}</span> : null}
+      </div>
+      <div className="bp-pf-total"><span>العمولة المتوقعة · <span className="bn">সম্ভাব্য কমিশন</span></span><b>{(s.bonusBase + s.production).toLocaleString("en-US", { maximumFractionDigits: 2 })} ﷼</b></div>
+      {i === 0 && s.days.length > 0 && <div className="bp-pf-chart"><div className="bp-note" style={{ marginTop: 0 }}>غسلاتك اليومية · <span className="bn">দৈনিক ওয়াশ</span>{s.bestDay ? ` · أفضل يوم ${s.bestDay.date.slice(8)} (${s.bestDay.n})` : ""}</div>
+        <div dangerouslySetInnerHTML={{ __html: dailySVG(s.days, s.period, { height: 120, width: 520, avg: s.dailyAvg || null }) }} /></div>}
+      {i === 0 && hAr.length > 0 && <div className="bp-pf-next"><b>هدفك التالي · <span className="bn">পরবর্তী লক্ষ্য</span></b>{hAr.map((h, k) => <div key={k}>• {h}<div className="bn">{hBn[k]}</div></div>)}</div>}
+      {i === 0 && s.compliance && <div className="bp-note">آخر جولة ميدانية · <span className="bn">শেষ পরিদর্শন</span>: {s.compliance.pct}% {s.compliance.date ? "· " + s.compliance.date : ""}</div>}
+      {i === 0 && s.fines > 0 && <div className="bp-note" style={{ color: "var(--bad-ink)" }}>غرامات مؤكدة · <span className="bn">জরিমানা</span>: {s.fines} ﷼</div>}
+    </div></div>); })}
+    <div className="bp-note" style={{ textAlign: "center", maxWidth: 560, margin: "0 auto" }}>الأرقام متوقعة حتى اعتماد المسير · <span className="bn">বেতন অনুমোদনের আগে এগুলো আনুমানিক</span></div>
+  </>);
 }
 
 /* ================= وثائقي ================= */
