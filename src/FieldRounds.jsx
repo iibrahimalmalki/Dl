@@ -153,6 +153,27 @@ export default function FieldRounds({opId,onGo}){
     if(onGo)setTimeout(()=>onGo("supply_requests"),400);
   };
 
+  // تجهيز بيانات التقرير v2: آخر 3 جولات، صورة البايكر الرسمية، طلب الإمداد المرتبط، الفريق
+  const[reporting,setReporting]=useState(null);
+  const openReportV2=async(r)=>{
+    setReporting(r.id);setMsg(null);
+    const extras={};
+    try{
+      const[{data:hist},{data:sreq},{data:emp}]=await Promise.all([
+        supabase.from("field_rounds").select("round_date,compliance_pct,results").eq("sweater_id",r.sweater_id).neq("status","requested").order("round_date",{ascending:false}).limit(4),
+        supabase.from("supply_requests").select("ref,created_at,status,items").eq("round_id",r.id).order("created_at",{ascending:false}).limit(1),
+        r.employee_id?supabase.from("employees").select("applicant_id,team_id").eq("id",r.employee_id).maybeSingle():Promise.resolve({data:null}),
+      ]);
+      extras.history=hist||[];
+      extras.supplyRequest=(sreq&&sreq[0])||null;
+      if(emp?.applicant_id){const{data:ap}=await supabase.from("applicants").select("personal_photo_url").eq("id",emp.applicant_id).maybeSingle();if(ap?.personal_photo_url)extras.bikerPhoto=ap.personal_photo_url;}
+      if(emp?.team_id){const{data:tm}=await supabase.from("teams").select("name").eq("id",emp.team_id).maybeSingle();if(tm?.name)extras.team=tm.name;}
+    }catch(_){}
+    const ok=await openReport(r,r.ai_analysis,"دلو ورغوة",extras);
+    if(!ok)setMsg({ok:false,t:"تعذّر فتح نافذة التقرير — اسمح بالنوافذ المنبثقة ثم أعد المحاولة"});
+    setReporting(null);
+  };
+
   const kpis=useMemo(()=>{
     const done=rounds.length;const rated=rounds.filter(r=>r.compliance_pct!=null);
     const avg=rated.length?Math.round(rated.reduce((a,r)=>a+Number(r.compliance_pct),0)/rated.length*10)/10:null;
@@ -230,7 +251,7 @@ export default function FieldRounds({opId,onGo}){
     <div className="fr-hint"><Icon n="alert" s={13}/> تُنفَّذ الجولة مرة شهرياً لكل بايكر على الأقل. بنود الإدارة (⚠) لا تدخل درجة البايكر وتتحوّل لإجراءات. الامتثال ≥80% لا أثر · 60–79% تنبيه · &lt;60% خصم جودة.</div>
 
     {/* السجل */}
-    {rounds.length===0?<div className="fr-empty"><div className="fr-empty-ic"><Icon n="rounds" s={30}/></div><h3>لا جولات في {periodLabel(period)}</h3><p>نفّذ جولة ميدانية لكل بايكر وفق لائحة الالتزام (14 بنداً) — النتيجة تغذّي درجة الأداء تلقائياً.</p></div>:
+    {rounds.length===0?<div className="fr-empty"><div className="fr-empty-ic"><Icon n="rounds" s={30}/></div><h3>لا جولات في {periodLabel(period)}</h3><p>نفّذ جولة ميدانية لكل بايكر وفق لائحة الالتزام (15 بنداً) — النتيجة تغذّي درجة الأداء تلقائياً.</p></div>:
     rounds.map(r=>{const ef=effect(r.compliance_pct);const self=r.source==="self";const stMap={requested:["مطلوب — بانتظار البايكر","#b54708","#fef3e2"],submitted:["ذاتي — بانتظار المراجعة","#175cd3","#eff6ff"],reviewed:["ذاتي — تمت المراجعة","#087443","#e7f7ef"]};const stx=self?stMap[r.status]:null;return(
       <div className="fr-card" key={r.id} style={{borderInlineStartColor:ef.color}}>
         <div className="fr-c-top">
@@ -244,7 +265,7 @@ export default function FieldRounds({opId,onGo}){
         {r.notes&&<div className="fr-c-notes">{r.notes}</div>}
         {(()=>{const all=Object.values(r.photos||{}).flat().filter(Boolean);return all.length>0&&<div className="fr-c-gal"><div className="fr-c-gal-h"><Icon n="camera" s={12}/> {all.length} صورة توثيق</div><div className="fr-c-thumbs">{all.slice(0,8).map((u,i)=><img key={i} src={u} onClick={()=>setViewer(u)}/>)}{all.length>8&&<span className="fr-more">+{all.length-8}</span>}</div></div>;})()}
         <div className="fr-c-actions">
-          {r.status!=="requested"&&<button className="fr-report" onClick={()=>openReport(r,r.ai_analysis,"دلو ورغوة")}><Icon n="print" s={14}/> تقرير الجولة</button>}
+          {r.status!=="requested"&&<button className="fr-report" disabled={reporting===r.id} onClick={()=>openReportV2(r)}><Icon n="print" s={14}/> {reporting===r.id?"جارٍ التجهيز…":"تقرير الجولة"}</button>}
           {r.status!=="requested"&&<button className="fr-edit" onClick={()=>startEdit(r)}><Icon n="edit" s={13}/> تعديل</button>}
           {r.status!=="requested"&&<button className="fr-wa" onClick={()=>createTicket(r)}><Icon n="send" s={13}/> طلب إمداد</button>}
           {self&&r.status==="submitted"&&<button className="fr-review" onClick={()=>markReviewed(r)}><Icon n="check" s={14}/> مراجعة واعتماد</button>}

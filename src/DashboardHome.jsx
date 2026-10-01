@@ -23,7 +23,7 @@ const PRESETS=[
 ];
 
 // لوحة القيادة الشاملة — بيانات حيّة من كل وحدات النظام، مع نطاق زمني وفلاتر ومقارنة
-export default function DashboardHome({onNav}){
+export default function DashboardHome({onNav,theme="light"}){
   const nav=k=>onNav&&onNav(k);
   const[d,setD]=useState(null);
   const[preset,setPreset]=useState("this");    // النطاق الزمني
@@ -264,8 +264,9 @@ export default function DashboardHome({onNav}){
   const sevC={crit:["#feecea","#b42318"],warn:["#fff3e2","#c2410c"],info:["#eef4ff","#1d5bbf"]};
   const monthOpts=allP;
 
-  return(<div className="dh">
+  return(<div className="dh" data-theme={theme}>
     <style>{CSS}</style>
+    <div className="dh-orbs" aria-hidden><span className="dh-orb a"/><span className="dh-orb b"/><span className="dh-orb c"/></div>
 
     {/* شريط النطاق الزمني + الفلاتر */}
     <div className="dh-period">
@@ -412,7 +413,7 @@ export default function DashboardHome({onNav}){
         <div className="dw-pb">
           {topBikers.length===0?<Empty t="لا بيانات عمليات بعد" s="ارفع تقارير سويتر الشهرية لتظهر الغسلات هنا."/>:
           <div className="dw-team">{topBikers.map((o,i)=>(
-            <div className="dw-tm" key={i}><div className="dw-tn">{o.biker_name||"—"}<small>{o.rating?`تقييم ${Number(o.rating).toFixed(2)}`:""}</small></div><div className="dw-tbar"><div style={{width:`${Math.round(o.net_washes/maxW*100)}%`,height:"100%",borderRadius:6,background:i===0?"#12b76a":"#E8712B"}}/></div><span className="dw-tv">{o.net_washes}</span></div>))}</div>}
+            <div className="dw-tm" key={i}><div className="dw-tn">{o.biker_name||"—"}<small>{o.rating?`تقييم ${Number(o.rating).toFixed(2)}`:""}</small></div><div className="dw-tbar"><div style={{width:`${Math.round(o.net_washes/maxW*100)}%`,height:"100%",borderRadius:6,background:i===0?"linear-gradient(90deg,#12b76a,#32d583)":"linear-gradient(90deg,#F59E0B,#E8712B)"}}/></div><span className="dw-tv">{o.net_washes}</span></div>))}</div>}
         </div>
       </div>
       <div className="dw-panel">
@@ -434,7 +435,7 @@ export default function DashboardHome({onNav}){
                   {(i===0||i===daily.length-1||i===Math.floor(daily.length/2))&&<span className="dh-cf-m">{x.day.slice(8)}/{x.day.slice(5,7)}</span>}
                 </div>))}</div>
               <div className="dh-fin" style={{marginTop:10}}>
-                <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"#e7f7ef",color:"#087443"}}><Icon n="operations" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إجمالي الغسلات · {rangeLabel}</div><div style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>{daily.length} يوم عمل</div></div><b>{dailyWashTot.toLocaleString("en-US")}</b></div>
+                <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"#e7f7ef",color:"#087443"}}><Icon n="operations" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إجمالي الغسلات · {rangeLabel}</div><div style={{fontSize:11,color:"var(--dh-mut2)",fontWeight:600}}>{daily.length} يوم عمل</div></div><b>{dailyWashTot.toLocaleString("en-US")}</b></div>
                 <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef4ff",color:"#1d5bbf"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">إيراد مُكتسب تقديري ({RATE}﷼/غسلة)</div></div><b>{money(dailyWashTot*RATE)}</b></div>
                 <div className="dh-fin-tot"><span>متوسط يومي</span><b>{Math.round(dailyWashTot/Math.max(1,daily.length))} غسلة</b></div>
               </div>
@@ -451,7 +452,7 @@ export default function DashboardHome({onNav}){
                 </div>))}</div>
               <div className="dh-cf-lg"><span><i style={{background:"#12b76a"}}/>داخل</span><span><i style={{background:"#f04438"}}/>خارج</span></div>
               <div className="dh-fin" style={{marginTop:10}}>
-                <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"#e7f7ef",color:"#087443"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الداخل</div><div style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>سويتر {money(cash.sw)} · تمويل {money(cash.i-cash.sw)}</div></div><b>{money(cash.i)}</b></div>
+                <div className="dh-fin-row hi"><span className="dh-fin-ic" style={{background:"#e7f7ef",color:"#087443"}}><Icon n="cash" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الداخل</div><div style={{fontSize:11,color:"var(--dh-mut2)",fontWeight:600}}>سويتر {money(cash.sw)} · تمويل {money(cash.i-cash.sw)}</div></div><b>{money(cash.i)}</b></div>
                 <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#feecea",color:"#b42318"}}><Icon n="payroll" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">النقد الخارج (تشغيلي)</div></div><b>{money(cash.o)}</b></div>
                 <div className="dh-fin-row"><span className="dh-fin-ic" style={{background:"#eef4ff",color:"#1d5bbf"}}><Icon n="chart" s={16}/></span><div style={{flex:1}}><div className="dh-fin-l">تغطية إيراد سويتر للمصروف</div></div><b style={{color:coverPct!=null&&coverPct>=100?"#087443":"#b54708"}}>{coverPct!=null?coverPct+"%":"—"}</b></div>
                 <div className="dh-fin-tot"><span>الصافي النقدي</span><b style={{color:cash.net>=0?"#087443":"#b42318"}}>{money(cash.net)}</b></div>
@@ -510,12 +511,12 @@ export default function DashboardHome({onNav}){
 }
 
 function SM({t,v,dl,inv,col}){
-  const up=dl!=null&&dl>=0;const good=inv?!up:up;const dc=dl==null?null:(dl===0?"#94a3b8":good?"#087443":"#b42318");
+  const up=dl!=null&&dl>=0;const good=inv?!up:up;const dc=dl==null?null:(dl===0?"var(--dh-mut2)":good?"#087443":"#b42318");
   return(<div className="dh-sm"><span className="dh-sm-t">{t}</span><span className="dh-sm-v" style={col?{color:col}:null}>{v}</span>{dl!=null&&<span className="dh-sm-d" style={{color:dc}}>{dl>0?"▲":dl<0?"▼":"■"} {Math.abs(dl)}%</span>}</div>);
 }
 function Kpi({label,ic,c,ib,n,sub,tone,onClick,delta,spark,inv}){
-  const dc=tone==="red"?"#b42318":"#64748b";
-  const up=delta!=null&&delta>=0;const good=inv?!up:up;const dcol=delta==null?null:(delta===0?"#94a3b8":good?"#087443":"#b42318");
+  const dc=tone==="red"?"#b42318":"var(--dh-mut)";
+  const up=delta!=null&&delta>=0;const good=inv?!up:up;const dcol=delta==null?null:(delta===0?"var(--dh-mut2)":good?"#087443":"#b42318");
   return(<div className={"dh-kpi"+(onClick?" dw-clk":"")} onClick={onClick}>
     <div className="dh-kh"><span className="dh-kl">{label}</span><span className="dh-ki" style={{background:ib,color:c}}><Icon n={ic} s={17}/></span></div>
     <div className="dh-kn">{n}{delta!=null&&<span className="dh-delta" style={{color:dcol}}>{delta>0?"▲":delta<0?"▼":"■"} {Math.abs(delta)}%</span>}</div>
@@ -533,114 +534,161 @@ function Donut({a,p,r,total}){
   const T=Math.max(a+p+r,1);const seg=v=>v/T*100;const A=seg(a),P=seg(p),R=seg(r);
   let off=25;const arc=(len,col,o)=>(<circle cx="21" cy="21" r="15.9" fill="none" stroke={col} strokeWidth="6" strokeDasharray={`${len} ${100-len}`} strokeDashoffset={o} transform="rotate(-90 21 21)"/>);
   const c1=off;off-=A;const c2=off;off-=P;const c3=off;
-  return(<svg width="118" height="118" viewBox="0 0 42 42"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#eef1f4" strokeWidth="6"/>{arc(A,"#12b76a",c1)}{arc(P,"#f79009",c2)}{arc(R,"#f04438",c3)}<text x="21" y="20.5" textAnchor="middle" fontSize="7" fontWeight="800" fill="#0f172a">{total}</text><text x="21" y="27" textAnchor="middle" fontSize="3.2" fill="#64748b">إجمالي</text></svg>);
+  return(<svg width="118" height="118" viewBox="0 0 42 42"><circle cx="21" cy="21" r="15.9" fill="none" className="dh-donut-track" strokeWidth="6"/>{arc(A,"#12b76a",c1)}{arc(P,"#f79009",c2)}{arc(R,"#f04438",c3)}<text x="21" y="20.5" textAnchor="middle" fontSize="7" fontWeight="800" className="dh-donut-n">{total}</text><text x="21" y="27" textAnchor="middle" fontSize="3.2" className="dh-donut-l">إجمالي</text></svg>);
 }
-function Leg({c,t,v}){return(<div style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:"#64748b"}}><i style={{width:10,height:10,borderRadius:3,background:c}}/>{t}<b style={{marginInlineStart:"auto",color:"#0f172a"}}>{v}</b></div>);}
+function Leg({c,t,v}){return(<div style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:"var(--dh-mut)"}}><i style={{width:10,height:10,borderRadius:3,background:c}}/>{t}<b style={{marginInlineStart:"auto",color:"var(--dh-ink)"}}>{v}</b></div>);}
 
+// ── التصميم الزجاجي (Glass) — فاتح افتراضياً، داكن عبر data-theme="dark" ──
+// كل الألوان عبر رموز --dh-* حتى تعمل البطاقات في السمتين. الهوية: برتقالي #E8712B/#F59E0B، وردي #FB7185، navy #0A0E27.
 const CSS=`
-.dh-period{background:#fff;border:1px solid #eceef1;border-radius:15px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.dh{position:relative;--dh-bg:#F5F6FA;--dh-glass:rgba(255,255,255,.66);--dh-glass2:rgba(255,255,255,.82);--dh-line:rgba(15,23,42,.09);--dh-ink:#0F172A;--dh-mut:#64748B;--dh-mut2:#94A3B8;--dh-track:#EEF1F4;--dh-soft:rgba(15,23,42,.04);--dh-hero:linear-gradient(135deg,#0f2a43,#1a3f5f);--dh-shadow:0 10px 30px -18px rgba(15,23,42,.25);--p:#E8712B;--p-rgb:232,113,43;--a:#F59E0B;--s:#FB7185;color:var(--dh-ink)}
+.dh[data-theme=dark]{--dh-bg:#0A0E27;--dh-glass:rgba(255,255,255,.07);--dh-glass2:rgba(255,255,255,.10);--dh-line:rgba(255,255,255,.13);--dh-ink:#F8FAFC;--dh-mut:#A3AFC2;--dh-mut2:#7C8AA0;--dh-track:rgba(255,255,255,.10);--dh-soft:rgba(255,255,255,.06);--dh-hero:linear-gradient(135deg,rgba(15,23,42,.9),rgba(23,33,52,.9));--dh-shadow:0 10px 40px -18px rgba(0,0,0,.7)}
+/* الكرات الضبابية خلف اللوحة */
+.dh-orbs{position:absolute;inset:-20px;overflow:hidden;pointer-events:none;z-index:0;border-radius:24px}
+.dh-orb{position:absolute;border-radius:9999px;filter:blur(80px);opacity:.28;will-change:transform}
+.dh-orb.a{width:420px;height:420px;top:-140px;right:-120px;background:radial-gradient(circle,#E8712B,transparent 65%);animation:dhFloat 14s ease-in-out infinite}
+.dh-orb.b{width:380px;height:380px;top:38%;left:-160px;background:radial-gradient(circle,#2563EB,transparent 65%);opacity:.18;animation:dhFloat 18s ease-in-out infinite reverse}
+.dh-orb.c{width:320px;height:320px;bottom:-140px;right:30%;background:radial-gradient(circle,#FB7185,transparent 65%);opacity:.2;animation:dhFloat 22s ease-in-out infinite}
+.dh[data-theme=dark] .dh-orb{opacity:.5}.dh[data-theme=dark] .dh-orb.b{opacity:.35}.dh[data-theme=dark] .dh-orb.c{opacity:.3}
+@keyframes dhFloat{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(30px,-40px,0)}}
+.dh>*:not(.dh-orbs){position:relative;z-index:1}
+/* بطاقة زجاجية بحافة متدرجة */
+.dh .glass,.dh-period,.dh-alerts,.dh-kpi,.dh-ai,.dh .dw-panel,.dh-q{position:relative;background:var(--dh-glass);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%);border:1px solid var(--dh-line);border-radius:18px;box-shadow:var(--dh-shadow)}
+.dh .dw-panel{overflow:hidden}
+.dh-kpi::before,.dh .dw-panel::before,.dh-q::before,.dh-alerts::before,.dh-ai::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(135deg,rgba(245,158,11,.55),rgba(232,113,43,.12) 45%,rgba(251,113,133,.45));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.9}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.dh-period,.dh-alerts,.dh-kpi,.dh-ai,.dh .dw-panel,.dh-q{background:var(--dh-glass2)}}
+/* دخول متدرج */
+.dh-period,.dh-summary,.dh-alerts,.dh-ins,.dh-ai,.dh-kpis,.dh-ops,.dh .dw-row,.dh-quick{animation:dhUp .45s ease-out both}
+.dh-summary{animation-delay:.05s}.dh-alerts{animation-delay:.1s}.dh-kpis{animation-delay:.15s}.dh-ops{animation-delay:.2s}.dh .dw-row{animation-delay:.25s}.dh-quick{animation-delay:.3s}
+@keyframes dhUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.dh-orb{animation:none!important}.dh-period,.dh-summary,.dh-alerts,.dh-ins,.dh-ai,.dh-kpis,.dh-ops,.dh .dw-row,.dh-quick{animation:none}}
+/* رأس اللوحات (يلغي ألوان Shell الافتراضية داخل اللوحة) */
+.dh .dw-ph{border-bottom:1px solid var(--dh-line)}.dh .dw-ph b{color:var(--dh-ink)}
+.dh .dw-tbl th{background:var(--dh-soft);color:var(--dh-mut);border-bottom:1px solid var(--dh-line)}
+.dh .dw-tbl td{border-bottom:1px solid var(--dh-line);color:var(--dh-ink)}.dh .dw-tbl tbody tr:hover{background:var(--dh-soft)}
+.dh .dw-cand small{color:var(--dh-mut)}.dh .dw-fl{color:var(--dh-mut)}.dh .dw-fv{color:var(--dh-mut)}
+.dh .dw-fbar{background:var(--dh-track)}.dh .dw-ffill{background:linear-gradient(90deg,#F59E0B,#E8712B)}
+.dh .dw-tbar{background:var(--dh-track)}.dh .dw-tn{color:var(--dh-ink)}.dh .dw-tn small{color:var(--dh-mut)}.dh .dw-tv{color:var(--dh-ink)}
+.dh .dw-a{color:var(--p)}
+.dh .dh-donut-track{stroke:var(--dh-track)}.dh .dh-donut-n{fill:var(--dh-ink)}.dh .dh-donut-l{fill:var(--dh-mut)}
+/* الفترة والفلاتر */
+.dh-period{padding:12px 14px;margin-bottom:14px}
 .dh-pchips{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
-.dh-pcap{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#0f172a;margin-inline-end:4px}
-.dh-chip{border:1px solid #e6e9ee;background:#f8fafc;color:#475569;font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .12s}
-.dh-chip:hover{border-color:#f5c9a8}
-.dh-chip.on{background:#E8712B;border-color:#E8712B;color:#fff}
+.dh-pcap{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--dh-ink);margin-inline-end:4px}
+.dh-chip{border:1px solid var(--dh-line);background:var(--dh-soft);color:var(--dh-mut);font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .12s}
+.dh-chip:hover{border-color:rgba(var(--p-rgb),.5);color:var(--dh-ink)}
+.dh-chip.on{background:linear-gradient(135deg,#F59E0B,#E8712B);border-color:transparent;color:#fff;box-shadow:0 6px 18px -8px rgba(var(--p-rgb),.8)}
 .dh-custom{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
-.dh-custom label{font-size:12px;font-weight:700;color:#64748b}
-.dh-custom select,.dh-fsel select{font-family:inherit;font-size:12.5px;font-weight:600;color:#0f172a;border:1px solid #e6e9ee;border-radius:9px;padding:6px 8px;background:#fff;cursor:pointer}
-.dh-filters{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-top:11px;padding-top:11px;border-top:1px dashed #eef1f4}
-.dh-fsel{display:flex;align-items:center;gap:6px;color:#64748b}
+.dh-custom label{font-size:12px;font-weight:700;color:var(--dh-mut)}
+.dh-custom select,.dh-fsel select{font-family:inherit;font-size:12.5px;font-weight:600;color:var(--dh-ink);border:1px solid var(--dh-line);border-radius:9px;padding:6px 8px;background:var(--dh-glass2);cursor:pointer}
+.dh-filters{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-top:11px;padding-top:11px;border-top:1px dashed var(--dh-line)}
+.dh-fsel{display:flex;align-items:center;gap:6px;color:var(--dh-mut)}
 .dh-clear{border:none;background:#feecea;color:#b42318;font-family:inherit;font-size:11.5px;font-weight:700;padding:6px 11px;border-radius:9px;cursor:pointer}
-.dh-summary{background:linear-gradient(135deg,#0f2a43,#1a3f5f);border-radius:15px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.08)}
-.dh-sm-h{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#cfe0f0;margin-bottom:11px}
+/* ملخّص الفترة (بطل) */
+.dh-summary{background:var(--dh-hero);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:14px 16px;margin-bottom:14px;box-shadow:0 20px 50px -30px rgba(0,0,0,.6);position:relative;overflow:hidden}
+.dh-summary::after{content:"";position:absolute;inset:auto -60px -120px auto;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(232,113,43,.45),transparent 65%);filter:blur(30px);pointer-events:none}
+.dh-sm-h{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#cfe0f0;margin-bottom:11px;position:relative}
 .dh-sm-h b{color:#fff;font-weight:800}
 .dh-sm-h em{color:#f6b98e;font-style:normal;font-weight:700}
 .dh-sm-cmp{margin-inline-start:auto;font-size:11px;color:#9fb8cf;font-weight:600}
-.dh-sm-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
-.dh-sm{background:rgba(255,255,255,.96);border-radius:11px;padding:9px 11px;display:flex;flex-direction:column;gap:2px}
-.dh-sm-t{font-size:10.5px;color:#64748b;font-weight:700}
-.dh-sm-v{font-size:16px;font-weight:800;color:#0f172a;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh-sm-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;position:relative}
+.dh-sm{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:12px;padding:9px 11px;display:flex;flex-direction:column;gap:2px}
+.dh-sm-t{font-size:10.5px;color:#b8c7d8;font-weight:700}
+.dh-sm-v{font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh-sm-v[style*="color: rgb(8, 116, 67)"],.dh-sm-v[style*="#087443"]{color:#5fe0a0!important}.dh-sm-v[style*="#b42318"],.dh-sm-v[style*="rgb(180, 35, 24)"]{color:#ff9a8f!important}
 .dh-sm-d{font-size:10.5px;font-weight:800}
-.dh-alerts{background:#fff;border:1px solid #eceef1;border-radius:15px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.dh-sm-d[style*="#087443"],.dh-sm-d[style*="rgb(8, 116, 67)"]{color:#5fe0a0!important}.dh-sm-d[style*="#b42318"],.dh-sm-d[style*="rgb(180, 35, 24)"]{color:#ff9a8f!important}
+/* التنبيهات */
+.dh-alerts{padding:14px 16px;margin-bottom:14px}
 .dh-al-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.dh-al-h span{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:#0f172a}
+.dh-al-h span{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:var(--dh-ink)}
 .dh-al-h b{background:#feecea;color:#b42318;font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px}
 .dh-al-ok{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#087443;background:#e7f7ef;border-radius:11px;padding:11px 13px}
 .dh-al-list{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.dh-al{display:flex;align-items:center;gap:9px;border:none;border-radius:11px;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:start;width:100%}
+.dh-al{display:flex;align-items:center;gap:9px;border:none;border-radius:11px;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:start;width:100%;transition:transform .15s}
+.dh-al:hover{transform:translateX(-3px)}
 .dh-al-ic{display:flex;flex:none}
 .dh-al-t{flex:1;font-size:12.5px;font-weight:700;line-height:1.4}
+/* المؤشرات */
 .dh-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:14px}
 .dh-ops{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
-.dh-kpi{background:#fff;border:1px solid #eceef1;border-radius:15px;padding:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.dh-kpi{padding:14px;transition:transform .2s,box-shadow .2s}
+.dh-kpi.dw-clk:hover{transform:translateY(-4px);box-shadow:0 0 40px -10px rgba(var(--p-rgb),.45),var(--dh-shadow);border-color:transparent}
 .dh-kh{display:flex;align-items:center;justify-content:space-between;gap:6px}
-.dh-kl{font-size:11px;color:#64748b;font-weight:700;line-height:1.3}
-.dh-ki{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none}
-.dh-kn{font-size:23px;font-weight:800;margin-top:9px;letter-spacing:-.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh-kl{font-size:11px;color:var(--dh-mut);font-weight:700;line-height:1.3}
+.dh-ki{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;filter:drop-shadow(0 0 6px rgba(0,0,0,.05))}
+.dh-kn{font-size:23px;font-weight:800;margin-top:9px;letter-spacing:-.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(90deg,var(--dh-ink),var(--dh-ink));-webkit-background-clip:text;background-clip:text}
 .dh-kd{font-size:11px;font-weight:700}
 .dh-kfoot{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;margin-top:3px}
 .dh-spark{flex:none;opacity:.9}
 .dh-delta{font-size:11px;font-weight:800;margin-inline-start:7px;vertical-align:2px;white-space:nowrap}
-.dh-ins{background:linear-gradient(135deg,#0f2a43,#1a3f5f);border-radius:15px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.08)}
+/* الرؤى */
+.dh-ins{background:var(--dh-hero);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:14px 16px;margin-bottom:14px;box-shadow:0 20px 50px -30px rgba(0,0,0,.6)}
 .dh-ins-h{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:800;color:#fff;margin-bottom:11px}
 .dh-ins-list{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
 .dh-ins-i{display:flex;align-items:flex-start;gap:9px;background:rgba(255,255,255,.96);border-inline-start:3px solid #ccc;border-radius:11px;padding:10px 12px;font-size:12px;font-weight:600;color:#1d2939;line-height:1.55}
 .dh-ins-ic{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:none}
-.dh-ai{background:#fff;border:1px solid #eceef1;border-radius:15px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.dh-ai{padding:14px 16px;margin-bottom:14px}
 .dh-ai-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
-.dh-ai-hl{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:800;color:#0f172a}
-.dh-ai-cnt{font-size:11px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:20px;padding:3px 10px}
+.dh-ai-hl{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:800;color:var(--dh-ink)}
+.dh-ai-cnt{font-size:11px;font-weight:700;color:var(--dh-mut);background:var(--dh-soft);border-radius:20px;padding:3px 10px}
 .dh-ai-list{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.dh-ai-i{border:1px solid #f0f2f4;border-inline-start:3px solid #ccc;border-radius:12px;padding:11px 13px;background:#fdfdfe}
-.dh-ai-t{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#0f172a}
+.dh-ai-i{border:1px solid var(--dh-line);border-inline-start:3px solid #ccc;border-radius:12px;padding:11px 13px;background:var(--dh-soft)}
+.dh-ai-t{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--dh-ink)}
 .dh-ai-t b{font-weight:800;line-height:1.4}
-.dh-ai-tag{margin-inline-start:auto;font-size:10px;font-weight:700;color:#475569;background:#eef1f4;border-radius:20px;padding:2px 8px;flex:none}
-.dh-ai-b{font-size:11.5px;color:#475569;font-weight:600;line-height:1.65;margin-top:7px}
+.dh-ai-tag{margin-inline-start:auto;font-size:10px;font-weight:700;color:var(--dh-mut);background:var(--dh-soft);border-radius:20px;padding:2px 8px;flex:none}
+.dh-ai-b{font-size:11.5px;color:var(--dh-mut);font-weight:600;line-height:1.65;margin-top:7px}
 .dh-ai-r{font-size:11px;color:#175cd3;font-weight:700;line-height:1.55;margin-top:6px;background:#eff6ff;border-radius:8px;padding:6px 9px}
+.dh[data-theme=dark] .dh-ai-r{background:rgba(37,99,235,.18);color:#93c5fd}
 @media(max-width:1100px){.dh-ai-list{grid-template-columns:1fr}}
+/* الأهداف */
 .dh-targets{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
 .dh-tg{display:flex;flex-direction:column;gap:6px}
 .dh-tg-top{display:flex;flex-direction:column;gap:2px}
-.dh-tg-k{font-size:11px;color:#64748b;font-weight:700;line-height:1.35;min-height:30px}
-.dh-tg-v{font-size:17px;font-weight:800}.dh-tg-v small{font-size:10.5px;color:#94a3b8;font-weight:600}
-.dh-tg-bar{height:6px;border-radius:6px;background:#eef1f4;overflow:hidden}.dh-tg-bar div{height:100%;border-radius:6px}
+.dh-tg-k{font-size:11px;color:var(--dh-mut);font-weight:700;line-height:1.35;min-height:30px}
+.dh-tg-v{font-size:17px;font-weight:800}.dh-tg-v small{font-size:10.5px;color:var(--dh-mut2);font-weight:600}
+.dh-tg-bar{height:6px;border-radius:6px;background:var(--dh-track);overflow:hidden}.dh-tg-bar div{height:100%;border-radius:6px}
 .dh-tg-badge{align-self:flex-start;font-size:10px;font-weight:800;padding:2px 9px;border-radius:20px}
-.dh-gran{display:flex;gap:2px;background:#f1f3f5;border-radius:9px;padding:2px}
-.dh-gran button{border:none;background:none;font-family:inherit;font-size:11.5px;font-weight:700;color:#64748b;padding:5px 12px;border-radius:7px;cursor:pointer}
-.dh-gran button.on{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(16,24,40,.1)}
-.dh-note{font-size:11px;color:#94a3b8;font-weight:600;margin-bottom:8px;line-height:1.5}
+.dh-gran{display:flex;gap:2px;background:var(--dh-soft);border-radius:9px;padding:2px}
+.dh-gran button{border:none;background:none;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--dh-mut);padding:5px 12px;border-radius:7px;cursor:pointer}
+.dh-gran button.on{background:var(--dh-glass2);color:var(--dh-ink);box-shadow:0 1px 2px rgba(16,24,40,.1)}
+.dh-note{font-size:11px;color:var(--dh-mut2);font-weight:600;margin-bottom:8px;line-height:1.5}
+/* التدفق النقدي */
 .dh-cf{display:flex;align-items:flex-end;gap:6px;height:64px;padding:0 2px}
 .dh-cf-day{gap:2px}
 .dh-cf-day .dh-cf-bars{gap:0}
 .dh-cf-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;background:none;border:none;padding:4px 2px 0;border-radius:8px;font-family:inherit}
 .dh-cf-bars{display:flex;align-items:flex-end;gap:3px;height:48px}
-.dh-cf-in{width:8px;border-radius:3px 3px 0 0;background:#12b76a}
-.dh-cf-out{width:8px;border-radius:3px 3px 0 0;background:#f04438}
-.dh-cf-m{font-size:9.5px;color:#94a3b8;font-weight:700;white-space:nowrap}
-.dh-cf-lg{display:flex;gap:14px;justify-content:center;margin-top:6px;font-size:10.5px;color:#64748b;font-weight:600}
+.dh-cf-in{width:8px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#32d583,#12b76a)}
+.dh-cf-out{width:8px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#fb7185,#f04438)}
+.dh-cf-m{font-size:9.5px;color:var(--dh-mut2);font-weight:700;white-space:nowrap}
+.dh-cf-lg{display:flex;gap:14px;justify-content:center;margin-top:6px;font-size:10.5px;color:var(--dh-mut);font-weight:600}
 .dh-cf-lg span{display:flex;align-items:center;gap:5px}.dh-cf-lg i{width:9px;height:9px;border-radius:3px}
 .dh-catlist{display:flex;flex-direction:column;gap:7px}
-.dh-cat{display:flex;align-items:center;gap:10px;border:1px solid transparent;background:#f8fafc;border-radius:10px;padding:8px 11px;cursor:pointer;font-family:inherit;text-align:start;width:100%}
-.dh-cat:hover{border-color:#e6e9ee}
-.dh-cat.on{border-color:#E8712B;background:#fff7f1}
-.dh-cat-k{flex:none;width:38%;font-size:12px;font-weight:700;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dh-cat-bar{flex:1;height:8px;background:#eef1f4;border-radius:6px;overflow:hidden}.dh-cat-bar div{height:100%;background:#E8712B;border-radius:6px}
-.dh-cat-v{flex:none;font-size:12px;font-weight:800;color:#0f172a;white-space:nowrap}.dh-cat-v small{color:#94a3b8;font-weight:600}
-.dh-mini{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:#64748b;border-top:1px solid #f1f3f5;padding-top:7px}
-.dh-mini b{color:#0f172a;font-size:13px}
+.dh-cat{display:flex;align-items:center;gap:10px;border:1px solid transparent;background:var(--dh-soft);border-radius:10px;padding:8px 11px;cursor:pointer;font-family:inherit;text-align:start;width:100%}
+.dh-cat:hover{border-color:var(--dh-line)}
+.dh-cat.on{border-color:var(--p);background:rgba(var(--p-rgb),.10)}
+.dh-cat-k{flex:none;width:38%;font-size:12px;font-weight:700;color:var(--dh-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh-cat-bar{flex:1;height:8px;background:var(--dh-track);border-radius:6px;overflow:hidden}.dh-cat-bar div{height:100%;background:linear-gradient(90deg,#F59E0B,#E8712B);border-radius:6px}
+.dh-cat-v{flex:none;font-size:12px;font-weight:800;color:var(--dh-ink);white-space:nowrap}.dh-cat-v small{color:var(--dh-mut2);font-weight:600}
+.dh-mini{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--dh-mut);border-top:1px solid var(--dh-line);padding-top:7px}
+.dh-mini b{color:var(--dh-ink);font-size:13px}
 .dh-fin{display:flex;flex-direction:column;gap:10px}
 .dh-fin-row{display:flex;align-items:center;gap:11px}
-.dh-fin-row.hi{background:#f4fbf7;border:1px solid #d6f0e2;border-radius:11px;padding:8px 10px;margin:-2px 0}
+.dh-fin-row.hi{background:rgba(18,183,106,.08);border:1px solid rgba(18,183,106,.25);border-radius:11px;padding:8px 10px;margin:-2px 0}
 .dh-fin-ic{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none}
-.dh-fin-l{font-size:12.5px;color:#475569;font-weight:600}
-.dh-fin-row b{font-size:14px;font-weight:800;color:#0f172a}
-.dh-fin-tot{display:flex;align-items:center;justify-content:space-between;border-top:1px dashed #e6e9ee;margin-top:4px;padding-top:11px;font-size:12.5px;color:#64748b;font-weight:700}
+.dh-fin-l{font-size:12.5px;color:var(--dh-mut);font-weight:600}
+.dh-fin-row b{font-size:14px;font-weight:800;color:var(--dh-ink)}
+.dh-fin-tot{display:flex;align-items:center;justify-content:space-between;border-top:1px dashed var(--dh-line);margin-top:4px;padding-top:11px;font-size:12.5px;color:var(--dh-mut);font-weight:700}
 .dh-fin-tot b{font-size:17px;font-weight:800}
-.dh-empty{display:flex;flex-direction:column;align-items:center;gap:5px;padding:26px 16px;text-align:center;color:#94a3b8}
-.dh-empty b{font-size:13.5px;color:#334155}.dh-empty span{font-size:11.5px;max-width:320px;line-height:1.6}
+.dh-empty{display:flex;flex-direction:column;align-items:center;gap:5px;padding:26px 16px;text-align:center;color:var(--dh-mut2)}
+.dh-empty b{font-size:13.5px;color:var(--dh-ink)}.dh-empty span{font-size:11.5px;max-width:320px;line-height:1.6}
+/* الاختصارات */
 .dh-quick{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-top:14px}
-.dh-q{display:flex;flex-direction:column;align-items:center;gap:7px;background:#fff;border:1px solid #eceef1;border-radius:14px;padding:14px 8px;font-family:inherit;font-size:11.5px;font-weight:700;color:#334155;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.05);transition:border-color .15s,transform .15s}
-.dh-q:hover{border-color:#f5c9a8;transform:translateY(-1px)}
-.dh-q-ic{width:38px;height:38px;border-radius:11px;background:#fff2e8;color:#E8712B;display:flex;align-items:center;justify-content:center}
+.dh-q{display:flex;flex-direction:column;align-items:center;gap:7px;padding:14px 8px;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--dh-ink);cursor:pointer;transition:transform .15s,box-shadow .2s}
+.dh-q:hover{transform:translateY(-3px);box-shadow:0 0 34px -10px rgba(var(--p-rgb),.5),var(--dh-shadow)}
+.dh-q-ic{width:38px;height:38px;border-radius:11px;background:rgba(var(--p-rgb),.14);color:var(--p);display:flex;align-items:center;justify-content:center}
+.dh-q:hover .dh-q-ic{filter:drop-shadow(0 0 6px rgba(var(--p-rgb),.7))}
 @media(max-width:1100px){.dh-kpis{grid-template-columns:repeat(3,1fr)}.dh-ops{grid-template-columns:repeat(2,1fr)}.dh-quick{grid-template-columns:repeat(4,1fr)}.dh-al-list{grid-template-columns:1fr}.dh-ins-list{grid-template-columns:1fr}.dh-targets{grid-template-columns:repeat(2,1fr)}.dh-sm-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:640px){.dh-kpis{grid-template-columns:repeat(2,1fr)}.dh-ops{grid-template-columns:repeat(2,1fr)}.dh-quick{grid-template-columns:repeat(4,1fr)}.dh-targets{grid-template-columns:repeat(2,1fr)}.dh-tg-k{min-height:0}.dh-sm-grid{grid-template-columns:repeat(2,1fr)}.dh-cat-k{width:34%}}
+@media(max-width:640px){.dh-kpis{grid-template-columns:repeat(2,1fr)}.dh-ops{grid-template-columns:repeat(2,1fr)}.dh-quick{grid-template-columns:repeat(4,1fr)}.dh-targets{grid-template-columns:repeat(2,1fr)}.dh-tg-k{min-height:0}.dh-sm-grid{grid-template-columns:repeat(2,1fr)}.dh-cat-k{width:34%}.dh-orb{filter:blur(50px)}}
 `;

@@ -1,6 +1,6 @@
 // تحليل ذكي للجولة الميدانية — يقرأ الجولة الحالية وتاريخ البايكر وينتج تحليلاً منظّماً.
 // محلّل قواعدي على مستوى المنصّة (deterministic) — لا يعتمد على خدمة خارجية.
-import{ITEMS,AXES,bikerItems,mgmtItems,complianceByAxis,effect}from"./fieldChecklist";
+import{ITEMS,AXES,bikerItems,mgmtItems,complianceByAxis,effect,supplyReadiness}from"./fieldChecklist";
 
 const item=n=>ITEMS.find(i=>i.n===Number(n));
 const addDays=(iso,d)=>{const t=new Date(iso).getTime();if(isNaN(t))return"";return new Date(t+d*864e5).toISOString().slice(0,10);};
@@ -58,6 +58,27 @@ export function analyzeRound(round,history=[]){
   ];
   const supportRequest=buildSupportRequest(round,supplyGaps);
 
+
+  // ── السبب الجذري والتوصية (قاعدي): تجميع البنود الضعيفة حسب الموضوع ──
+  const THEMES=[
+    {key:"clean",items:[1,2,3,8],ar:"غياب روتين نظافة الدراجة والصندوق والزي",rec:"مسح الدراجة والصندوق 10 دقائق نهاية كل وردية + غسلة أسبوعية يوم الجمعة، ويتحقق المشرف بصورتين (أمام/الصندوق)."},
+    {key:"safety",items:[5,6],ar:"إهمال فحص السلامة اليومي (الإنارة وسلامة الهيكل)",rec:"فحص إنارة وهيكل يومي قبل الانطلاق مع إبلاغ الصيانة فوراً عند أي عطل."},
+    {key:"towels",items:[11],ar:"ضعف معرفة نظام المناشف",rec:"إعادة شرح ألوان المناشف من دليل أدوات البايكر + اختبار قصير بإشراف مدير العمليات."},
+    {key:"wash",items:[13,14],ar:"عدم الالتزام بتسلسل الغسيل أو التخلص من المخلفات",rec:"مرافقة المشرف في غسلتين مع التركيز على التسلسل والكيس."},
+  ];
+  const weakSet=new Set(weak.map(i=>i.n));
+  const themeHits=THEMES.map(t=>({...t,hit:t.items.filter(n=>weakSet.has(n))})).filter(t=>t.hit.length).sort((a,b)=>b.hit.length-a.hit.length);
+  const rootCause=themeHits.length?`${themeHits[0].ar} (البنود ${themeHits[0].hit.map(n=>"#"+n).join("، ")}).`:(weak.length?"":"لا توجد مخالفات على البايكر في هذه الجولة.");
+  const recommendation=themeHits.length?themeHits[0].rec:"";
+  const supply=supplyReadiness(results);
+
+  // إجراءات الجولة السابقة: ماذا حدث لكل بند كان فاشلاً/جزئياً في آخر جولة؟
+  const prevActions=prev?Object.entries(prev.results||{}).filter(([,v])=>v==="fail"||v==="half").map(([k])=>{
+    const n=Number(k);const it=item(n);const now=results[n];
+    const status=now==="pass"?"closed":now==null?"unknown":(now==="fail"||now==="half")?"recurring":"open";
+    return{n,ar:it?it.ar:"#"+n,resp:it?it.resp:"biker",prev:prev.results[k],now:now||null,status};
+  }):[];
+
   // الملخص العام
   const summary=`سجّل البايكر ${round.biker_name||""} التزاماً بنسبة ${pct!=null?pct+"%":"—"} (${eff.ar}).`
     +(passed.length?` نقاط القوة تشمل ${passed.length} بنداً مطابقاً.`:"")
@@ -67,7 +88,8 @@ export function analyzeRound(round,history=[]){
 
   return{generated_at:new Date().toISOString(),compliance:pct,effect:eff,summary,trend,axes,weakestAxis,
     strengths:passed.map(i=>({n:i.n,ar:i.ar})),weaknesses:weak.map(i=>({n:i.n,ar:i.ar,level:results[i.n]})),
-    recurring:recurring.map(i=>({n:i.n,ar:i.ar})),priorities,photoNote,supplyGaps,supportRequest};
+    recurring:recurring.map(i=>({n:i.n,ar:i.ar})),priorities,photoNote,supplyGaps,supportRequest,
+    rootCause,recommendation,supply:{pct:supply.pct,denom:supply.denom,points:supply.points,missing:supply.missing},prevActions};
 }
 
 export function buildSupportRequest(round,supplyGaps){

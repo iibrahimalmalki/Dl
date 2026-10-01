@@ -3,6 +3,8 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import DashboardHome from"./DashboardHome";
 import Notifications from"./Notifications";
+import GlassSidebar from"./GlassSidebar";
+import{Sun,Moon}from"lucide-react";
 const AdminDashboard=lazy(()=>import("./AdminDashboard"));
 const UserManagement=lazy(()=>import("./UserManagement"));
 const Payroll=lazy(()=>import("./Payroll"));
@@ -76,7 +78,7 @@ const NAV=[
   {k:"users",ar:"المستخدمون",ic:"users"},
   {k:"audit",ar:"سجل التدقيق",ic:"eye",lock:1},
 ];
-const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],job_ad:["إعلان التوظيف","تحرير الإعلان العام · فتح/إغلاق التوظيف · مشاركة الرابط"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["مركز التقارير","المالية والتشغيل والامتثال والتوظيف — بفلاتر وتصدير"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],vendors:["الموردون","الصيانة والقطع والدراجات والسكن ومصروفاتها"],supply:["سلاسل الإمداد","المخزون والطلبات والاستلام والعُهد والجرد"],supply_requests:["طلبات الإمداد والتصعيد","نواقص الجولات — رقم مرجعي · عدّاد مهلة 24 ساعة · تصعيد واتساب/إيميل · اكتمال"],custody:["العُهد والإهلاك","عُهد البايكرز — تواريخ بداية/نهاية · احتساب الإهلاك · تخطيط شراء الدراجات وإعادة طلب المستهلكات"],fleet:["الأسطول والحوادث","سجل المركبات والتتبّع والكاميرات والمفاتيح وحوادث السرقة والأعطال"],offboarding:["إنهاء الخدمة","مخالصة المغادرة — عُهد ودراجة وسكن وتسوية ووثائق وحساب"],incidents:["الحوادث والجزاءات","عرض موحّد — مخالفات سويتر ومخالفات السكن وحوادث الأسطول"],audit:["سجل التدقيق","من غيّر ماذا ومتى — مقصور على المالك"],housing:["السكن والإقامة","الوحدات والساكنون وجدول الدفعات ومخالفات السكن"],renewals:["الوثائق والتجديدات","متابعة صلاحية التأمين والاستمارات والرخص والإقامات"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],pricing:["المقابل والتسعير","نموذج غسلات سويتر — الشرائح وحاسبة المقابل الشهري"],settlement:["تسوية سويتر","احتساب المستحق الشهري لكل بايكر ومطابقته بالفاتورة"],reconciliation:["مطابقة/مطالبة سويتر","مطابقة تقارير سويتر بالعقد ومتابعة المطالبة عن الطلبات غير المُحتسَبة"],damage_claims:["دعاوى ضرر العملاء","تسجيل حالات ضرر مركبات العملاء وتحميلها على البايكر بعد التحقيق — خصم ≤50% من الراتب"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 14 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"],gosi:["تأمينات GOSI","الرصيد المستحق وخطة التقسيط والسجل الشهري وتنبيه الاستحقاق"]};
+const TITLES={dashboard:["لوحة القيادة","نظرة عامة على الأداء"],job_ad:["إعلان التوظيف","تحرير الإعلان العام · فتح/إغلاق التوظيف · مشاركة الرابط"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["مركز التقارير","المالية والتشغيل والامتثال والتوظيف — بفلاتر وتصدير"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],vendors:["الموردون","الصيانة والقطع والدراجات والسكن ومصروفاتها"],supply:["سلاسل الإمداد","المخزون والطلبات والاستلام والعُهد والجرد"],supply_requests:["طلبات الإمداد والتصعيد","نواقص الجولات — رقم مرجعي · عدّاد مهلة 24 ساعة · تصعيد واتساب/إيميل · اكتمال"],custody:["العُهد والإهلاك","عُهد البايكرز — تواريخ بداية/نهاية · احتساب الإهلاك · تخطيط شراء الدراجات وإعادة طلب المستهلكات"],fleet:["الأسطول والحوادث","سجل المركبات والتتبّع والكاميرات والمفاتيح وحوادث السرقة والأعطال"],offboarding:["إنهاء الخدمة","مخالصة المغادرة — عُهد ودراجة وسكن وتسوية ووثائق وحساب"],incidents:["الحوادث والجزاءات","عرض موحّد — مخالفات سويتر ومخالفات السكن وحوادث الأسطول"],audit:["سجل التدقيق","من غيّر ماذا ومتى — مقصور على المالك"],housing:["السكن والإقامة","الوحدات والساكنون وجدول الدفعات ومخالفات السكن"],renewals:["الوثائق والتجديدات","متابعة صلاحية التأمين والاستمارات والرخص والإقامات"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],payroll:["الرواتب","كشوف ومكافآت الفريق"],pricing:["المقابل والتسعير","نموذج غسلات سويتر — الشرائح وحاسبة المقابل الشهري"],settlement:["تسوية سويتر","احتساب المستحق الشهري لكل بايكر ومطابقته بالفاتورة"],reconciliation:["مطابقة/مطالبة سويتر","مطابقة تقارير سويتر بالعقد ومتابعة المطالبة عن الطلبات غير المُحتسَبة"],damage_claims:["دعاوى ضرر العملاء","تسجيل حالات ضرر مركبات العملاء وتحميلها على البايكر بعد التحقيق — خصم ≤50% من الراتب"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 15 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"],gosi:["تأمينات GOSI","الرصيد المستحق وخطة التقسيط والسجل الشهري وتنبيه الاستحقاق"]};
 
 export default function Shell({onLogout,me}){
   const[view,setView]=useState("dashboard");
@@ -84,6 +86,12 @@ export default function Shell({onLogout,me}){
   const[ops,setOps]=useState([]);const[op,setOp]=useState("all");
   const[menu,setMenu]=useState(false);
   const[tmaTarget,setTmaTarget]=useState(null);
+  // سمة الشريط الجانبي: فاتح افتراضياً، والداكن خيار يُحفظ على الجهاز | sidebar theme (light default)
+  const[sbTheme,setSbTheme]=useState(()=>{try{return localStorage.getItem("dw.sidebar.theme")||"light";}catch(_){return"light";}});
+  const toggleSbTheme=()=>setSbTheme(t=>{const n=t==="dark"?"light":"dark";try{localStorage.setItem("dw.sidebar.theme",n);}catch(_){}return n;});
+  // شارات حيّة على القائمة: طلبات الإمداد المفتوحة | live badges (open supply requests)
+  const[badges,setBadges]=useState({});
+  useEffect(()=>{(async()=>{try{const{count}=await supabase.from("supply_requests").select("id",{count:"exact",head:true}).neq("status","completed");if(count)setBadges(b=>({...b,supply_requests:count}));}catch(_){}})();},[]);
   useEffect(()=>{supabase.from("operators").select("id,name,active").order("created_at").then(({data})=>setOps(data||[]));},[]);
   const nm=(me&&me.display_name)||"إبراهيم المالكي";
   const owner=!!(me&&me.is_owner);
@@ -96,18 +104,8 @@ export default function Shell({onLogout,me}){
 
   return(<div className="sh">
     <style>{CSS}</style>
-    {open&&<div className="sh-scrim" onClick={()=>setOpen(false)}/>}
-    <aside className={"sh-side"+(open?" open":"")}>
-      <div className="sh-brand"><div className="sh-logo"><img src="/brand-mark.png" alt="دلو ورغوة"/></div><div><b>دلو ورغوة</b><span>منصّة إدارة العمليات</span></div></div>
-      <nav className="sh-nav">
-        {nav.map((n,i)=>n.g?<div className="sh-navlbl" key={i}>{n.g}</div>:
-          <div key={n.k} className={"sh-item"+(view===n.k?" on":"")} onClick={()=>go(n.k)}>
-            <span className="sh-ic"><Icon n={n.ic} s={18}/></span>{n.ar}
-            {n.lock&&<span className="sh-lock"><Icon n="lock" s={13}/></span>}{n.soon&&<span className="sh-soon">قريباً</span>}
-          </div>)}
-      </nav>
-      <div className="sh-foot"><div className="sh-prof"><div className="sh-av">{nm.trim().charAt(0)}</div><div style={{flex:1,minWidth:0}}><b>{nm}</b><span>{owner?"المالك · صلاحية كاملة":"مستخدم"}</span></div></div></div>
-    </aside>
+    <GlassSidebar items={nav} active={view} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={sbTheme}
+      user={{name:nm,role:owner?"المالك · صلاحية كاملة":isSup?"مشرف ميداني":"مستخدم"}} onLogout={onLogout} onSettings={owner?()=>go("users"):undefined}/>
 
     <div className="sh-main">
       <header className="sh-top">
@@ -120,14 +118,15 @@ export default function Shell({onLogout,me}){
             {ops.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
         </div>
+        <button className="sh-ib sh-hm" onClick={toggleSbTheme} title={sbTheme==="dark"?"شريط فاتح":"شريط داكن"} aria-label={sbTheme==="dark"?"شريط فاتح":"شريط داكن"}>{sbTheme==="dark"?<Sun size={17}/>:<Moon size={17}/>}</button>
         <Notifications me={me} onNav={go}/>
         <div style={{position:"relative"}}>
           <button className="sh-ib" onClick={()=>setMenu(!menu)}><div className="sh-av2">{nm.trim().charAt(0)}</div></button>
           {menu&&<div className="sh-menu">{owner&&<div className="sh-mi" onClick={()=>{setMenu(false);go("users");}}><Icon n="users" s={16}/> المستخدمون</div>}<div className="sh-mi" onClick={onLogout}><Icon n="logout" s={16}/> تسجيل الخروج</div></div>}
         </div>
       </header>
-      <div className="sh-content">
-        {view==="dashboard"&&<DashboardHome onNav={go}/>}
+      <div className={"sh-content"+(view==="dashboard"&&sbTheme==="dark"?" dark":"")}>
+        {view==="dashboard"&&<DashboardHome onNav={go} theme={sbTheme}/>}
         {view==="job_ad"&&<Suspense fallback={<Sk/>}><JobAdManager/></Suspense>}
         {view==="recruitment"&&<Suspense fallback={<Sk/>}><AdminDashboard embedded section="applicants" onLogout={onLogout}/></Suspense>}
         {view==="employees"&&<Suspense fallback={<Sk/>}><AdminDashboard embedded section="employees" onLogout={onLogout}/></Suspense>}
@@ -167,10 +166,9 @@ function Sk(){return<div className="dw-skel" style={{height:200}}/>;}
 function Soon({ic,name}){return(<div className="sh-soonbox"><div className="sh-soonic"><Icon n={ic} s={30}/></div><h2>{name}</h2><p>هذه الوحدة قيد البناء ضمن خارطة الطريق — ستظهر هنا بنفس المستوى الاحترافي فور اكتمالها.</p></div>);}
 
 const CSS=`
-.sh{--bg:#f4f5f7;--panel:#fff;--ink:#0f172a;--mut:#64748b;--line:#eceef1;--line2:#e6e9ee;--brand:#E8712B;--side:#0e1622;--side2:#141f2e;--sidink:#c7d0dc;--sidmut:#7c8aa0;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);--r:16px;display:grid;grid-template-columns:246px 1fr;min-height:100dvh;background:var(--bg);font-family:'Segoe UI',Tahoma,system-ui,sans-serif;color:var(--ink);font-size:14px}
+.sh{--bg:#f4f5f7;--panel:#fff;--ink:#0f172a;--mut:#64748b;--line:#eceef1;--line2:#e6e9ee;--brand:#E8712B;--side:#0e1622;--side2:#141f2e;--sidink:#c7d0dc;--sidmut:#7c8aa0;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);--r:16px;display:flex;min-height:100dvh;background:var(--bg);font-family:'Segoe UI',Tahoma,system-ui,sans-serif;color:var(--ink);font-size:14px}
 .sh *{box-sizing:border-box}
 .sh-scrim{display:none}
-.sh-side{background:var(--side);color:var(--sidink);display:flex;flex-direction:column;position:sticky;top:0;height:100dvh}
 .sh-brand{display:flex;align-items:center;gap:11px;padding:20px 20px 14px}
 .sh-logo{width:42px;height:42px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(232,113,43,.35);flex:none}
 .sh-logo img{width:30px;height:30px;object-fit:contain}
@@ -189,7 +187,7 @@ const CSS=`
 .sh-prof{display:flex;align-items:center;gap:10px;padding:8px;border-radius:11px}
 .sh-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#334155,#475569);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;flex:none}
 .sh-prof b{font-size:12.5px;color:#fff;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sh-prof span{font-size:10.5px;color:var(--sidmut)}
-.sh-main{display:flex;flex-direction:column;min-width:0}
+.sh-main{display:flex;flex-direction:column;min-width:0;flex:1}
 .sh-top{background:rgba(255,255,255,.88);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:30}
 .sh-burger{display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink)}
 .sh-ttl h1{font-size:16px;font-weight:800;margin:0}.sh-sub{font-size:12px;color:var(--mut)}
@@ -202,6 +200,10 @@ const CSS=`
 .sh-menu{position:absolute;top:46px;inset-inline-start:0;background:#fff;border:1px solid var(--line2);border-radius:12px;box-shadow:0 8px 24px rgba(16,24,40,.12);overflow:hidden;min-width:170px;z-index:40}
 .sh-mi{padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:9px;color:var(--ink)}.sh-mi:hover{background:var(--bg)}
 .sh-content{padding:20px;max-width:1200px;width:100%;margin:0 auto}
+.sh-main:has(>.sh-content.dark){background:#0A0E27}
+.sh-main:has(>.sh-content.dark) .sh-top{background:rgba(10,14,39,.85);border-bottom-color:rgba(255,255,255,.12);color:#F8FAFC}
+.sh-main:has(>.sh-content.dark) .sh-top .sh-ttl h1,.sh-main:has(>.sh-content.dark) .sh-burger{color:#F8FAFC}.sh-main:has(>.sh-content.dark) .sh-sub{color:#A3AFC2}
+.sh-main:has(>.sh-content.dark) .sh-ib,.sh-main:has(>.sh-content.dark) .sh-ops{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);color:#F8FAFC}.sh-main:has(>.sh-content.dark) .sh-ops select{color:#F8FAFC;background:transparent}.sh-main:has(>.sh-content.dark) .sh-ops-ic{color:#A3AFC2}
 .sh-embed{margin:-20px;}
 .sh-soonbox{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:48px 24px;text-align:center;box-shadow:var(--shadow)}
 .sh-soonic{width:64px;height:64px;border-radius:18px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff2e8,#ffe2cc);color:var(--brand)}
@@ -251,15 +253,14 @@ const CSS=`
 .dw-track div{height:100%;background:linear-gradient(90deg,#12b76a,#32d583);border-radius:6px}
 .dw-skel{background:linear-gradient(90deg,#eef0f3 25%,#f6f7f9 37%,#eef0f3 63%);background-size:400% 100%;animation:shim 1.4s infinite;border-radius:16px}
 @keyframes shim{0%{background-position:100% 0}100%{background-position:-100% 0}}
-@media(max-width:900px){
-  .sh{grid-template-columns:1fr}
-  .sh-side{position:fixed;inset-inline-start:0;top:0;width:250px;z-index:60;transform:translateX(100%);transition:.25s;box-shadow:-8px 0 30px rgba(0,0,0,.3)}
-  .sh-side.open{transform:translateX(0)}
-  .sh-scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:55}
+@media(max-width:1023px){
   .sh-burger{display:block}
+}
+@media(max-width:900px){
   .dw-kpis{grid-template-columns:1fr 1fr}
   .dw-2,.dw-2b{grid-template-columns:1fr}
   .sh-content{padding:14px}.sh-embed{margin:-14px}
+  .sh-sub{display:none}.sh-ttl h1{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:38vw}
   .sh-hm,.dw-hm{display:none}
 }
 /* ═══ الطباعة: إخفاء الهيكل وإظهار المحتوى فقط بعرض كامل ═══ */
