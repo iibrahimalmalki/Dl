@@ -17,6 +17,13 @@ const DEC={
   rejected:{ar:"مرفوضة (لا تُحتسب)",color:"#087443",bg:"#e7f7ef"},
 };
 
+// سجل الحركات: الحقول المتتبَّعة وتسمياتها + عرض القيم
+const FL={decision:"القرار",status:"الحالة",qc_recommendation:"توصية الجودة",qc_notes:"ملاحظة الجودة",sub_category:"الفئة الفرعية",description:"الوصف",biker_name:"البايكر",sweater_id:"رقم البايكر",sweater_ticket_no:"رقم سويتر",sweater_decision:"قرار سويتر",compensation:"التعويض",has_image:"صورة",sweater_pic_url:"رابط الصورة",no_customer_image:"لا صورة عميل",coach:"رسائل التطوير"};
+const DV={approved:"معتمدة",rejected:"مرفوضة",pending:"معلّقة",accept:"قبول",reject:"رفض",pending_review:"قيد المراجعة",reviewed:"روجعت",decided:"مبتوتة"};
+const dv=v=>v===true?"نعم":v===false?"لا":(v==null||v==="")?"—":(DV[v]||(typeof v==="object"?"—":String(v)));
+function diffRow(o,n){const ch=[];Object.keys(FL).forEach(k=>{const a=o?o[k]:undefined,b=n?n[k]:undefined;if(JSON.stringify(a??null)!==JSON.stringify(b??null))ch.push({k,a,b});});return ch;}
+const fmtDT2=iso=>new Date(iso).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+
 export default function SweaterTickets({opId,me,owner}){
   const[period,setPeriod]=useState("2026-06");
   const[loading,setLoading]=useState(true);
@@ -27,6 +34,8 @@ export default function SweaterTickets({opId,me,owner}){
   const[busy,setBusy]=useState({});   // id -> true
   const[draft,setDraft]=useState({}); // id -> {rec, notes}
   const[lightbox,setLightbox]=useState(null);
+  const[edit,setEdit]=useState(null);   // تعديل الشكوى
+  const[hist,setHist]=useState({});     // id -> {open,loading,rows}
   const fileRef=useRef(null);const upTarget=useRef(null);
 
   const load=useCallback(async()=>{
@@ -158,6 +167,42 @@ export default function SweaterTickets({opId,me,owner}){
     setB(t.id,false);
   };
 
+  // تحرير الشكوى
+  const openEdit=(t)=>setEdit({id:t.id,sweater_ticket_no:t.sweater_ticket_no||"",sub_category:t.sub_category||"",description:t.description||"",biker_name:t.biker_name||"",sweater_id:t.sweater_id||"",sweater_decision:t.sweater_decision||"",compensation:t.compensation||"",qc_notes:t.qc_notes||""});
+  const saveEdit=async()=>{
+    const e=edit;if(!e)return;setB(e.id,true);setMsg(null);
+    try{
+      const patch={sweater_ticket_no:e.sweater_ticket_no||null,sub_category:e.sub_category||null,description:e.description||null,biker_name:e.biker_name||null,sweater_id:e.sweater_id||null,sweater_decision:e.sweater_decision||null,compensation:e.compensation||null,qc_notes:e.qc_notes||null};
+      const{data,error}=await supabase.from("ops_tickets").update(patch).eq("id",e.id).select().single();
+      if(error)throw error;
+      setRows(p=>p.map(r=>r.id===e.id?data:r));
+      setEdit(null);setMsg({ok:true,t:"تم حفظ التعديل — سُجّل في سجل الحركات"});
+      if(hist[e.id]&&hist[e.id].open)loadHist({id:e.id},true);
+    }catch(err){setMsg({ok:false,t:"تعذّر الحفظ: "+(err.message||err)});}
+    setB(e.id,false);
+  };
+  // سجل الحركات (تايملاين)
+  const loadHist=async(t,force)=>{
+    const cur=hist[t.id];
+    if(cur&&cur.open&&!force){setHist(p=>({...p,[t.id]:{...cur,open:false}}));return;}
+    setHist(p=>({...p,[t.id]:{open:true,loading:true,rows:(cur&&cur.rows)||[]}}));
+    const{data}=await supabase.from("audit_log").select("action,actor_email,changed_at,old_data,new_data").eq("table_name","ops_tickets").eq("row_id",t.id).order("changed_at",{ascending:false});
+    setHist(p=>({...p,[t.id]:{open:true,loading:false,rows:data||[]}}));
+  };
+  // إعادة فتح شكوى مبتوتة لتعديل سلسلة الاعتماد
+  const reopen=async(t)=>{
+    if(typeof confirm!=="undefined"&&!confirm("إعادة فتح الشكوى لإعادة القرار؟"))return;
+    setB(t.id,true);setMsg(null);
+    try{
+      const{data,error}=await supabase.from("ops_tickets").update({decision:"pending",status:"reviewed"}).eq("id",t.id).select().single();
+      if(error)throw error;
+      setRows(p=>p.map(r=>r.id===t.id?data:r));
+      setMsg({ok:true,t:"أُعيد فتح الشكوى — يمكنك تغيير القرار الآن"});
+      if(hist[t.id]&&hist[t.id].open)loadHist(t,true);
+    }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
+    setB(t.id,false);
+  };
+
   const totals=useMemo(()=>({
     count:rows.length,
     pending:rows.filter(r=>r.status==="pending_review").length,
@@ -263,7 +308,43 @@ export default function SweaterTickets({opId,me,owner}){
         {!owner&&t.status==="reviewed"&&<div className="st-wait"><Icon n="clock" s={12}/> بانتظار اعتماد المالك</div>}
 
         {t.decided_at&&<div className="st-decided"><Icon n="check" s={12}/> {t.decision==="approved"?"اعتمدها المالك":"رفضها المالك"} بتاريخ {new Date(t.decided_at).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div>}
+
+        {/* أدوات: تحرير · سجل الحركات · إعادة فتح */}
+        {(canEdit||owner)&&<div className="st-tools">
+          {canEdit&&<button className="st-tbtn" onClick={()=>openEdit(t)}><Icon n="edit" s={12}/> تعديل</button>}
+          <button className={"st-tbtn"+(hist[t.id]&&hist[t.id].open?" on":"")} onClick={()=>loadHist(t)}><Icon n="clock" s={12}/> سجل الحركات{hist[t.id]&&hist[t.id].rows&&hist[t.id].rows.length?` (${hist[t.id].rows.length})`:""}</button>
+          {owner&&(t.decision==="approved"||t.decision==="rejected")&&<button className="st-tbtn warn" onClick={()=>reopen(t)}><Icon n="refresh" s={12}/> إعادة فتح القرار</button>}
+        </div>}
+        {hist[t.id]&&hist[t.id].open&&<div className="st-hist">
+          {hist[t.id].loading?<div className="st-hist-l">جارٍ التحميل…</div>:
+           (!hist[t.id].rows.length?<div className="st-hist-l">لا حركات مسجّلة بعد</div>:
+            hist[t.id].rows.map((h,i)=>{const ch=h.action==="UPDATE"?diffRow(h.old_data,h.new_data):[];return(
+              <div className="st-hi" key={i}>
+                <div className="st-hi-top"><b>{h.action==="INSERT"?"أُنشئت الشكوى":h.action==="DELETE"?"حُذفت الشكوى":"تحديث"}</b><span>{fmtDT2(h.changed_at)}{h.actor_email?" · "+h.actor_email:""}</span></div>
+                {h.action==="UPDATE"&&(ch.length?<div className="st-hi-ch">{ch.map((c,j)=><div key={j}><span className="st-hi-f">{FL[c.k]}:</span> من <s>{dv(c.a)}</s> إلى <b>{dv(c.b)}</b></div>)}</div>:<div className="st-hi-ch dim">تحديث بيانات فنية/صور</div>)}
+              </div>);}))}
+        </div>}
       </div>);})}
+
+    {edit&&<div className="st-ov" onClick={()=>setEdit(null)}>
+      <div className="st-modal" onClick={e=>e.stopPropagation()}>
+        <div className="st-mh"><b>تعديل الشكوى</b><button className="st-x" onClick={()=>setEdit(null)}><Icon n="x" s={15}/></button></div>
+        <label className="st-fl">رقم سويتر<input value={edit.sweater_ticket_no} onChange={e=>setEdit({...edit,sweater_ticket_no:e.target.value})}/></label>
+        <label className="st-fl">الفئة الفرعية<input value={edit.sub_category} onChange={e=>setEdit({...edit,sub_category:e.target.value})}/></label>
+        <label className="st-fl">الوصف<textarea value={edit.description} onChange={e=>setEdit({...edit,description:e.target.value})}/></label>
+        <div className="st-frow">
+          <label className="st-fl">البايكر<input value={edit.biker_name} onChange={e=>setEdit({...edit,biker_name:e.target.value})}/></label>
+          <label className="st-fl">رقم البايكر<input value={edit.sweater_id} onChange={e=>setEdit({...edit,sweater_id:e.target.value})}/></label>
+        </div>
+        <div className="st-frow">
+          <label className="st-fl">قرار سويتر<input value={edit.sweater_decision} onChange={e=>setEdit({...edit,sweater_decision:e.target.value})}/></label>
+          <label className="st-fl">التعويض<input value={edit.compensation} onChange={e=>setEdit({...edit,compensation:e.target.value})}/></label>
+        </div>
+        <label className="st-fl">ملاحظة الجودة<textarea value={edit.qc_notes} onChange={e=>setEdit({...edit,qc_notes:e.target.value})}/></label>
+        <div className="st-mact"><button className="st-save" onClick={saveEdit} disabled={!!busy[edit.id]}><Icon n="save" s={14}/> {busy[edit.id]?"جارٍ الحفظ…":"حفظ"}</button><button className="st-cancel" onClick={()=>setEdit(null)}>إلغاء</button></div>
+        <div className="st-mnote2">كل تعديل يُسجَّل تلقائياً في «سجل الحركات» باسمك ووقته.</div>
+      </div>
+    </div>}
 
     {lightbox&&<div className="st-lb" onClick={()=>setLightbox(null)}>
       <img src={lightbox.imgs[lightbox.i]} alt="صورة الشكوى" onClick={e=>e.stopPropagation()}/>
@@ -354,6 +435,36 @@ const CSS=`
 .st-approve:disabled,.st-reject:disabled{opacity:.55}
 .st-wait{display:inline-flex;align-items:center;gap:5px;margin-top:11px;font-size:11.5px;font-weight:700;color:#175cd3}
 .st-decided{display:flex;align-items:center;gap:5px;margin-top:10px;font-size:11px;color:#64748b}
+.st-tools{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;padding-top:10px;border-top:1px dashed #eceef1}
+.st-tbtn{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:9px;border:1px solid #e6e9ee;background:#fff;color:#475569;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer}
+.st-tbtn.on{background:#0f172a;color:#fff;border-color:#0f172a}
+.st-tbtn.warn{border-color:#fbdba7;background:#fffaf0;color:#b54708}
+.st-hist{margin-top:9px;border:1px solid #eef1f4;border-radius:11px;background:#fafbfc;padding:8px 10px}
+.st-hist-l{font-size:11.5px;color:#94a3b8;font-weight:600;padding:6px 2px}
+.st-hi{padding:8px 0;border-bottom:1px solid #eef1f4}
+.st-hi:last-child{border-bottom:none}
+.st-hi-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.st-hi-top b{font-size:12px;color:#0f172a;font-weight:800}
+.st-hi-top span{font-size:10.5px;color:#94a3b8;font-weight:600}
+.st-hi-ch{margin-top:5px;display:flex;flex-direction:column;gap:3px}
+.st-hi-ch div{font-size:11px;color:#475569;font-weight:600;line-height:1.6}
+.st-hi-ch.dim{color:#94a3b8}
+.st-hi-f{font-weight:800;color:#0f172a}
+.st-hi-ch s{color:#b42318}
+.st-hi-ch b{color:#087443}
+.st-ov{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:9500;padding:16px}
+.st-modal{background:#fff;border-radius:18px;width:min(520px,100%);max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(16,24,40,.35);padding:16px}
+.st-mh{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:15px;font-weight:800;color:#0f172a;margin-bottom:12px}
+.st-x{width:28px;height:28px;border-radius:8px;border:1px solid #e6e9ee;background:#fff;color:#475569;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.st-fl{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:700;color:#334155;margin-bottom:10px;flex:1}
+.st-fl input,.st-fl textarea{border:1px solid #e6e9ee;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;color:#0f172a;outline:none;background:#fff}
+.st-fl textarea{min-height:64px;resize:vertical}
+.st-frow{display:flex;gap:10px}
+.st-mact{display:flex;gap:9px;margin-top:6px}
+.st-save{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px;border-radius:11px;border:none;background:linear-gradient(135deg,#12b76a,#087443);color:#fff;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.st-save:disabled{opacity:.6}
+.st-cancel{padding:11px 16px;border-radius:11px;border:1px solid #e6e9ee;background:#fff;color:#334155;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.st-mnote2{font-size:10.5px;color:#94a3b8;font-weight:600;margin-top:9px;text-align:center}
 .st-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:16px;padding:40px 24px;text-align:center}
 .st-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f2f4f7,#e6e9ee);color:#475467}
 .st-empty h3{font-size:16px;margin:0 0 8px}.st-empty p{color:#64748b;font-size:12.5px;max-width:460px;margin:0 auto;line-height:1.7}
