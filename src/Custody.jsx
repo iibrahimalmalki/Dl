@@ -1,6 +1,7 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
+import{useToast}from"./ui";
 import ActivityLog from"./ActivityLog";
 const CU_FL={name:"العهدة",status:"الحالة",start_date:"البداية",end_date:"النهاية",biker_name:"البايكر",sweater_id:"رقم البايكر",life_months:"العمر (شهر)",category:"الفئة"};
 const CU_DV={active:"نشطة",due:"مستحقة",replaced:"مُستبدلة",returned:"مُرجعة",planned:"مخطّطة"};
@@ -36,7 +37,9 @@ const today=()=>new Date().toISOString().slice(0,10);
 
 export default function Custody({opId,owner}){
   const[rows,setRows]=useState([]);const[emps,setEmps]=useState([]);const[loading,setLoading]=useState(true);
-  const[msg,setMsg]=useState(null);const[tab,setTab]=useState("all");
+  const toast=useToast();const[msg,setMsgRaw]=useState(null);
+  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
+  const setMsg=m=>{if(m&&m.ok){toast.ok(m.t,undefined,m.t.length>60?7000:undefined);setMsgRaw(null);}else setMsgRaw(m);};const[tab,setTab]=useState("all");
   const[showAdd,setShowAdd]=useState(false);const[showExtract,setShowExtract]=useState(false);
   const[rounds,setRounds]=useState([]);const[exRound,setExRound]=useState("");
   const[f,setF]=useState({sweater_id:"",catKey:"moto",name:"",start_date:today(),life_months:36,lead_days:90,cost:""});
@@ -116,7 +119,7 @@ export default function Custody({opId,owner}){
   const markReplaced=async(r)=>{const{data}=await supabase.from("custody_assets").update({status:"replaced"}).eq("id",r.id).select().single();if(data)setRows(p=>p.map(x=>x.id===r.id?data:x));};
   const del=async(r)=>{if(!confirm("حذف العُهدة؟"))return;const{error}=await supabase.from("custody_assets").delete().eq("id",r.id);if(!error)setRows(p=>p.filter(x=>x.id!==r.id));};
 
-  if(loading)return<div className="dw-skel" style={{height:280}}/>;
+  if(loading)return<div className="g-skel" style={{height:280}}/>;
 
   return(<div className="cu">
     <style>{CSS}</style>
@@ -149,17 +152,17 @@ export default function Custody({opId,owner}){
     </div>}
 
     <div className="cu-kpis">
-      <K ic="bucket" c="#175cd3" bg="#eff6ff" t="إجمالي العُهد" v={kpis.total}/>
-      <K ic="alert" c="#b54708" bg="#fef3e2" t="قارب انتهاؤها" v={kpis.due}/>
-      <K ic="bike" c="#b42318" bg="#feecea" t="تخطيط شراء" v={kpis.buy}/>
-      <K ic="refresh" c="#087443" bg="#e7f7ef" t="إعادة طلب" v={kpis.reorder}/>
+      <K ic="bucket" c="var(--info-ink)" bg="var(--info-bg)" t="إجمالي العُهد" v={kpis.total}/>
+      <K ic="alert" c="var(--warn-ink)" bg="var(--warn-bg)" t="قارب انتهاؤها" v={kpis.due}/>
+      <K ic="bike" c="var(--bad-ink)" bg="var(--bad-bg)" t="تخطيط شراء" v={kpis.buy}/>
+      <K ic="refresh" c="var(--ok-ink)" bg="var(--ok-bg)" t="إعادة طلب" v={kpis.reorder}/>
     </div>
     <div className="cu-hint"><Icon n="alert" s={13}/> يُحسب الإهلاك من تاريخ البداية × العمر الافتراضي. قبل النهاية بمهلة التخطيط: الأصول المعمّرة (الدراجة) → «خطّط للشراء»، والمواد المستهلكة → «طلب سويتر» يُنشئ طلب إمداد ويعيد ضبط دورة العُهدة.</div>
 
     <div className="cu-tabs">{[["all","الكل"],["due","قارب الانتهاء"],["reorder","المستهلكات"],["active","النشطة"]].map(([k,l])=><button key={k} className={"cu-tab"+(tab===k?" on":"")} onClick={()=>setTab(k)}>{l}</button>)}</div>
 
     {shown.length===0?<div className="cu-empty"><div className="cu-empty-ic"><Icon n="bucket" s={30}/></div><h3>لا عُهد</h3><p>أضِف عُهدة يدوياً أو استخرجها من جولة ميدانية — ويبدأ احتساب الإهلاك وتخطيط الاستبدال/إعادة الطلب.</p></div>:
-    shown.map(r=>{const d=dep(r);const mode=MODE_OF(r.item_type);const col=r.status==="replaced"?"#94a3b8":d.due?"#f04438":d.used>=70?"#f79009":"#12b76a";
+    shown.map(r=>{const d=dep(r);const mode=MODE_OF(r.item_type);const col=r.status==="replaced"?"var(--mut-2)":d.due?"var(--bad)":d.used>=70?"var(--warn)":"var(--ok)";
       return(
       <div className={"cu-card"+(d.due?" due":"")} key={r.id} style={{borderInlineStartColor:col}}>
         <div className="cu-top">
@@ -186,53 +189,53 @@ export default function Custody({opId,owner}){
 function K({ic,c,bg,t,v}){return(<div className="cu-kpi"><span className="cu-ki" style={{background:bg,color:c}}><Icon n={ic} s={17}/></span><div><div className="cu-kv">{v}</div><div className="cu-kl">{t}</div></div></div>);}
 
 const CSS=`
-.cu{--b:#E8712B}
+.cu{--b:var(--p)}
 .cu-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.cu-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:11px;border:none;background:#0f172a;color:#fff;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
-.cu-btn.ghost{background:#fff;border:1px solid #e6e9ee;color:#334155}
-.cu-btn.ok{background:linear-gradient(135deg,#12b76a,#087443)}
+.cu-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:11px;border:none;background:var(--ink);color:var(--bg);font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.cu-btn.ghost{background:var(--glass-2);border:1px solid var(--line-2);color:var(--ink-2)}
+.cu-btn.ok{background:linear-gradient(135deg,var(--ok),color-mix(in srgb,var(--ok) 72%,black))}
 .cu-msg{padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:700;margin-bottom:12px}
-.cu-msg.ok{background:#e7f7ef;color:#087443}.cu-msg.err{background:#feecea;color:#b42318}
-.cu-form{background:#fff;border:1px solid #eceef1;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.cu-msg.ok{background:var(--ok-bg);color:var(--ok-ink)}.cu-msg.err{background:var(--bad-bg);color:var(--bad-ink)}
+.cu-form{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:var(--shadow)}
 .cu-fh{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800;margin-bottom:10px}
 .cu-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 .cu-grid label{display:flex;flex-direction:column;gap:4px}
-.cu-grid span{font-size:11px;color:#64748b;font-weight:600}
-.cu-grid select,.cu-grid input{border:1px solid #e6e9ee;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;color:#0f172a;outline:none;background:#fff;width:100%;box-sizing:border-box}
-.cu-endhint{font-size:11.5px;color:#64748b;margin-top:9px}.cu-endhint b{color:#0f172a}
+.cu-grid span{font-size:11px;color:var(--mut);font-weight:600}
+.cu-grid select,.cu-grid input{border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);outline:none;background:var(--glass-3);width:100%;box-sizing:border-box}
+.cu-endhint{font-size:11.5px;color:var(--mut);margin-top:9px}.cu-endhint b{color:var(--ink)}
 .cu-exrow{display:flex;gap:8px;flex-wrap:wrap}
-.cu-exrow select{flex:1;min-width:180px;border:1px solid #e6e9ee;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none;background:#fff}
-.cu-note{font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.6}
+.cu-exrow select{flex:1;min-width:180px;border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none;background:var(--glass-3)}
+.cu-note{font-size:11px;color:var(--mut-2);margin-top:8px;line-height:1.6}
 .cu-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
-.cu-kpi{background:#fff;border:1px solid #eceef1;border-radius:15px;padding:13px;display:flex;align-items:center;gap:11px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.cu-kpi{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:15px;padding:13px;display:flex;align-items:center;gap:11px;box-shadow:var(--shadow)}
 .cu-ki{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
-.cu-kv{font-size:19px;font-weight:800;letter-spacing:-.5px}.cu-kl{font-size:11px;color:#64748b;font-weight:600}
-.cu-hint{display:flex;align-items:flex-start;gap:7px;background:#fffbeb;border:1px solid #fde9c8;color:#92600e;font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-bottom:12px;line-height:1.6}
+.cu-kv{font-size:19px;font-weight:800;letter-spacing:-.5px}.cu-kl{font-size:11px;color:var(--mut);font-weight:600}
+.cu-hint{display:flex;align-items:flex-start;gap:7px;background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);color:var(--warn-ink);font-size:11.5px;font-weight:600;border-radius:11px;padding:10px 12px;margin-bottom:12px;line-height:1.6}
 .cu-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
-.cu-tab{padding:7px 14px;border-radius:20px;border:1px solid #e6e9ee;background:#fff;color:#475569;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer}
-.cu-tab.on{background:#0f172a;color:#fff;border-color:#0f172a}
-.cu-card{background:#fff;border:1px solid #eceef1;border-inline-start:3px solid #ccc;border-radius:14px;padding:13px 15px;margin-bottom:10px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
-.cu-card.due{background:#fffdf9}
+.cu-tab{padding:7px 14px;border-radius:20px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink-2);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.cu-tab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.cu-card{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-inline-start:3px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:10px;box-shadow:var(--shadow)}
+.cu-card.due{background:var(--p-50)}
 .cu-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.cu-name{font-size:14px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.cu-cat{font-size:10px;font-weight:700;color:#64748b;background:#f4f5f7;border-radius:20px;padding:2px 9px}
+.cu-name{font-size:14px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cu-cat{font-size:10px;font-weight:700;color:var(--mut);background:var(--soft);border-radius:20px;padding:2px 9px}
 .cu-badge{font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:20px}
-.cu-badge.due{background:#feecea;color:#b42318}.cu-badge.rep{background:#eef0f3;color:#64748b}
-.cu-sub{font-size:11.5px;color:#64748b;margin-top:3px}
+.cu-badge.due{background:var(--bad-bg);color:var(--bad-ink)}.cu-badge.rep{background:var(--soft);color:var(--mut)}
+.cu-sub{font-size:11.5px;color:var(--mut);margin-top:3px}
 .cu-rem{font-size:15px;font-weight:800;flex:none}
-.cu-dates{font-size:11px;color:#64748b;margin-top:8px}.cu-dates b{color:#0f172a}
-.cu-bar-t{height:7px;background:#eef0f3;border-radius:5px;overflow:hidden;margin-top:7px}.cu-bar-t div{height:100%;border-radius:5px}
-.cu-used{font-size:10.5px;color:#94a3b8;margin-top:4px}
-.cu-notes{margin-top:8px;font-size:11.5px;color:#475569;background:#fafbfc;border:1px solid #f1f3f5;border-radius:8px;padding:7px 10px}
+.cu-dates{font-size:11px;color:var(--mut);margin-top:8px}.cu-dates b{color:var(--ink)}
+.cu-bar-t{height:7px;background:var(--track);border-radius:5px;overflow:hidden;margin-top:7px}.cu-bar-t div{height:100%;border-radius:5px}
+.cu-used{font-size:10.5px;color:var(--mut-2);margin-top:4px}
+.cu-notes{margin-top:8px;font-size:11.5px;color:var(--ink-2);background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
 .cu-actions{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:11px}
-.cu-b{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:9px;border:1px solid #e6e9ee;background:#fff;color:#334155;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
-.cu-b.reorder{border-color:#b7e4cd;background:#effaf3;color:#087443}
-.cu-b.buy{border-color:#f7bfba;background:#fff5f4;color:#b42318}
-.cu-b.plan{border-color:#fbdba7;background:#fffaf0;color:#b54708}
-.cu-b.done{border-color:#cfe0f7;background:#f5f9ff;color:#1d5bbf}
-.cu-b.del{border-color:#f0d5d2;color:#b42318}
-.cu-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:16px;padding:40px 24px;text-align:center}
-.cu-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff2e8,#ffe2cc);color:var(--b)}
-.cu-empty h3{font-size:16px;margin:0 0 8px}.cu-empty p{color:#64748b;font-size:12.5px;max-width:440px;margin:0 auto;line-height:1.7}
+.cu-b{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:9px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink-2);font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+.cu-b.reorder{border-color:color-mix(in srgb,var(--ok) 35%,transparent);background:var(--ok-bg);color:var(--ok-ink)}
+.cu-b.buy{border-color:color-mix(in srgb,var(--bad) 35%,transparent);background:var(--bad-bg);color:var(--bad-ink)}
+.cu-b.plan{border-color:color-mix(in srgb,var(--warn) 35%,transparent);background:var(--warn-bg);color:var(--warn-ink)}
+.cu-b.done{border-color:color-mix(in srgb,var(--info) 35%,transparent);background:var(--info-bg);color:var(--info-ink)}
+.cu-b.del{border-color:color-mix(in srgb,var(--bad) 35%,transparent);color:var(--bad-ink)}
+.cu-empty{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px dashed var(--line);border-radius:16px;padding:40px 24px;text-align:center}
+.cu-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--p-100),var(--p-100));color:var(--b)}
+.cu-empty h3{font-size:16px;margin:0 0 8px}.cu-empty p{color:var(--mut);font-size:12.5px;max-width:440px;margin:0 auto;line-height:1.7}
 @media(max-width:720px){.cu-kpis{grid-template-columns:1fr 1fr}.cu-grid{grid-template-columns:1fr 1fr}}
 `;

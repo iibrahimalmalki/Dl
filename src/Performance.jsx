@@ -10,14 +10,14 @@ const TARGET=200; // هدف الغسلات الشهري
 const RANK=["يحتاج تحسين","جيد","ممتاز","متميز"];
 function standing(rating,cpct,fines,compliance){
   let s;
-  if(rating>=4.75&&cpct<1&&fines===0)s={ar:"متميز",color:"#087443",bg:"#e7f7ef",ic:"star"};
-  else if(rating>=4.5&&cpct<1.5)s={ar:"ممتاز",color:"#175cd3",bg:"#eff6ff",ic:"check"};
-  else if(rating>=4.0)s={ar:"جيد",color:"#b54708",bg:"#fef3e2",ic:"performance"};
-  else s={ar:"يحتاج تحسين",color:"#b42318",bg:"#feecea",ic:"alert"};
+  if(rating>=4.75&&cpct<1&&fines===0)s={ar:"متميز",color:"var(--ok-ink)",bg:"var(--ok-bg)",ic:"star"};
+  else if(rating>=4.5&&cpct<1.5)s={ar:"ممتاز",color:"var(--info-ink)",bg:"var(--info-bg)",ic:"check"};
+  else if(rating>=4.0)s={ar:"جيد",color:"var(--warn-ink)",bg:"var(--warn-bg)",ic:"performance"};
+  else s={ar:"يحتاج تحسين",color:"var(--bad-ink)",bg:"var(--bad-bg)",ic:"alert"};
   // سقف الالتزام الميداني: <60% يخفض للأدنى، <80% لا يتجاوز «جيد»
   if(compliance!=null){
     const cap=compliance<60?0:compliance<80?1:3;
-    if(RANK.indexOf(s.ar)>cap){const m=[{ar:"يحتاج تحسين",color:"#b42318",bg:"#feecea",ic:"alert"},{ar:"جيد",color:"#b54708",bg:"#fef3e2",ic:"performance"}];s=m[Math.min(cap,1)];}
+    if(RANK.indexOf(s.ar)>cap){const m=[{ar:"يحتاج تحسين",color:"var(--bad-ink)",bg:"var(--bad-bg)",ic:"alert"},{ar:"جيد",color:"var(--warn-ink)",bg:"var(--warn-bg)",ic:"performance"}];s=m[Math.min(cap,1)];}
   }
   return s;
 }
@@ -69,7 +69,7 @@ export default function Performance({opId}){
       violations:withData.reduce((a,r)=>a+r.violations,0),fines:withData.reduce((a,r)=>a+r.fines,0)};
   },[rows]);
 
-  if(loading)return <div className="dw-skel" style={{height:280}}/>;
+  if(loading)return <div className="g-skel" style={{height:280}}/>;
   const hasAny=rows.some(r=>r.hasData);
 
   return(<div className="pf">
@@ -79,10 +79,10 @@ export default function Performance({opId}){
     </div>
 
     <div className="pf-kpis">
-      <K ic="employees" c="#E8712B" bg="#fff2e8" t="بايكرز مقيّمون" v={team.bikers}/>
-      <K ic="operations" c="#175cd3" bg="#eff6ff" t="إجمالي الغسلات" v={team.washes}/>
-      <K ic="star" c="#087443" bg="#e7f7ef" t="متوسط تقييم الفريق" v={team.avgRating?team.avgRating.toFixed(2):"—"}/>
-      <K ic="complaints" c="#b42318" bg="#feecea" t="غرامات مؤكّدة" v={AR(team.fines)} sar/>
+      <K ic="employees" c="var(--p)" bg="var(--p-100)" t="بايكرز مقيّمون" v={team.bikers}/>
+      <K ic="operations" c="var(--info-ink)" bg="var(--info-bg)" t="إجمالي الغسلات" v={team.washes}/>
+      <K ic="star" c="var(--ok-ink)" bg="var(--ok-bg)" t="متوسط تقييم الفريق" v={team.avgRating?team.avgRating.toFixed(2):"—"}/>
+      <K ic="complaints" c="var(--bad-ink)" bg="var(--bad-bg)" t="غرامات مؤكّدة" v={AR(team.fines)} sar/>
     </div>
 
     {!hasAny?<div className="pf-empty"><div className="pf-empty-ic"><Icon n="performance" s={30}/></div><h3>لا بيانات أداء في {periodLabel(period)}</h3><p>الأداء يُجمَّع تلقائياً من العمليات (الغسلات والتقييم) والرواتب والمخالفات. ارفع تقارير سويتر في العمليات أولاً.</p></div>:
@@ -96,7 +96,7 @@ export default function Performance({opId}){
           </div>
           <div className="pf-stats">
             {r.rating!=null&&<div className="pf-rate"><b>{r.rating.toFixed(2)}</b><span>التقييم</span></div>}
-            {r.compliance!=null&&<div className="pf-rate"><b style={{color:r.compliance>=80?"#087443":r.compliance>=60?"#b54708":"#b42318"}}>{r.compliance}%</b><span>الالتزام</span></div>}
+            {r.compliance!=null&&<div className="pf-rate"><b style={{color:r.compliance>=80?"var(--ok-ink)":r.compliance>=60?"var(--warn-ink)":"var(--bad-ink)"}}>{r.compliance}%</b><span>الالتزام</span></div>}
           </div>
         </div>
         <div className="pf-metrics">
@@ -106,42 +106,42 @@ export default function Performance({opId}){
           <M t="الالتزام الميداني" v={r.compliance!=null?r.compliance+"%":"—"} tone={r.compliance==null?null:r.compliance>=80?"g":r.compliance>=60?"a":"r"}/>
           <M t="صافي المكافأة" v={r.net_bonus!=null?AR(r.net_bonus):"—"} sub="ريال"/>
         </div>
-        <div className="pf-track"><div style={{width:pct+"%",background:pct>=100?"#12b76a":pct>=75?"#E8712B":"#f79009"}}/></div>
+        <div className="pf-track"><div style={{width:pct+"%",background:pct>=100?"var(--ok)":pct>=75?"var(--p)":"var(--warn)"}}/></div>
         <div className="pf-track-l">{r.net_washes} من {TARGET} غسلة · {pct}%</div>
       </div>);})}</div>}
   </div>);
 }
 function K({ic,c,bg,t,v,sar}){return(<div className="pf-kpi"><span className="pf-ki" style={{background:bg,color:c}}><Icon n={ic} s={17}/></span><div><div className="pf-kv">{v}{sar&&<i> ر</i>}</div><div className="pf-kl">{t}</div></div></div>);}
-function M({t,v,sub,tone}){const c=tone==="g"?"#087443":tone==="a"?"#b54708":tone==="r"?"#b42318":"#0f172a";return(<div className="pf-m"><div className="pf-m-v" style={{color:c}}>{v}</div><div className="pf-m-t">{t}</div>{sub&&<div className="pf-m-s">{sub}</div>}</div>);}
+function M({t,v,sub,tone}){const c=tone==="g"?"var(--ok-ink)":tone==="a"?"var(--warn-ink)":tone==="r"?"var(--bad-ink)":"var(--ink)";return(<div className="pf-m"><div className="pf-m-v" style={{color:c}}>{v}</div><div className="pf-m-t">{t}</div>{sub&&<div className="pf-m-s">{sub}</div>}</div>);}
 
 const CSS=`
-.pf{--b:#E8712B}
+.pf{--b:var(--p)}
 .pf-bar{display:flex;align-items:center;gap:8px;margin-bottom:12px}
-.pf-month{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e6e9ee;border-radius:11px;padding:7px 11px;color:#64748b}
-.pf-month input{border:none;outline:none;font-family:inherit;font-size:13px;font-weight:700;color:#0f172a;background:none}
+.pf-month{display:flex;align-items:center;gap:7px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:11px;padding:7px 11px;color:var(--mut)}
+.pf-month input{border:none;outline:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);background:none}
 .pf-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
-.pf-kpi{background:#fff;border:1px solid #eceef1;border-radius:15px;padding:13px;display:flex;align-items:center;gap:11px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.pf-kpi{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:15px;padding:13px;display:flex;align-items:center;gap:11px;box-shadow:var(--shadow)}
 .pf-ki{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
-.pf-kv{font-size:19px;font-weight:800;letter-spacing:-.5px}.pf-kv i{font-size:11px;color:#94a3b8;font-weight:600;font-style:normal}
-.pf-kl{font-size:11px;color:#64748b;font-weight:600}
+.pf-kv{font-size:19px;font-weight:800;letter-spacing:-.5px}.pf-kv i{font-size:11px;color:var(--mut-2);font-weight:600;font-style:normal}
+.pf-kl{font-size:11px;color:var(--mut);font-weight:600}
 .pf-list{display:flex;flex-direction:column;gap:11px}
-.pf-card{background:#fff;border:1px solid #eceef1;border-radius:16px;padding:15px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.pf-card{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:15px;box-shadow:var(--shadow)}
 .pf-c-top{display:flex;align-items:center;gap:12px;margin-bottom:13px}
-.pf-av{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#E8712B,#f5a35f);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex:none}
-.pf-name{font-size:14.5px;font-weight:800;color:#0f172a}.pf-name small{color:#94a3b8;font-weight:600;margin-inline-start:6px;font-size:11.5px}
+.pf-av{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,var(--p),var(--a));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex:none}
+.pf-name{font-size:14.5px;font-weight:800;color:var(--ink)}.pf-name small{color:var(--mut-2);font-weight:600;margin-inline-start:6px;font-size:11.5px}
 .pf-stand{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:10.5px;font-weight:800;margin-top:4px}
 .pf-stats{display:flex;gap:16px;flex:none}
-.pf-rate{text-align:center;flex:none}.pf-rate b{font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-.5px;display:block;line-height:1}.pf-rate span{font-size:10px;color:#94a3b8}
+.pf-rate{text-align:center;flex:none}.pf-rate b{font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.5px;display:block;line-height:1}.pf-rate span{font-size:10px;color:var(--mut-2)}
 .pf-metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px}
-.pf-m{background:#fafbfc;border:1px solid #f1f3f5;border-radius:11px;padding:10px 8px;text-align:center}
+.pf-m{background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:10px 8px;text-align:center}
 .pf-m-v{font-size:16px;font-weight:800;letter-spacing:-.3px}
-.pf-m-t{font-size:10px;color:#64748b;font-weight:600;margin-top:2px}
-.pf-m-s{font-size:9.5px;color:#94a3b8;margin-top:1px}
-.pf-track{height:8px;background:#eef0f3;border-radius:6px;overflow:hidden}
+.pf-m-t{font-size:10px;color:var(--mut);font-weight:600;margin-top:2px}
+.pf-m-s{font-size:9.5px;color:var(--mut-2);margin-top:1px}
+.pf-track{height:8px;background:var(--track);border-radius:6px;overflow:hidden}
 .pf-track div{height:100%;border-radius:6px}
-.pf-track-l{font-size:10.5px;color:#94a3b8;margin-top:5px;font-weight:600}
-.pf-empty{background:#fff;border:1px dashed #e6e9ee;border-radius:16px;padding:40px 24px;text-align:center}
-.pf-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#175cd3}
-.pf-empty h3{font-size:16px;margin:0 0 8px}.pf-empty p{color:#64748b;font-size:12.5px;max-width:440px;margin:0 auto;line-height:1.7}
+.pf-track-l{font-size:10.5px;color:var(--mut-2);margin-top:5px;font-weight:600}
+.pf-empty{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px dashed var(--line);border-radius:16px;padding:40px 24px;text-align:center}
+.pf-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--info-bg),var(--info-bg));color:var(--info-ink)}
+.pf-empty h3{font-size:16px;margin:0 0 8px}.pf-empty p{color:var(--mut);font-size:12.5px;max-width:440px;margin:0 auto;line-height:1.7}
 @media(max-width:720px){.pf-kpis{grid-template-columns:1fr 1fr}.pf-metrics{grid-template-columns:1fr 1fr 1fr}}
 `;
