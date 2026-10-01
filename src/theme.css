@@ -57,6 +57,10 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-
 .g-orb.b{width:460px;height:460px;inset-inline-end:-140px;top:30%;background:radial-gradient(circle,rgba(var(--s-rgb),.32),transparent 65%)}
 .g-orb.c{width:420px;height:420px;inset-inline-start:30%;bottom:-200px;background:radial-gradient(circle,rgba(var(--a-rgb),.30),transparent 65%)}
 :root[data-theme=dark] .g-orb{opacity:.38}
+/* زر الثيم الثابت في زاوية الصفحات المستقلة (خارج Shell) — هدف لمس 44px */
+.g-corner{position:fixed;top:12px;inset-inline-start:12px;z-index:60}
+.g-corner .g-btn.icon{width:44px;height:44px;border-radius:14px;background:var(--glass-2);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:var(--shadow)}
+@media print{.g-corner,.g-orbs{display:none!important}}
 
 /* ── البطاقة الزجاجية ── */
 .g-card{position:relative;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);color:var(--ink)}

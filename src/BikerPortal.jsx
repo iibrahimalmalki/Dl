@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import TOOLREFS from "./toolRefs";
+import { ThemeToggle, Orbs, useToast } from "./ui";
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
     هوية دلو ورغوة (برتقالي) · ثنائية اللغة (عربي + বাংলা)
@@ -10,79 +11,90 @@ import TOOLREFS from "./toolRefs";
 */
 
 const CSS = `
-.bp-wrap{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;direction:rtl;background:linear-gradient(160deg,#FFF9F0,#FFF3DC 60%,#FFEACC);min-height:100dvh;color:#15243a;padding:14px 10px 70px}
-.bp-card{max-width:560px;margin:0 auto 14px;background:#fff;border-radius:18px;box-shadow:0 6px 22px rgba(20,36,58,.08);overflow:hidden}
-.bp-head{background:linear-gradient(135deg,#E8712B,#CC5200);color:#fff;padding:18px 18px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.bp-wrap{font-family:var(--font);direction:rtl;background:var(--bg);min-height:100dvh;color:var(--ink);padding:66px 10px 70px;position:relative}
+.bp-wrap>*:not(.g-orbs):not(.g-corner){position:relative;z-index:1}
+.bp-wrap .bn,.bp-wrap :lang(bn){font-family:system-ui,-apple-system,'Noto Sans Bengali','Segoe UI',sans-serif}
+.bp-card{max-width:560px;margin:0 auto 14px;border-radius:18px;overflow:hidden}
+.bp-head{background:linear-gradient(135deg,var(--a),var(--p));color:#fff;padding:18px 18px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .bp-head h1{font-size:19px;font-weight:900;margin:0}
-.bp-head .s{opacity:.95;font-size:12px;margin-top:4px;line-height:1.5}
-.bp-logout{background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:9px;padding:7px 12px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0;line-height:1.4}
+.bp-head .s{font-size:12.5px;font-weight:600;margin-top:4px;line-height:1.5}
+.bp-logout{background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:11px;padding:7px 14px;min-height:44px;min-width:44px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0;line-height:1.4}
 .bp-prof{max-width:560px;margin:0 auto 14px;display:flex;gap:10px}
-.bp-pcell{flex:1;background:#fff;border:1px solid #f0e2ce;border-radius:14px;padding:12px 10px;text-align:center;box-shadow:0 3px 14px rgba(232,113,43,.06)}
-.bp-pcell .k{font-size:10.5px;color:#a8834f;font-weight:700}
-.bp-pcell .v{font-size:15px;font-weight:900;color:#15243a;margin-top:3px}
-.bp-tabs{display:flex;gap:6px;max-width:560px;margin:0 auto 14px}
-.bp-tab{flex:1;padding:10px 4px;text-align:center;border-radius:12px;background:#fff;border:1.5px solid #f0e2ce;font-weight:800;font-size:12.5px;cursor:pointer;color:#8a6d47;line-height:1.45}
-.bp-tab .bn{display:block;font-size:9px;font-weight:600;opacity:.75}
-.bp-tab.on{background:linear-gradient(135deg,#E8712B,#CC5200);color:#fff;border-color:#E8712B}
+.bp-pcell{flex:1;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:12px 10px;text-align:center;box-shadow:var(--shadow)}
+.bp-pcell .k{font-size:10.5px;color:var(--mut);font-weight:700}
+.bp-pcell .v{font-size:15px;font-weight:900;color:var(--ink);margin-top:3px}
+.bp-tabs{display:flex;gap:6px;max-width:560px;margin:0 auto 14px;padding:5px;border-radius:16px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);box-shadow:var(--shadow)}
+.bp-tab{flex:1;min-height:48px;padding:8px 4px;text-align:center;border-radius:12px;background:transparent;border:1px solid transparent;font-weight:800;font-size:12.5px;cursor:pointer;color:var(--mut);line-height:1.45;font-family:inherit}
+.bp-tab .bn{display:block;font-size:10px;font-weight:600}
+.bp-tab.on{background:linear-gradient(135deg,var(--a),var(--p));color:#fff;box-shadow:0 6px 16px -8px rgba(var(--p-rgb),.8)}
+.bp-tab:focus-visible,.bp-seg button:focus-visible,.bp-btn:focus-visible,.bp-logout:focus-visible{outline:none;box-shadow:var(--glow)}
 .bp-sec{padding:16px 18px}
-.bp-lbl{font-size:13px;font-weight:800;color:#334155;margin:14px 0 6px;display:block}
-.bp-lbl .bn{font-weight:600;color:#94a3b8;font-size:11px}
-.bp-req{color:#c0392b;font-weight:900}
-.bp-in,.bp-sel,.bp-ta{width:100%;padding:11px 13px;border:1.5px solid #e6dccb;border-radius:11px;font-size:14px;font-family:inherit;background:#fffdf9;box-sizing:border-box}
-.bp-in:focus,.bp-sel:focus,.bp-ta:focus{outline:none;border-color:#E8712B}
-.bp-ta{min-height:64px;resize:vertical}
-.bp-bike{display:flex;align-items:center;gap:10px;background:#fff4e9;border:1.5px solid #f0b27f;border-radius:12px;padding:12px 14px}
+.bp-lbl{font-size:13px;font-weight:800;color:var(--ink-2);margin:14px 0 6px;display:block}
+.bp-lbl .bn{font-weight:600;color:var(--mut);font-size:11px}
+.bp-req{color:var(--bad-ink);font-weight:900}
+.bp-in,.bp-sel,.bp-ta{min-height:46px;padding:11px 13px;font-size:15px}
+.bp-ta{min-height:72px;resize:vertical}
+.bp-bike{display:flex;align-items:center;gap:10px;background:var(--p-50);border:1px solid rgba(var(--p-rgb),.35);border-radius:12px;padding:12px 14px}
 .bp-bike .ic{font-size:24px}
-.bp-bike .p{font-weight:900;font-size:16px;color:#CC5200}
-.bp-bike .m{font-size:11px;color:#a8834f}
+.bp-bike .p{font-weight:900;font-size:16px;color:var(--p-700)}
+.bp-bike .m{font-size:11.5px;color:var(--mut)}
+:root[data-theme=dark] .bp-bike .p{color:var(--p)}
 .bp-row{display:flex;gap:10px}.bp-row>*{flex:1}
 .bp-seg{display:flex;gap:8px}
-.bp-seg button{flex:1;padding:11px 6px;border-radius:11px;border:1.5px solid #e6dccb;background:#fffdf9;font-weight:800;font-size:13px;cursor:pointer;color:#8a6d47;font-family:inherit;line-height:1.4}
-.bp-seg button .bn{display:block;font-size:10px;font-weight:600;opacity:.75}
-.bp-seg button.on{background:#15243a;color:#fff;border-color:#15243a}
-.bp-chklist{border:1.5px solid #eee4d3;border-radius:12px;overflow:hidden;margin-top:6px}
-.bp-chk{display:flex;align-items:center;gap:10px;padding:11px 13px;font-size:13.5px;font-weight:700;color:#334155;border-bottom:1px solid #f4ece0;background:#fffdf9}
+.bp-seg button{flex:1;min-height:48px;padding:9px 6px;border-radius:11px;border:1px solid var(--line-2);background:var(--glass-2);font-weight:800;font-size:13px;cursor:pointer;color:var(--mut);font-family:inherit;line-height:1.4}
+.bp-seg button .bn{display:block;font-size:10.5px;font-weight:600}
+.bp-seg button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.bp-chklist{border:1px solid var(--line-2);border-radius:12px;overflow:hidden;margin-top:6px}
+.bp-chk{display:flex;align-items:center;gap:10px;min-height:48px;box-sizing:border-box;padding:11px 13px;font-size:13.5px;font-weight:700;color:var(--ink-2);border-bottom:1px solid var(--line);background:var(--glass-2)}
 .bp-chk:last-child{border-bottom:none}
-.bp-chk input{width:22px;height:22px;accent-color:#2E7D32;flex-shrink:0}
-.bp-chk .bn{font-weight:600;color:#94a3b8;font-size:10.5px}
+.bp-chk input{width:22px;height:22px;accent-color:var(--ok);flex-shrink:0}
+.bp-chk .bn{font-weight:600;color:var(--mut);font-size:11px}
 .bp-chk .tx{flex:1}
+.bp-chk.pledge{margin-top:14px;background:var(--p-50);border:1px solid rgba(var(--p-rgb),.35);border-radius:12px;padding:12px 13px;align-items:flex-start}
 .bp-pgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:6px}
-.bp-pbox{border:1.5px dashed #f0b27f;border-radius:12px;background:#fff8f1;overflow:hidden;position:relative;min-height:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;text-align:center}
+.bp-pbox{border:1.5px dashed rgba(var(--p-rgb),.5);border-radius:12px;background:var(--p-50);overflow:hidden;position:relative;min-height:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;text-align:center}
 .bp-pbox input{display:none}
-.bp-pbox .cap{font-size:12px;font-weight:800;color:#CC5200;padding:6px}
-.bp-pbox .cap .bn{display:block;font-size:9.5px;font-weight:600;color:#a8834f}
+.bp-pbox .cap{font-size:12px;font-weight:800;color:var(--p-700);padding:6px}
+.bp-pbox .cap .bn{display:block;font-size:10px;font-weight:600;color:var(--mut)}
+:root[data-theme=dark] .bp-pbox .cap,:root[data-theme=dark] .bp-photo label,:root[data-theme=dark] .bp-acap{color:var(--p)}
 .bp-pbox .em{font-size:22px;margin-top:6px}
-.bp-pbox.done{border-style:solid;border-color:#2E7D32}
+.bp-pbox.done{border-style:solid;border-color:var(--ok)}
 .bp-pbox img{width:100%;height:96px;object-fit:cover;display:block}
-.bp-pbox .tag{position:absolute;top:5px;inset-inline-start:5px;background:rgba(21,36,58,.75);color:#fff;font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:20px}
+.bp-pbox .tag{position:absolute;top:5px;inset-inline-start:5px;background:rgba(10,14,39,.75);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px}
 .bp-photo{margin-top:6px}
 .bp-photo input{display:none}
-.bp-photo label{display:inline-flex;align-items:center;gap:7px;padding:11px 15px;background:#fff4e9;border:1.5px dashed #f0b27f;border-radius:11px;color:#CC5200;font-weight:800;font-size:13px;cursor:pointer}
+.bp-photo label{display:inline-flex;align-items:center;gap:7px;min-height:46px;box-sizing:border-box;padding:11px 15px;background:var(--p-50);border:1.5px dashed rgba(var(--p-rgb),.5);border-radius:11px;color:var(--p-700);font-weight:800;font-size:13px;cursor:pointer}
 .bp-thumbs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.bp-thumbs img{width:66px;height:66px;object-fit:cover;border-radius:10px;border:1px solid #e6dccb}
-.bp-btn{width:100%;margin-top:18px;padding:14px;background:linear-gradient(135deg,#E8712B,#CC5200);color:#fff;border:none;border-radius:12px;font-weight:900;font-size:15px;cursor:pointer;font-family:inherit}
+.bp-thumbs img{width:66px;height:66px;object-fit:cover;border-radius:10px;border:1px solid var(--line-2)}
+.bp-btn{width:100%;min-height:50px;margin-top:18px;padding:14px;background:linear-gradient(135deg,var(--a),var(--p));color:#fff;border:none;border-radius:12px;font-weight:900;font-size:15px;cursor:pointer;font-family:inherit;box-shadow:0 8px 20px -10px rgba(var(--p-rgb),.9)}
 .bp-btn:disabled{opacity:.6}
 .bp-msg{margin-top:12px;padding:11px 13px;border-radius:11px;font-size:13px;font-weight:700}
-.bp-ok{background:#e9f7ee;color:#1b7a3d}.bp-err{background:#fdeaea;color:#c0392b}
+.bp-ok{background:var(--ok-bg);color:var(--ok-ink)}.bp-err{background:var(--bad-bg);color:var(--bad-ink)}
 .bp-list{margin-top:6px}
-.bp-item{border:1px solid #f0e2ce;border-radius:11px;padding:10px 12px;margin-bottom:7px;font-size:12.5px;background:#fffdf9}
-.bp-item .t{font-weight:800;color:#15243a}.bp-item .m{color:#a8834f;font-size:11.5px;margin-top:2px}
-.bp-note{font-size:11.5px;color:#a8834f;margin-top:6px;line-height:1.6}
-.bp-logo{width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#E8712B,#f5a35f);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:30px;box-shadow:0 8px 20px rgba(232,113,43,.32);overflow:hidden}
+.bp-item{border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:7px;font-size:12.5px;background:var(--glass-2)}
+.bp-item .t{font-weight:800;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}.bp-item .m{color:var(--mut);font-size:11.5px;margin-top:2px}
+.bp-item .t .g-badge{margin-inline-start:auto}
+.bp-note{font-size:11.5px;color:var(--mut);margin-top:6px;line-height:1.6}
+.bp-logo{width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,var(--a),var(--p));display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:30px;box-shadow:0 8px 20px rgba(var(--p-rgb),.32);overflow:hidden}
 .bp-logo img{width:70%;height:70%;object-fit:contain}
-.bp-aitem{border-bottom:1px solid #f4ece0}.bp-aitem:last-child{border-bottom:none}
-.bp-arow{display:flex;align-items:center;gap:10px;padding:10px 13px;cursor:pointer}
-.bp-arow input[type=checkbox]{width:22px;height:22px;accent-color:#2E7D32;flex:none}
-.bp-arow .tx{flex:1;font-size:13.5px;font-weight:700;color:#334155}
-.bp-arow .tx .bn{font-weight:600;color:#94a3b8;font-size:10.5px}
-.bp-aref{width:46px;height:46px;border-radius:10px;object-fit:cover;border:1px solid #eee4d3;flex:none;background:#fff}
-.bp-aref.ph{display:flex;align-items:center;justify-content:center;font-size:20px;color:#c9b48f}
-.bp-acap{display:inline-flex;align-items:center;gap:8px;padding:9px 13px;background:#fff4e9;border:1.5px dashed #f0b27f;border-radius:11px;color:#CC5200;font-weight:800;font-size:12.5px;cursor:pointer}
+.bp-aitem{border-bottom:1px solid var(--line);background:var(--glass-2)}.bp-aitem:last-child{border-bottom:none}
+.bp-aitem.on{background:var(--p-50)}
+.bp-arow{display:flex;align-items:center;gap:10px;min-height:48px;padding:10px 13px;cursor:pointer}
+.bp-arow input[type=checkbox]{width:22px;height:22px;accent-color:var(--ok);flex:none}
+.bp-arow .tx{flex:1;font-size:13.5px;font-weight:700;color:var(--ink-2)}
+.bp-arow .tx .bn{font-weight:600;color:var(--mut);font-size:11px}
+.bp-aref{width:46px;height:46px;border-radius:10px;object-fit:cover;border:1px solid var(--line-2);flex:none;background:#fff}
+.bp-aref.ph{display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--mut-2);background:var(--soft)}
+.bp-acap{display:inline-flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;padding:9px 13px;background:var(--p-50);border:1.5px dashed rgba(var(--p-rgb),.5);border-radius:11px;color:var(--p-700);font-weight:800;font-size:12.5px;cursor:pointer}
 .bp-acap input{display:none}
-.bp-athumb{width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid #e6dccb}
+.bp-athumb{width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--line-2)}
+.bp-done{color:var(--ok-ink)}
 `;
 
 /* قائمة التحقق الأساسية للدراجة (أفضل الممارسات) */
+/* خلفية الكرات + زر الثيم في الزاوية — مرة واحدة في جذر كل شاشة */
+const Chrome = () => <><Orbs /><div className="g-corner"><ThemeToggle /></div></>;
+
 const CHECKLIST = [
   { id: "engine", ar: "صوت المحرك سليم", bn: "ইঞ্জিনের শব্দ ঠিক" },
   { id: "brakes", ar: "الفرامل تعمل", bn: "ব্রেক কাজ করে" },
@@ -162,20 +174,20 @@ function Login() {
     } catch (e) { setErr("تعذّر الدخول · লগইন ব্যর্থ: " + (e.message || e)); setBusy(false); }
   }
   return (
-    <div className="bp-wrap"><style>{CSS}</style>
-      <div className="bp-card" style={{ maxWidth: 380, marginTop: "8vh" }}>
+    <div className="bp-wrap"><style>{CSS}</style><Chrome />
+      <div className="bp-card g-card" style={{ maxWidth: 380, marginTop: "8vh" }}>
         <div className="bp-sec" style={{ textAlign: "center", padding: "30px 24px" }}>
           <div className="bp-logo">
             <img src="/brand-mark.png" alt="" onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.parentNode.append("🪣"); }} />
           </div>
-          <div style={{ fontSize: 20, fontWeight: 900, color: "#15243a" }}>بوابة البايكر</div>
-          <div style={{ fontSize: 12.5, color: "#a8834f", fontWeight: 700, marginTop: 2, marginBottom: 4 }}>বাইকার পোর্টাল — দলু ওয়ারঘওয়া</div>
-          <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>سجّل الدخول برقمك · আপনার নম্বর দিয়ে লগইন করুন</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: "var(--ink)" }}>بوابة البايكر</div>
+          <div className="bn" style={{ fontSize: 12.5, color: "var(--mut)", fontWeight: 700, marginTop: 2, marginBottom: 4 }}>বাইকার পোর্টাল — দলু ওয়ারঘওয়া</div>
+          <div style={{ fontSize: 12, color: "var(--mut)", marginBottom: 6 }}>سجّل الدخول برقمك · আপনার নম্বর দিয়ে লগইন করুন</div>
 
           <label className="bp-lbl" style={{ textAlign: "right" }}>رقم البايكر <span className="bn">/ বাইকার নম্বর</span></label>
-          <input className="bp-in" inputMode="text" value={bid} onChange={e => setBid(e.target.value)} placeholder="1624" />
+          <input className="g-input bp-in" inputMode="text" value={bid} onChange={e => setBid(e.target.value)} placeholder="1624" />
           <label className="bp-lbl" style={{ textAlign: "right" }}>الرقم السري <span className="bn">/ পাসওয়ার্ড</span></label>
-          <input className="bp-in" type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••"
+          <input className="g-input bp-in" type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••"
             onKeyDown={e => { if (e.key === "Enter") go(); }} />
           <button className="bp-btn" onClick={go} disabled={busy}>{busy ? "جارٍ الدخول… · লগইন হচ্ছে…" : "دخول · প্রবেশ"}</button>
           {err && <div className="bp-msg bp-err">{err}</div>}
@@ -192,7 +204,7 @@ export default function BikerPortal() {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => { try { sub.subscription.unsubscribe(); } catch (e) {} };
   }, []);
-  if (session === undefined) return <div className="bp-wrap"><style>{CSS}</style><div className="bp-card"><div className="bp-sec">جارٍ التحميل… · লোড হচ্ছে…</div></div></div>;
+  if (session === undefined) return <div className="bp-wrap"><style>{CSS}</style><Chrome /><div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div></div>;
   if (!session) return <Login />;
   return <Portal />;
 }
@@ -230,13 +242,13 @@ function Portal() {
     } catch (e) { setErr("تعذّر تحميل البيانات · ডেটা লোড ব্যর্থ: " + (e.message || e)); }
   })(); }, []);
 
-  if (err) return <div className="bp-wrap"><style>{CSS}</style><div className="bp-card"><div className="bp-sec"><div className="bp-msg bp-err">{err}</div><button className="bp-btn" onClick={() => supabase.auth.signOut()}>خروج · লগআউট</button></div></div></div>;
-  if (!me) return <div className="bp-wrap"><style>{CSS}</style><div className="bp-card"><div className="bp-sec">جارٍ التحميل… · লোড হচ্ছে…</div></div></div>;
+  if (err) return <div className="bp-wrap"><style>{CSS}</style><Chrome /><div className="bp-card g-card"><div className="bp-sec"><div className="bp-msg bp-err">{err}</div><button className="bp-btn" onClick={() => supabase.auth.signOut()}>خروج · লগআউট</button></div></div></div>;
+  if (!me) return <div className="bp-wrap"><style>{CSS}</style><Chrome /><div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div></div>;
 
   return (
     <div className="bp-wrap">
-      <style>{CSS}</style>
-      <div className="bp-card">
+      <style>{CSS}</style><Chrome />
+      <div className="bp-card g-card">
         <div className="bp-head">
           <div>
             <h1>بوابة البايكر</h1>
@@ -253,9 +265,10 @@ function Portal() {
       </div>
 
       {myBike && myBike.needs_receipt_update && (
-        <div className="bp-card" style={{ marginBottom: 14 }}>
+        <div className="bp-card g-card" style={{ marginBottom: 14 }}>
           <div className="bp-sec" style={{ padding: "12px 16px" }}>
             <div className="bp-msg bp-err" style={{ margin: 0 }}>
+              <span className="g-badge warn" style={{ marginBottom: 6 }}><i />مطلوب · <span className="bn">প্রয়োজন</span></span><br />
               ⚠️ مطلوب تحديث الاستلام: افتح تبويب «الدراجة» وسجّل استلامًا فعليًا بقراءة العدّاد والصور.<br />
               রিসিট আপডেট প্রয়োজন: «বাইক» ট্যাবে গিয়ে প্রকৃত ওডোমিটার ও ছবিসহ গ্রহণ রেকর্ড করুন।
             </div>
@@ -264,7 +277,7 @@ function Portal() {
       )}
 
       {temp && myBike && (
-        <div className="bp-card" style={{ marginBottom: 14 }}>
+        <div className="bp-card g-card" style={{ marginBottom: 14 }}>
           <div className="bp-sec" style={{ padding: "12px 16px" }}>
             <div className="bp-msg bp-ok" style={{ margin: 0 }}>
               🔁 حيازة مؤقتة: دراجة {myBike.plate} بعهدتك حالياً كبديل{myBike.held_until ? ` حتى ${myBike.held_until}` : ""}.<br />
@@ -274,11 +287,11 @@ function Portal() {
         </div>
       )}
 
-      <div className="bp-tabs">
-        <div className={"bp-tab" + (tab === "profile" ? " on" : "")} onClick={() => setTab("profile")}>ملفي<span className="bn">প্রোফাইল</span></div>
-        <div className={"bp-tab" + (tab === "handover" ? " on" : "")} onClick={() => setTab("handover")}>الدراجة<span className="bn">বাইক হস্তান্তর</span></div>
-        <div className={"bp-tab" + (tab === "fuel" ? " on" : "")} onClick={() => setTab("fuel")}>الوقود<span className="bn">জ্বালানি</span></div>
-        <div className={"bp-tab" + (tab === "assets" ? " on" : "")} onClick={() => setTab("assets")}>العهدة<span className="bn">সরঞ্জাম</span></div>
+      <div className="bp-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === "profile"} className={"bp-tab" + (tab === "profile" ? " on" : "")} onClick={() => setTab("profile")}>ملفي<span className="bn">প্রোফাইল</span></button>
+        <button type="button" role="tab" aria-selected={tab === "handover"} className={"bp-tab" + (tab === "handover" ? " on" : "")} onClick={() => setTab("handover")}>الدراجة<span className="bn">বাইক হস্তান্তর</span></button>
+        <button type="button" role="tab" aria-selected={tab === "fuel"} className={"bp-tab" + (tab === "fuel" ? " on" : "")} onClick={() => setTab("fuel")}>الوقود<span className="bn">জ্বালানি</span></button>
+        <button type="button" role="tab" aria-selected={tab === "assets"} className={"bp-tab" + (tab === "assets" ? " on" : "")} onClick={() => setTab("assets")}>العهدة<span className="bn">সরঞ্জাম</span></button>
       </div>
 
       {tab === "profile" && <Profile me={me} myBike={myBike} onGo={setTab} />}
@@ -287,6 +300,15 @@ function Portal() {
       {tab === "assets" && <Assets me={me} />}
     </div>
   );
+}
+
+/* حالة الإقرار: مُرسل (declared) ← مُراجع (reviewed/approved/confirmed) */
+function StatusBadge({ s }) {
+  if (!s) return null;
+  const rev = ["reviewed", "approved", "confirmed", "accepted"].includes(s);
+  return rev ? <span className="g-badge ok"><i />مُراجع · <span className="bn">পর্যালোচিত</span></span>
+    : s === "rejected" ? <span className="g-badge bad"><i />مرفوض · <span className="bn">প্রত্যাখ্যাত</span></span>
+    : <span className="g-badge info"><i />مُرسل · <span className="bn">জমা দেওয়া</span></span>;
 }
 
 /* ================= ملفي ================= */
@@ -299,7 +321,7 @@ function Profile({ me, myBike, onGo }) {
     setHo(c1 || 0); setFl(c2 || 0);
   })(); }, []);
   return (
-    <div className="bp-card"><div className="bp-sec">
+    <div className="bp-card g-card"><div className="bp-sec">
       <label className="bp-lbl">بياناتي <span className="bn">/ আমার তথ্য</span></label>
       <div className="bp-item"><div className="t">الاسم · নাম: {me.name || "—"}</div><div className="m">رقم البايكر · বাইকার নম্বর: {me.biker_employee_id}</div></div>
       <div className="bp-item"><div className="t">الدراجة المخصّصة · নির্ধারিত বাইক: {myBike ? myBike.plate : "غير محدّدة — راجع الإدارة · নির্ধারিত নয়"}</div>{myBike && myBike.make && <div className="m">{myBike.make}</div>}</div>
@@ -341,7 +363,7 @@ function PhotoBox({ id, cap, capBn, tag, file, onPick }) {
 /* رسالة عدم وجود دراجة مخصّصة */
 function NoBike() {
   return (
-    <div className="bp-card"><div className="bp-sec">
+    <div className="bp-card g-card"><div className="bp-sec">
       <div className="bp-msg bp-err">لا توجد دراجة مخصّصة لك حالياً — يرجى مراجعة الإدارة.<br />বর্তমানে কোনো বাইক নির্ধারিত নেই — অনুগ্রহ করে ম্যানেজমেন্টের সাথে যোগাযোগ করুন।</div>
     </div></div>
   );
@@ -361,7 +383,10 @@ function Handover({ me, myBike }) {
   const [notes, setNotes] = useState("");
   const [pledge, setPledge] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const toast = useToast();
+  const [msg, setMsgRaw] = useState(null);
+  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
+  const setMsg = m => { if (m && m.t === "ok") { toast.ok(m.m); setMsgRaw(null); } else setMsgRaw(m); };
   const [recent, setRecent] = useState([]);
 
   async function loadRecent() {
@@ -414,7 +439,7 @@ function Handover({ me, myBike }) {
   }
 
   return (
-    <div className="bp-card"><div className="bp-sec">
+    <div className="bp-card g-card"><div className="bp-sec">
       <label className="bp-lbl">الدراجة المخصّصة <span className="bn">/ নির্ধারিত বাইক</span></label>
       <div className="bp-bike"><span className="ic">🏍️</span><div><div className="p">{myBike.plate}</div>{myBike.make && <div className="m">{myBike.make}</div>}</div></div>
 
@@ -425,7 +450,7 @@ function Handover({ me, myBike }) {
       </div>
 
       <label className="bp-lbl">قراءة العدّاد (كم) <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার (কিমি)</span></label>
-      <input className="bp-in" type="number" inputMode="numeric" value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="14230" />
+      <input className="g-input bp-in" type="number" inputMode="numeric" value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="14230" />
 
       <label className="bp-lbl">قائمة التحقق <span className="bn">/ চেকলিস্ট</span></label>
       <div className="bp-chklist">
@@ -458,10 +483,10 @@ function Handover({ me, myBike }) {
       <div className="bp-thumbs">{damages.map((f, i) => <img key={i} src={URL.createObjectURL(f)} alt="" />)}</div>
 
       <label className="bp-lbl">ملاحظات الحالة <span className="bn">/ অবস্থার নোট</span></label>
-      <textarea className="bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي عطل أو خدش… · কোনো ত্রুটি বা দাগ…" />
+      <textarea className="g-textarea bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي عطل أو خدش… · কোনো ত্রুটি বা দাগ…" />
       <div className="bp-note">التوثيق الكامل يحمي حقّك عند التسليم والاستلام. · সম্পূর্ণ ডকুমেন্টেশন আপনার অধিকার রক্ষা করে।</div>
 
-      <label className="bp-chk" style={{ marginTop: 14, background: "#fff8f1", border: "1.5px solid #f0b27f", borderRadius: 12, padding: "12px 13px", alignItems: "flex-start" }}>
+      <label className="bp-chk pledge">
         <input type="checkbox" checked={pledge} onChange={e => setPledge(e.target.checked)} style={{ marginTop: 2 }} />
         <span className="tx" style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.7 }}>
           أتعهّد بالمحافظة على الدراجة والالتزام بتعليمات المرور، وأتحمّل مسؤولية أي أضرار تنتج عن سوء الاستخدام.
@@ -474,9 +499,9 @@ function Handover({ me, myBike }) {
 
       <label className="bp-lbl" style={{ marginTop: 18 }}>آخر سجلاتك <span className="bn">/ সর্বশেষ রেকর্ড</span></label>
       <div className="bp-list">
-        {recent.length === 0 ? <div className="bp-note">لا يوجد بعد · এখনও নেই</div> :
+        {recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
           recent.map(r => <div className="bp-item" key={r.id}>
-            <div className="t">{r.plate || "—"} · {r.direction === "receive" ? "استلام · গ্রহণ" : "تسليم · হস্তান্তর"} · العدّاد {r.odometer}</div>
+            <div className="t">{r.plate || "—"} · {r.direction === "receive" ? "استلام · গ্রহণ" : "تسليم · হস্তান্তর"} · العدّاد {r.odometer}<span className="g-badge info"><i />مُرسل · <span className="bn">জমা দেওয়া</span></span></div>
             <div className="m">{new Date(r.created_at).toLocaleString("ar")}</div>
           </div>)}
       </div>
@@ -494,7 +519,10 @@ function Fuel({ me, myBike }) {
   const [recFile, setRecFile] = useState(null);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const toast = useToast();
+  const [msg, setMsgRaw] = useState(null);
+  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
+  const setMsg = m => { if (m && m.t === "ok") { toast.ok(m.m); setMsgRaw(null); } else setMsgRaw(m); };
   const [recent, setRecent] = useState([]);
 
   async function loadRecent() {
@@ -530,7 +558,7 @@ function Fuel({ me, myBike }) {
   }
 
   return (
-    <div className="bp-card"><div className="bp-sec">
+    <div className="bp-card g-card"><div className="bp-sec">
       <label className="bp-lbl">الدراجة المخصّصة <span className="bn">/ নির্ধারিত বাইক</span></label>
       <div className="bp-bike"><span className="ic">🏍️</span><div><div className="p">{myBike.plate}</div>{myBike.make && <div className="m">{myBike.make}</div>}</div></div>
 
@@ -542,12 +570,12 @@ function Fuel({ me, myBike }) {
 
       <div className="bp-row">
         <div><label className="bp-lbl">العدّاد (كم) <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার</span></label>
-          <input className="bp-in" type="number" inputMode="numeric" value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="14230" /></div>
+          <input className="g-input bp-in" type="number" inputMode="numeric" value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="14230" /></div>
         <div><label className="bp-lbl">المبلغ (ريال) <span className="bp-req">*</span> <span className="bn">/ পরিমাণ</span></label>
-          <input className="bp-in" type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="50" /></div>
+          <input className="g-input bp-in" type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="50" /></div>
       </div>
       <label className="bp-lbl">اللترات (اختياري) <span className="bn">/ লিটার (ঐচ্ছিক)</span></label>
-      <input className="bp-in" type="number" inputMode="decimal" value={liters} onChange={e => setLiters(e.target.value)} placeholder="8.2" />
+      <input className="g-input bp-in" type="number" inputMode="decimal" value={liters} onChange={e => setLiters(e.target.value)} placeholder="8.2" />
 
       <label className="bp-lbl">صورة العدّاد بعد التعبئة <span className="bp-req">*</span> <span className="bn">/ ওডোমিটারের ছবি</span></label>
       <div className="bp-pgrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
@@ -557,16 +585,16 @@ function Fuel({ me, myBike }) {
       <div className="bp-note">إرفاق الفاتورة إلزامي لاعتماد التعبئة. · রসিদ সংযুক্ত করা আবশ্যক।</div>
 
       <label className="bp-lbl">ملاحظات (اختياري) <span className="bn">/ নোট</span></label>
-      <textarea className="bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="…" />
+      <textarea className="g-textarea bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="…" />
 
       <button className="bp-btn" onClick={submit} disabled={busy}>{busy ? "جارٍ الحفظ… · সংরক্ষণ হচ্ছে…" : "حفظ التعبئة · রিফুয়েল সংরক্ষণ"}</button>
       {msg && <div className={"bp-msg " + (msg.t === "ok" ? "bp-ok" : "bp-err")}>{msg.m}</div>}
 
       <label className="bp-lbl" style={{ marginTop: 18 }}>سجل تعبئاتك <span className="bn">/ আপনার রিফুয়েল রেকর্ড</span></label>
       <div className="bp-list">
-        {recent.length === 0 ? <div className="bp-note">لا يوجد بعد · এখনও নেই</div> :
+        {recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
           recent.map(r => <div className="bp-item" key={r.id}>
-            <div className="t">{r.plate || "—"} · {r.fuel_type === "oil" ? "زيت · অয়েল" : "بنزين · পেট্রল"} · {r.amount ? r.amount + "﷼" : "—"} · العدّاد {r.odometer}</div>
+            <div className="t">{r.plate || "—"} · {r.fuel_type === "oil" ? "زيت · অয়েল" : "بنزين · পেট্রল"} · {r.amount ? r.amount + "﷼" : "—"} · العدّاد {r.odometer}<span className="g-badge info"><i />مُرسل · <span className="bn">জমা দেওয়া</span></span></div>
             <div className="m">{new Date(r.fill_at).toLocaleString("ar")}</div>
           </div>)}
       </div>
@@ -583,12 +611,15 @@ function Assets({ me }) {
   const [notes, setNotes] = useState("");
   const [pledge, setPledge] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const toast = useToast();
+  const [msg, setMsgRaw] = useState(null);
+  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
+  const setMsg = m => { if (m && m.t === "ok") { toast.ok(m.m); setMsgRaw(null); } else setMsgRaw(m); };
   const [recent, setRecent] = useState([]);
 
   async function loadRecent() {
     const { data } = await supabase.from("biker_assets")
-      .select("id,items,notes,created_at").order("created_at", { ascending: false }).limit(6);
+      .select("id,items,notes,status,created_at").order("created_at", { ascending: false }).limit(6);
     setRecent(data || []);
   }
   useEffect(() => { loadRecent(); }, []);
@@ -623,7 +654,7 @@ function Assets({ me }) {
   }
 
   return (
-    <div className="bp-card"><div className="bp-sec">
+    <div className="bp-card g-card"><div className="bp-sec">
       <label className="bp-lbl">إقرار العهدة — الأدوات والمواد <span className="bn">/ সরঞ্জাম ও উপকরণের ঘোষণা</span></label>
       <div className="bp-note" style={{ marginBottom: 4 }}>حدّد ما استلمته، والكمية، وحالته، وصوّر الصنف. · আপনি যা পেয়েছেন তা নির্বাচন করুন, পরিমাণ ও অবস্থা দিন এবং ছবি তুলুন।</div>
 
@@ -632,7 +663,7 @@ function Assets({ me }) {
           const r = rows[it.key];
           const ref = it.img ? TOOLREFS[it.img] : null;
           return (
-            <div className="bp-aitem" key={it.key} style={{ background: r.present ? "#fff8f1" : "#fffdf9" }}>
+            <div className={"bp-aitem" + (r.present ? " on" : "")} key={it.key}>
               <label className="bp-arow" htmlFor={"as_" + it.key}>
                 {ref ? <img className="bp-aref" src={ref} alt="" /> : <div className="bp-aref ph">🧰</div>}
                 <input id={"as_" + it.key} type="checkbox" checked={r.present} onChange={e => setItem(it.key, { present: e.target.checked })} />
@@ -643,12 +674,12 @@ function Assets({ me }) {
                   <div className="bp-row" style={{ gap: 8 }}>
                     <div style={{ flex: "0 0 32%" }}>
                       <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الكمية <span className="bn">/ পরিমাণ</span></label>
-                      <input className="bp-in" type="number" inputMode="numeric" min="1" value={r.qty}
+                      <input className="g-input bp-in" type="number" inputMode="numeric" min="1" value={r.qty}
                         onChange={e => setItem(it.key, { qty: e.target.value })} style={{ padding: "9px 11px" }} />
                     </div>
                     <div>
                       <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الحالة <span className="bn">/ অবস্থা</span></label>
-                      <select className="bp-sel" value={r.condition} onChange={e => setItem(it.key, { condition: e.target.value })} style={{ padding: "9px 11px" }}>
+                      <select className="g-select bp-sel" value={r.condition} onChange={e => setItem(it.key, { condition: e.target.value })} style={{ padding: "9px 11px" }}>
                         {CONDITIONS.map(c => <option key={c.v} value={c.v}>{c.ar} / {c.bn}</option>)}
                       </select>
                     </div>
@@ -656,7 +687,7 @@ function Assets({ me }) {
                   <label className="bp-lbl" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>صورة الصنف (اختياري) <span className="bn">/ ছবি (ঐচ্ছিক)</span></label>
                   <label className="bp-acap" htmlFor={"asph_" + it.key}>
                     {r.photo ? <img className="bp-athumb" src={URL.createObjectURL(r.photo)} alt="" /> : <>📷 تصوير الصنف · ছবি তুলুন</>}
-                    {r.photo && <span style={{ color: "#1b7a3d" }}>✓ تم · হয়েছে</span>}
+                    {r.photo && <span className="bp-done">✓ تم · হয়েছে</span>}
                     <input id={"asph_" + it.key} type="file" accept="image/*" capture="environment"
                       onChange={e => setItem(it.key, { photo: (e.target.files || [])[0] || null })} />
                   </label>
@@ -668,9 +699,9 @@ function Assets({ me }) {
       </div>
 
       <label className="bp-lbl">ملاحظات (اختياري) <span className="bn">/ নোট (ঐচ্ছিক)</span></label>
-      <textarea className="bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي تفاصيل عن العهدة… · সরঞ্জাম সম্পর্কে বিস্তারিত…" />
+      <textarea className="g-textarea bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي تفاصيل عن العهدة… · সরঞ্জাম সম্পর্কে বিস্তারিত…" />
 
-      <label className="bp-chk" style={{ marginTop: 14, background: "#fff8f1", border: "1.5px solid #f0b27f", borderRadius: 12, padding: "12px 13px", alignItems: "flex-start" }}>
+      <label className="bp-chk pledge">
         <input type="checkbox" checked={pledge} onChange={e => setPledge(e.target.checked)} style={{ marginTop: 2 }} />
         <span className="tx" style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.7 }}>
           أُقرّ وأتعهّد بأن ما ذكرته أعلاه صحيح، وأنني استلمت هذه العهدة وأتحمّل مسؤوليتها والمحافظة عليها.
@@ -683,12 +714,12 @@ function Assets({ me }) {
 
       <label className="bp-lbl" style={{ marginTop: 18 }}>آخر إقراراتك <span className="bn">/ সর্বশেষ ঘোষণা</span></label>
       <div className="bp-list">
-        {recent.length === 0 ? <div className="bp-note">لا يوجد بعد · এখনও নেই</div> :
+        {recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
           recent.map(r => {
             const its = Array.isArray(r.items) ? r.items : [];
             return (
               <div className="bp-item" key={r.id}>
-                <div className="t">{its.length} عنصر · {its.length} টি সরঞ্জাম</div>
+                <div className="t">{its.length} عنصر · {its.length} টি সরঞ্জাম<StatusBadge s={r.status} /></div>
                 <div className="m">{its.map(x => `${x.name_ar}${x.qty > 1 ? "×" + x.qty : ""} (${condAr(x.condition)})`).join("، ")}</div>
                 <div className="m">{new Date(r.created_at).toLocaleString("ar")}</div>
               </div>
