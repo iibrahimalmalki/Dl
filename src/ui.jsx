@@ -1,7 +1,8 @@
 // ═══ مكوّنات الواجهة المشتركة (Glass UI) — أغلفة خفيفة فوق فئات g-* في theme.css ═══
-// import{Card,Btn,Badge,Modal,Tabs,Empty,Skeleton,KPI,Title,ToastProvider,useToast}from"./ui";
+// import{Card,Btn,Badge,Modal,Tabs,Empty,Skeleton,KPI,Title,ToastProvider,useToast,AnimatedNumber,Gauge}from"./ui";
 import{createContext,useContext,useState,useCallback,useEffect,useRef}from"react";
 import{X,Inbox,Sun,Moon,Monitor}from"lucide-react";
+import{animate,useReducedMotion}from"framer-motion";
 import{useTheme,MODE_AR}from"./theme";
 
 const cx=(...a)=>a.filter(Boolean).join(" ");
@@ -54,3 +55,38 @@ export function ThemeToggle({className,size=17}){
 }
 // ── خلفية الكرات الملوّنة — مرة واحدة في الهيكل ──
 export function Orbs(){return<div className="g-orbs" aria-hidden><span className="g-orb a"/><span className="g-orb b"/><span className="g-orb c"/></div>;}
+
+// ── عدّاد رقمي متحرك — يعدّ من القيمة السابقة إلى الجديدة (يحترم «تقليل الحركة») ──
+// <AnimatedNumber value={1075} format={v=>v.toLocaleString("en-US")} duration={0.9}/>
+export function AnimatedNumber({value,format,duration=0.9,decimals=0,className,style}){
+  const reduce=useReducedMotion();const ref=useRef(null);const prev=useRef(0);
+  const n=Number(value)||0;
+  const fmt=useCallback(v=>format?format(v):Number(v).toLocaleString("en-US",{minimumFractionDigits:decimals,maximumFractionDigits:decimals}),[format,decimals]);
+  useEffect(()=>{
+    const el=ref.current;if(!el)return;
+    const from=prev.current;prev.current=n;
+    if(reduce||from===n){el.textContent=fmt(n);return;}
+    const c=animate(from,n,{duration,ease:[.2,.8,.2,1],onUpdate:v=>{el.textContent=fmt(decimals?v:Math.round(v));}});
+    return()=>c.stop();
+  },[n,reduce,duration,fmt,decimals]);
+  return<span ref={ref} className={cx("g-num",className)} style={style} aria-label={fmt(n)}>{fmt(reduce?n:0)}</span>;
+}
+
+// ── مؤشر دائري (Gauge) — 0..max، لونه حسب العتبات ──
+// <Gauge value={86} label="الالتزام" sub="آخر 30 يوماً" size={150}/>
+export function Gauge({value,max=100,size=140,stroke=12,label,sub,unit="%",tone,thresholds=[80,60]}){
+  const reduce=useReducedMotion();
+  const has=value!=null&&!isNaN(value);const v=has?Math.max(0,Math.min(max,Number(value))):0;
+  const pct=v/max;const r=(size-stroke)/2;const C=2*Math.PI*r;
+  const t=tone||(!has?"mut":v>=thresholds[0]?"ok":v>=thresholds[1]?"warn":"bad");
+  const col=t==="mut"?"var(--mut-2)":t==="p"?"var(--p)":`var(--${t})`;
+  return(<div className="g-gauge" style={{width:size}} role="meter" aria-valuemin={0} aria-valuemax={max} aria-valuenow={has?v:undefined} aria-label={label}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+      <circle cx={size/2} cy={size/2} r={r} style={{fill:"none",stroke:"var(--track)"}} strokeWidth={stroke}/>
+      <circle cx={size/2} cy={size/2} r={r} style={{fill:"none",stroke:col,transition:reduce?"none":"stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1)"}} strokeWidth={stroke} strokeLinecap="round"
+        strokeDasharray={C} strokeDashoffset={C*(1-pct)} transform={`rotate(-90 ${size/2} ${size/2})`}/>
+    </svg>
+    <div className="g-gauge-c"><b style={{color:t==="mut"?"var(--mut)":`var(--${t==="p"?"p-ink":t+"-ink"})`}}>{has?<AnimatedNumber value={v} decimals={v%1?1:0}/>:"—"}{has&&unit?<small>{unit}</small>:null}</b>{label&&<span>{label}</span>}</div>
+    {sub&&<div className="g-gauge-s">{sub}</div>}
+  </div>);
+}
