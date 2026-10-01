@@ -157,7 +157,7 @@ const CSS=`
 .nt-bell:hover{background:var(--hover)}
 .nt-badge{position:absolute;top:-4px;inset-inline-end:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bad);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--glass-3)}
 .nt-scrim{position:fixed;inset:0;z-index:80}
-.nt-panel{backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);position:absolute;inset-inline-end:0;top:48px;width:352px;max-width:90vw;max-height:74vh;background:var(--glass-3);border:1px solid var(--line-2);border-radius:16px;box-shadow:var(--shadow-lg);z-index:81;display:flex;flex-direction:column;overflow:hidden}
+.nt-panel{backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);position:absolute;inset-inline-end:0;top:48px;width:352px;max-width:calc(100vw - 16px);max-height:74vh;background:var(--glass-3);border:1px solid var(--line-2);border-radius:16px;box-shadow:var(--shadow-lg);z-index:81;display:flex;flex-direction:column;overflow:hidden}
 .nt-head{display:flex;align-items:center;justify-content:space-between;padding:13px 15px;border-bottom:1px solid var(--line)}
 .nt-head b{font-size:14px;font-weight:800;display:flex;align-items:center;gap:7px}
 .nt-cnt{background:var(--bad);color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px}
@@ -199,4 +199,5 @@ const CSS=`
 .nt-x{border:none;background:transparent;color:var(--mut-2);cursor:pointer;flex:none;padding:2px}
 @media(max-width:520px){.nt-toast{inset-inline:10px;width:auto}}
 @media print{.nt-wrap,.nt-toast{display:none}}
+@media(max-width:640px){.nt-panel{position:fixed;inset-inline:8px;top:62px;width:auto;max-width:none;max-height:78vh}.nt-scrim{z-index:80}}
 `;

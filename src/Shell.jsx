@@ -173,7 +173,7 @@ function Sk(){return<div className="g-skel box" style={{height:200}}/>;}
 function Soon({ic,name}){return(<div className="sh-soonbox"><div className="sh-soonic"><Icon n={ic} s={30}/></div><h2>{name}</h2><p>هذه الوحدة قيد البناء ضمن خارطة الطريق — ستظهر هنا بنفس المستوى الاحترافي فور اكتمالها.</p></div>);}
 
 const CSS=`
-.sh{--panel:var(--glass-3);--line2:var(--line-2);--brand:var(--p);--side:#0e1622;--side2:#141f2e;--sidink:#c7d0dc;--sidmut:#7c8aa0;display:flex;min-height:100dvh;background:var(--bg);font-family:var(--font);color:var(--ink);font-size:14px;position:relative}
+.sh{--panel:var(--glass-3);--line2:var(--line-2);--brand:var(--p);--side:#0e1622;--side2:#141f2e;--sidink:#c7d0dc;--sidmut:#7c8aa0;display:flex;min-height:100dvh;background:var(--bg);font-family:var(--font);color:var(--ink);font-size:14px;position:relative;overflow-x:clip}
 .sh *{box-sizing:border-box}
 .sh-scrim{display:none}
 .sh-brand{display:flex;align-items:center;gap:11px;padding:20px 20px 14px}
@@ -194,7 +194,7 @@ const CSS=`
 .sh-prof{display:flex;align-items:center;gap:10px;padding:8px;border-radius:11px}
 .sh-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#334155,#475569);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;flex:none}
 .sh-prof b{font-size:12.5px;color:#fff;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sh-prof span{font-size:10.5px;color:var(--sidmut)}
-.sh-main{display:flex;flex-direction:column;min-width:0;flex:1;position:relative;z-index:1;overflow-x:hidden}
+.sh-main{display:flex;flex-direction:column;min-width:0;flex:1;position:relative;z-index:1;overflow-x:clip}
 .sh-top{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:30}
 .sh-burger{display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink)}
 .sh-ttl h1{font-size:16px;font-weight:800;margin:0}.sh-sub{font-size:12px;color:var(--mut)}
@@ -205,7 +205,7 @@ const CSS=`
 .sh-ib:hover,.sh-tt:hover{border-color:rgba(var(--p-rgb),.4)}
 .sh-dot{position:absolute;top:8px;inset-inline-end:9px;width:7px;height:7px;border-radius:50%;background:var(--bad);border:1.5px solid var(--glass-3)}
 .sh-av2{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#E8712B,#f5a35f);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px}
-.sh-menu{position:absolute;top:46px;inset-inline-start:0;background:var(--glass-3);border:1px solid var(--line-2);border-radius:12px;box-shadow:var(--shadow-lg);overflow:hidden;min-width:170px;z-index:40}
+.sh-menu{position:absolute;top:46px;inset-inline-end:0;max-width:calc(100vw - 16px);background:var(--glass-3);border:1px solid var(--line-2);border-radius:12px;box-shadow:var(--shadow-lg);overflow:hidden;min-width:170px;z-index:40}
 .sh-mi{padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:9px;color:var(--ink)}.sh-mi:hover{background:var(--hover)}
 .sh-content{padding:20px;max-width:1200px;width:100%;margin:0 auto}
 .sh-embed{margin:-20px;}
@@ -271,6 +271,12 @@ const CSS=`
   .sh-sub{display:none}.sh-ttl h1{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:38vw}
   .sh-top{padding:10px 12px;gap:8px}
   .dw-hm{display:none}
+}
+/* بعد كتلة 900px حتى تغلب max-width:38vw؛ و.sh .nt-bell لأن CSS الإشعارات يُحقن بعد CSS الهيكل */
+@media(max-width:640px){
+  .sh-ib,.sh-tt,.sh .nt-bell{width:36px;height:36px}
+  .sh-ttl{flex:1;min-width:0}
+  .sh-ttl h1{max-width:none}
 }
 /* ═══ الطباعة: إخفاء الهيكل وإظهار المحتوى فقط بعرض كامل ═══ */
 @media print{
