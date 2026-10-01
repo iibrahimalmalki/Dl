@@ -8,6 +8,7 @@ import{periodAr,downloadCardPdf}from"./perfExport";
 import{waPhone}from"./renewalsLib";
 import{honorData,honorHTML,shareHonor,downloadHonor,honorPNG,honorFileName}from"./honorCard";
 import{downloadBlob}from"./exportKit";
+import DataTable from"./DataTable";
 import{ensureFonts}from"./exportKit";
 
 // لوحة إنتاجية البايكر — بطاقة الأداء الشهرية (HR-POL-003 عبر scorecard.js/payrollEngine.js)
@@ -20,11 +21,6 @@ const sidOf=v=>String(v==null?"":v).trim();
 export const rTone=v=>v>=0.75?"ok":v>=0.25?"warn":"bad";
 const TR={up:"▲",down:"▼",flat:"■"};
 
-const COLS=[
-  {k:"rank",ar:"#"},{k:"name",ar:"البايكر"},{k:"washes",ar:"الغسلات",n:1},{k:"dailyAvg",ar:"متوسط يومي",n:1},{k:"rating",ar:"التقييم",n:1},
-  {k:"complaintPct",ar:"الشكاوى",n:1,asc:1},{k:"cmp",ar:"الالتزام",n:1},{k:"qR",ar:"ريال الجودة",n:1},{k:"sR",ar:"ريال السلامة",n:1},
-  {k:"ratePerWash",ar:"أجر الغسلة",n:1},{k:"bonusBase",ar:"العمولة المتوقعة",n:1},{k:"production",ar:"مكافأة الإنتاج",n:1},{k:"fines",ar:"المخالفات (ر)",n:1,asc:1},
-];
 
 async function safe(q){try{const r=await q;return r.error?{data:null,error:r.error}:r;}catch(e){return{data:null,error:e};}}
 
@@ -33,7 +29,6 @@ export default function Performance({opId,onNav}){
   const[period,setPeriod]=useState(null);
   const[loading,setLoading]=useState(true);
   const[D,setD]=useState(null);
-  const[sort,setSort]=useState({k:"washes",dir:-1});
   const[openSid,setOpenSid]=useState(null);
   const[busy,setBusy]=useState("");
   const[honor,setHonor]=useState(null);   // {sid,variant}
@@ -108,11 +103,6 @@ export default function Performance({opId,onNav}){
     return{list:ranked,team:teamSummary(cur),teamPrev:prev.length?teamSummary(prev):null};
   },[D]);
 
-  const sorted=useMemo(()=>{
-    if(!M)return[];
-    const{k,dir}=sort;
-    return M.list.slice().sort((a,b)=>{const x=a[k],y=b[k];if(typeof x==="string"||typeof y==="string")return dir*String(x||"").localeCompare(String(y||""),"ar");return dir*((Number(x)||0)-(Number(y)||0))||a.rank-b.rank;});
-  },[M,sort]);
 
   // فتح البطاقة من لوحة القيادة/البحث: dw:open {view:'performance',id:sweater_id}
   useEffect(()=>{
@@ -129,8 +119,23 @@ export default function Performance({opId,onNav}){
   const kd=(c,p,{fmt=n0,inv=false,unit=""}={})=>{if(p==null)return null;const d=monthDelta(c,p);if(d.diff==null)return null;const good=inv?d.dir==="down":d.dir==="up";
     return<div className={"g-kpi-d "+(d.dir==="flat"?"":good?"up":"down")}>{TR[d.dir]} {fmt(Math.abs(d.diff))}{unit} عن {periodAr(D.prevP)}</div>;};
   const open=M.list.find(x=>x.sid===openSid)||null;
-  const th=c=><th key={c.k} className={(c.n?"num ":"")+"pf-th"+(sort.k===c.k?" on":"")} onClick={()=>setSort(s=>({k:c.k,dir:s.k===c.k?-s.dir:(c.asc?1:-1)}))}>{c.ar}{sort.k===c.k?(sort.dir<0?" ▾":" ▴"):""}</th>;
 
+  const teamOpts=[...new Set(M.list.map(x=>x.team).filter(Boolean))].sort();
+  const dtCols=[
+    {k:"rank",label:"#",num:true,hideSm:true,render:s=><span className={"pf-rank r"+s.rank}>{s.rank}</span>},
+    {k:"name",label:"البايكر",search:true,value:s=>s.name+" "+s.sid,render:s=><div className="pf-who"><Av s={s}/><div><b>{s.name}</b><small>#{s.sid}{s.team?" · "+s.team:""}</small></div><span className={"pf-tr "+s.tr.dir} title={`الاتجاه ${s.tr.pct}%`}>{TR[s.tr.dir]}</span></div>},
+    {k:"washes",label:"الغسلات",num:true,render:s=><b>{n0(s.washes)}</b>},
+    {k:"dailyAvg",label:"متوسط يومي",num:true,hideSm:true,render:s=>s.workDays?<span className="pf-nw" dir="rtl">{s.dailyAvg}<small> /يوم · {s.workDays} ي</small></span>:"—"},
+    {k:"rating",label:"التقييم",num:true,render:s=>s.rating?s.rating.toFixed(2):"—"},
+    {k:"complaintPct",label:"الشكاوى",num:true,render:s=><span className="pf-nw" dir="rtl">{s.complaintPct}%<small> · {s.complaints}</small></span>},
+    {k:"cmp",label:"الالتزام",num:true,render:s=>s.compliance?<Badge tone={s.compliance.pct>=80?"ok":s.compliance.pct>=60?"warn":"bad"}>{s.compliance.pct}%</Badge>:"—"},
+    {k:"qR",label:"ريال الجودة",num:true,hideSm:true,render:s=><Badge tone={rTone(s.qR)}>{s.qR.toFixed(2)}</Badge>},
+    {k:"sR",label:"ريال السلامة",num:true,hideSm:true,render:s=><Badge tone={rTone(s.sR)}>{s.sR.toFixed(2)}</Badge>},
+    {k:"ratePerWash",label:"أجر الغسلة",num:true,render:s=><b>{n2(s.ratePerWash)}</b>},
+    {k:"bonusBase",label:"العمولة المتوقعة",num:true,hideSm:true,render:s=>n2(s.bonusBase)},
+    {k:"production",label:"مكافأة الإنتاج",num:true,render:s=>s.production?<Badge tone="brand">+{s.production}</Badge>:<span className="pf-mut">{s.nextProduction?`تبقّى ${s.nextProduction.gap}`:"—"}</span>},
+    {k:"fines",label:"المخالفات (ر)",num:true,render:s=>s.fines?<span style={{color:"var(--bad-ink)",fontWeight:700}}>{n2(s.fines)}</span>:"—"},
+  ];
   const sendWa=s=>{const m=s.emp&&s.emp.mobile;if(!m){toast.warn("لا يوجد جوال مسجّل لهذا البايكر");return;}window.open("https://wa.me/"+waPhone(m)+"?text="+encodeURIComponent(bikerBrief(s,"both")),"_blank");};
   const copy=async s=>{try{await navigator.clipboard.writeText(bikerBrief(s,"both"));toast.ok("نُسخ الملخص");}catch(_){toast.bad("تعذّر النسخ");}};
   const pdf=async s=>{setBusy("pdf");try{await downloadCardPdf(s,{name:s.name,sid:s.sid,team:s.team,photo:s.photo,line:s.line,violations:s.violList,series:s.series});toast.ok("تم تنزيل بطاقة "+s.name);}catch(e){toast.bad("تعذّر إنشاء PDF",String(e.message||e));}setBusy("");};
@@ -166,24 +171,9 @@ export default function Performance({opId,onNav}){
       <div className="g-card g-kpi"><div className="g-kpi-l">العمولة المتوقعة<Icon n="cash" s={16}/></div><div className="g-kpi-n">{n0(Math.round(T.bonusBase))}<small> ر</small></div>{kd(T.bonusBase,TP&&TP.bonusBase,{fmt:v=>n0(Math.round(v))})}</div>
     </div>
 
-    <div className="g-card pf-tw"><table className="g-tbl compact pf-tbl">
-      <thead><tr>{COLS.map(th)}</tr></thead>
-      <tbody>{sorted.map(s=><tr key={s.sid} onClick={()=>setOpenSid(s.sid)} className="pf-row" tabIndex={0} onKeyDown={e=>e.key==="Enter"&&setOpenSid(s.sid)}>
-        <td><span className={"pf-rank r"+s.rank}>{s.rank}</span></td>
-        <td><div className="pf-who"><Av s={s}/><div><b>{s.name}</b><small>#{s.sid}{s.team?" · "+s.team:""}</small></div><span className={"pf-tr "+s.tr.dir} title={`الاتجاه ${s.tr.pct}%`}>{TR[s.tr.dir]}</span></div></td>
-        <td className="num"><b>{n0(s.washes)}</b></td>
-        <td className="num pf-nw">{s.workDays?<>{s.dailyAvg}<small> /يوم · {s.workDays} ي</small></>:"—"}</td>
-        <td className="num">{s.rating?s.rating.toFixed(2):"—"}</td>
-        <td className="num pf-nw">{s.complaintPct}%<small> · {s.complaints}</small></td>
-        <td className="num">{s.compliance?<Badge tone={s.compliance.pct>=80?"ok":s.compliance.pct>=60?"warn":"bad"}>{s.compliance.pct}%</Badge>:"—"}</td>
-        <td className="num"><Badge tone={rTone(s.qR)}>{s.qR.toFixed(2)}</Badge></td>
-        <td className="num"><Badge tone={rTone(s.sR)}>{s.sR.toFixed(2)}</Badge></td>
-        <td className="num"><b>{n2(s.ratePerWash)}</b></td>
-        <td className="num">{n2(s.bonusBase)}</td>
-        <td className="num">{s.production?<Badge tone="brand">+{s.production}</Badge>:<span className="pf-mut">{s.nextProduction?`تبقّى ${s.nextProduction.gap}`:"—"}</span>}</td>
-        <td className="num">{s.fines?<span style={{color:"var(--bad-ink)",fontWeight:700}}>{n2(s.fines)}</span>:"—"}</td>
-      </tr>)}</tbody>
-    </table></div>
+    <div className="g-card pf-tw"><DataTable caption={`ترتيب البايكرز — ${periodAr(period)}`} rows={M.list} rowKey={r=>r.sid} columns={dtCols} initialSort={{k:"washes",dir:-1}}
+      pageSize={20} compact searchPlaceholder="بحث بالاسم أو الرقم…" onRowClick={r=>setOpenSid(r.sid)}
+      filters={teamOpts.length>1?[{k:"team",label:"الفريق",options:teamOpts}]:[]}/></div>
     <div className="pf-legend"><Badge tone="ok" dot>≥ 0.75 ر</Badge><Badge tone="warn" dot>0.25–0.50 ر</Badge><Badge tone="bad" dot>0 ر</Badge><span>أجر الغسلة = 2 + ريال الجودة + ريال السلامة (HR-POL-003) · الأرقام متوقعة حتى اعتماد المسير.</span></div>
     </>}
 
@@ -272,7 +262,7 @@ const CSS=`
 .pf-plabel{font-size:13px;font-weight:800;color:var(--ink-2)}
 .pf-kpis{grid-template-columns:repeat(5,1fr)!important;margin-bottom:14px}
 .pf-kpis .g-kpi-n small{font-size:12px;color:var(--mut);font-weight:600}
-.pf-tw{overflow:auto;max-height:70vh}
+.pf-tw{overflow:hidden;padding:0}
 .pf-tbl th.pf-th{cursor:pointer;user-select:none}.pf-tbl th.on{color:var(--p)}
 .pf-row{cursor:pointer}.pf-row:focus-visible{outline:none;box-shadow:inset 0 0 0 2px rgba(var(--p-rgb),.5)}
 .pf-rank{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;background:var(--soft);font-weight:800;font-size:12px;color:var(--mut)}

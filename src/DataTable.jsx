@@ -2,6 +2,7 @@
 // <DataTable caption="ترتيب البايكرز" rows={list} rowKey={r=>r.id} columns={[
 //   {k:"name",label:"الاسم",value:r=>r.name,render:r=><b>{r.name}</b>,search:true},
 //   {k:"washes",label:"الغسلات",num:true},
+//   {k:"note",label:"ملاحظة",hideSm:true},   // يُخفى في بطاقات الجوال
 // ]} initialSort={{k:"washes",dir:-1}} pageSize={15} onRowClick={r=>…} filters={[{k:"team",label:"الفريق",options:[…]}]}/>
 import{useState,useMemo,useEffect,useRef}from"react";
 import Icon from"./Icon";
@@ -45,11 +46,11 @@ export default function DataTable({columns,rows,rowKey,caption,initialSort,pageS
     <div className="g-dt-wrap">
       <table className="g-tbl g-dt-t">
         {caption&&<caption className="g-sr">{caption}</caption>}
-        <thead><tr>{columns.map(c=><th key={c.k} scope="col" aria-sort={ariaSort(c)} className={(c.num?"num ":"")+(c.sortable===false?"":"g-dt-s")+(sort&&sort.k===c.k?" on":"")}>
+        <thead><tr>{columns.map(c=><th key={c.k} scope="col" aria-sort={ariaSort(c)} className={(c.num?"num ":"")+(c.hideSm?"g-dt-hsm ":"")+(c.sortable===false?"":"g-dt-s")+(sort&&sort.k===c.k?" on":"")}>
           {c.sortable===false?c.label:<button type="button" onClick={()=>toggle(c)}>{c.label}<span className="g-dt-ar" aria-hidden>{sort&&sort.k===c.k?(sort.dir<0?"▾":"▴"):"↕"}</span></button>}</th>)}</tr></thead>
         <tbody>{view.map((r,i)=><tr key={rowKey?rowKey(r):i} className={onRowClick?"g-dt-click":""} onClick={onRowClick?()=>onRowClick(r):undefined}
           tabIndex={onRowClick?0:undefined} onKeyDown={onRowClick?e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onRowClick(r);}}:undefined}>
-          {columns.map(c=><td key={c.k} className={c.num?"num":""} data-l={c.label}>{cell(c,r)}</td>)}</tr>)}</tbody>
+          {columns.map(c=><td key={c.k} className={(c.num?"num":"")+(c.hideSm?" g-dt-hsm":"")} data-l={c.label}>{cell(c,r)}</td>)}</tr>)}</tbody>
       </table>
     </div>
     {pages>1&&<nav className="g-dt-pg" aria-label="ترقيم الصفحات">
