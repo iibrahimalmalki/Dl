@@ -14,7 +14,7 @@ export default function SweaterPricing(){
   return(<div className="sp">
     <style>{CSS}</style>
 
-    <div style={{background:"#fff7ed",border:"1px solid #fdba74",borderRadius:12,padding:"11px 14px",marginBottom:14,fontSize:12.5,color:"#9a3412",fontWeight:600,display:"flex",gap:8,alignItems:"center"}}>
+    <div style={{background:"var(--p-50)",border:"1px solid var(--warn)",borderRadius:12,padding:"11px 14px",marginBottom:14,fontSize:12.5,color:"var(--warn-ink)",fontWeight:600,display:"flex",gap:8,alignItems:"center"}}>
       <Icon n="alert" s={15}/> نظام الشرائح والحدّ الأدنى المضمون يُطبَّق اعتباراً من شهر الخدمة <b>أغسطس 2026</b> (ملحق التسعير الموقّع 30/07/2026). أمّا الأشهر السابقة (يناير–يوليو) فبسعر ثابت <b>20﷼/طلب</b> دون شرائح. هذه الحاسبة تعرض نظام الشرائح الجديد.
     </div>
 
@@ -76,41 +76,41 @@ export default function SweaterPricing(){
 }
 
 const CSS=`
-.sp{--b:#E8712B;color:#0f172a}
+.sp{--b:var(--p);color:var(--ink)}
 .sp *{box-sizing:border-box}
 .sp-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
-.sp-kpi{background:#fff;border:1px solid #eceef1;border-radius:14px;padding:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
-.sp-kl{font-size:11px;color:#64748b;font-weight:700}
+.sp-kpi{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+.sp-kl{font-size:11px;color:var(--mut);font-weight:700}
 .sp-kpi b{display:block;font-size:20px;font-weight:800;margin-top:6px;letter-spacing:-.5px}
-.sp-kpi small{font-size:10.5px;color:#94a3b8}
-.sp-calc{background:#fff;border:1px solid #eceef1;border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,24,40,.05);margin-bottom:14px}
+.sp-kpi small{font-size:10.5px;color:var(--mut-2)}
+.sp-calc{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
 .sp-ch{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin-bottom:12px}
 .sp-inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .sp-inputs label{display:flex;flex-direction:column;gap:5px}
-.sp-inputs span{font-size:11.5px;color:#64748b;font-weight:700}
-.sp-inputs input{border:1px solid #e6e9ee;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:15px;font-weight:700;outline:none}
+.sp-inputs span{font-size:11.5px;color:var(--mut);font-weight:700}
+.sp-inputs input{border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;font-family:inherit;font-size:15px;font-weight:700;outline:none}
 .sp-inputs input:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(232,113,43,.1)}
 .sp-range{margin:14px 0 4px}
 .sp-range input{width:100%;accent-color:var(--b)}
 .sp-out{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
-.sp-o{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#f8fafc;border:1px solid #eef1f4;border-radius:11px;padding:11px 13px}
-.sp-o span{font-size:12px;color:#64748b;font-weight:600}
-.sp-o b{font-size:15px;font-weight:800}.sp-o b small{font-size:11px;color:#64748b;font-weight:600}
-.sp-o.hi{background:#fff7f2;border-color:#f5d3b8}
-.sp-o.hi.big{grid-column:1/-1;background:linear-gradient(135deg,#E8712B,#f5a35f);border:none}
+.sp-o{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--soft);border:1px solid var(--line-2);border-radius:11px;padding:11px 13px}
+.sp-o span{font-size:12px;color:var(--mut);font-weight:600}
+.sp-o b{font-size:15px;font-weight:800}.sp-o b small{font-size:11px;color:var(--mut);font-weight:600}
+.sp-o.hi{background:var(--p-50);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+.sp-o.hi.big{grid-column:1/-1;background:linear-gradient(135deg,var(--p),var(--a));border:none}
 .sp-o.hi.big span,.sp-o.hi.big b{color:#fff}.sp-o.hi.big b{font-size:22px}
-.sp-min{font-style:normal;font-size:10px;font-weight:800;background:#e7f7ef;color:#087443;padding:1px 7px;border-radius:20px;margin-inline-start:6px}
-.sp-note{font-size:11px;color:#94a3b8;line-height:1.7;margin:12px 0 0}
-.sp-tblwrap,.sp-terms{background:#fff;border:1px solid #eceef1;border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,24,40,.05);margin-bottom:14px}
+.sp-min{font-style:normal;font-size:10px;font-weight:800;background:var(--ok-bg);color:var(--ok-ink);padding:1px 7px;border-radius:20px;margin-inline-start:6px}
+.sp-note{font-size:11px;color:var(--mut-2);line-height:1.7;margin:12px 0 0}
+.sp-tblwrap,.sp-terms{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
 .sp-tbl{width:100%;border-collapse:collapse}
-.sp-tbl th{font-size:11px;color:#64748b;font-weight:700;text-align:center;padding:9px;border-bottom:1px solid #eceef1;background:#fafbfc}
-.sp-tbl td{padding:10px 9px;border-bottom:1px solid #f1f3f5;font-size:12.5px;text-align:center}
+.sp-tbl th{font-size:11px;color:var(--mut);font-weight:700;text-align:center;padding:9px;border-bottom:1px solid var(--line);background:var(--soft)}
+.sp-tbl td{padding:10px 9px;border-bottom:1px solid var(--line);font-size:12.5px;text-align:center}
 .sp-tbl tr:last-child td{border-bottom:none}
-.sp-tbl tr.on{background:#fff7f2}
+.sp-tbl tr.on{background:var(--p-50)}
 .sp-here{font-size:10px;font-weight:800;color:var(--b);margin-inline-start:6px}
 .sp-tg{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.sp-tg>div{display:flex;flex-direction:column;gap:3px;background:#f8fafc;border:1px solid #eef1f4;border-radius:11px;padding:10px 12px}
-.sp-tg span{font-size:11px;color:#64748b;font-weight:600}
+.sp-tg>div{display:flex;flex-direction:column;gap:3px;background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:10px 12px}
+.sp-tg span{font-size:11px;color:var(--mut);font-weight:600}
 .sp-tg b{font-size:12.5px;font-weight:800}
 @media(max-width:820px){.sp-kpis{grid-template-columns:1fr 1fr}.sp-inputs,.sp-out,.sp-tg{grid-template-columns:1fr}}
 `;

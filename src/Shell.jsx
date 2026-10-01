@@ -42,7 +42,7 @@ const BikerPortal=lazy(()=>import("./BikerPortal"));
 const SUPERVISOR_POS=["sec_ops","ops1","field_sup"];
 // الصفحات المنقولة إلى نظام التصميم الزجاجي (تتبع الوضع الداكن). غير المنقولة تُعرض كجزيرة فاتحة حتى نقلها.
 // migrated pages follow the theme; others render inside a light island until migrated (Phase 1/2)
-const GLASS_READY=new Set(["dashboard","field_rounds","supply_requests","complaints","payroll","operations","employees","recruitment","supply","renewals","fleet","housing","custody","performance","settlement","reconciliation","reports","vendors","damage_claims","incidents","onboarding","offboarding","interviews","sourcing","org","myteam","job_ad","users","gosi"]);
+const GLASS_READY=new Set(["dashboard","field_rounds","supply_requests","complaints","payroll","operations","employees","recruitment","supply","renewals","fleet","housing","custody","performance","settlement","reconciliation","reports","vendors","damage_claims","incidents","onboarding","offboarding","interviews","sourcing","org","myteam","job_ad","users","gosi","pricing","audit","tma"]);
 
 const NAV=[
   {g:"الرئيسية"},
