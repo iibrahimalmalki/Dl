@@ -24,6 +24,13 @@ function useNarrow(){
   useEffect(()=>{if(!window.matchMedia)return;const m=window.matchMedia(q);const h=()=>setV(m.matches);m.addEventListener?m.addEventListener("change",h):m.addListener(h);return()=>{m.removeEventListener?m.removeEventListener("change",h):m.removeListener(h);};},[]);
   return v;
 }
+// شاشات اللمس (hover:none): لا تأثير hover — يمنع بقاء العنصر مظلّلاً بعد اللمس
+function useCanHover(){
+  const q="(hover:hover)";const get=()=>typeof window==="undefined"||!window.matchMedia||window.matchMedia(q).matches;
+  const[v,setV]=useState(get);
+  useEffect(()=>{if(!window.matchMedia)return;const m=window.matchMedia(q);const h=()=>setV(m.matches);m.addEventListener?m.addEventListener("change",h):m.addListener(h);return()=>{m.removeEventListener?m.removeEventListener("change",h):m.removeListener(h);};},[]);
+  return v;
+}
 function useBreakpoint(){
   const get=()=>typeof window==="undefined"?"desktop":window.innerWidth>=1024?"desktop":window.innerWidth>=768?"tablet":"mobile";
   const[bp,setBp]=useState(get);
@@ -35,7 +42,7 @@ const writeStored=v=>{try{localStorage.setItem(STORE,v?"1":"0");}catch(_){}};
 const initials=n=>String(n||"").trim().split(/\s+/).slice(0,2).map(s=>s[0]||"").join("")||"—";
 
 export default function GlassSidebar({items,active,onGo,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,onSearch,extra,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
-  const bp=useBreakpoint();const narrow=useNarrow();const reduce=useReducedMotion();
+  const bp=useBreakpoint();const narrow=useNarrow();const canHover=useCanHover();const reduce=useReducedMotion();
   const[collapsed,setCollapsed]=useState(()=>readStored()??false);
   const[openState,setOpenState]=useState(false);
   const open=openProp??openState;
@@ -82,7 +89,7 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
       <motion.button type="button" data-nav aria-current={isActive?"page":undefined} aria-disabled={locked||undefined} disabled={locked}
         aria-label={!showLabels?n.ar:undefined} aria-describedby={!showLabels?tipId:undefined}
         onClick={()=>{if(locked)return;if(bottom&&n.k==="logout"){onLogout&&onLogout();return;}if(bottom&&n.k==="settings"){onSettings&&onSettings();return;}go(n.k);}}
-        whileHover={locked||reduce?undefined:{x:-4}} whileTap={locked?undefined:{scale:0.97}} transition={{type:"spring",stiffness:500,damping:30}}
+        whileHover={locked||reduce||!canHover?undefined:{x:-4}} whileTap={locked?undefined:{scale:0.97}} transition={{type:"spring",stiffness:500,damping:30}}
         className={"gs-item"+(isActive?" on":"")+(showLabels?"":" icon-only")+(locked?" locked":"")+(bottom&&n.k==="logout"?" danger":"")}>
         {isActive&&<span aria-hidden className="gs-ind"/>}
         <span className="gs-ic"><Ic size={20} strokeWidth={1.9}/>{badge?<span className="gs-dot">{badge>99?"99+":badge}</span>:null}</span>
@@ -168,7 +175,7 @@ const CSS=`
 .gs-logo img{width:28px;height:28px;object-fit:contain}
 .gs-brand{min-width:0;flex:1}.gs-brand b{display:block;font-size:15px;font-weight:800;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gs-brand span{display:block;font-size:11px;color:var(--gs-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gs-tgl{width:32px;height:32px;border-radius:9px;border:none;background:none;color:var(--gs-mut);display:grid;place-items:center;cursor:pointer;flex:none}
-.gs-tgl:hover{color:var(--gs-txt);background:var(--gs-hover)}
+@media(hover:hover){.gs-tgl:hover{color:var(--gs-txt);background:var(--gs-hover)}}
 .gs-tgl.float{position:absolute;top:64px;left:50%;transform:translateX(-50%)}
 .gs-prof{margin:0 12px 12px;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--gs-line);border-radius:16px;background:rgba(255,255,255,.04)}
 .gs-prof.c{justify-content:center;padding:8px 0;margin-top:34px;border:none;background:none}
@@ -183,7 +190,7 @@ const CSS=`
 .gs-sbox input::placeholder{color:var(--gs-mut)}
 .gs-sbox kbd{font-size:10px;border:1px solid var(--gs-line);border-radius:4px;padding:0 4px;color:var(--gs-mut);font-family:inherit}
 .gs-sbtn{width:36px;height:36px;border-radius:12px;border:none;background:none;color:var(--gs-mut);display:grid;place-items:center;cursor:pointer}
-.gs-sbtn:hover{color:var(--gs-txt);background:var(--gs-hover)}
+@media(hover:hover){.gs-sbtn:hover{color:var(--gs-txt);background:var(--gs-hover)}}
 .gs-nav{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 8px 8px;scrollbar-width:thin;scrollbar-color:rgba(127,127,127,.3) transparent}
 .gs-nav::-webkit-scrollbar{width:6px}.gs-nav::-webkit-scrollbar-thumb{background:rgba(127,127,127,.3);border-radius:6px}
 .gs-empty{padding:24px 12px;text-align:center;font-size:12px;color:var(--gs-mut)}
@@ -192,11 +199,11 @@ const CSS=`
 .gs-wrap{position:relative}
 .gs-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;margin:1px 0;border:none;border-radius:12px;background:none;color:var(--gs-mut);font-size:13.5px;font-weight:600;cursor:pointer;text-align:right;outline:none}
 .gs-item.icon-only{justify-content:center;padding:10px 0}
-.gs-item:hover:not([disabled]){color:var(--gs-txt);background:var(--gs-hover)}
+@media(hover:hover){.gs-item:hover:not([disabled]){color:var(--gs-txt);background:var(--gs-hover)}}
 .gs-item.on{color:var(--gs-txt);background:rgba(var(--p-rgb),.15)}
 .gs-item.locked{opacity:.45;cursor:not-allowed}
-.gs-item.danger:hover{color:#B42318;background:rgba(240,68,56,.10)}
-.gs-panel[data-theme=dark] .gs-item.danger:hover{color:#FCA5A5}
+@media(hover:hover){.gs-item.danger:hover{color:#B42318;background:rgba(240,68,56,.10)}}
+@media(hover:hover){.gs-panel[data-theme=dark] .gs-item.danger:hover{color:#FCA5A5}}
 .gs-item:focus-visible{box-shadow:0 0 0 2px var(--gs-bg),0 0 0 4px var(--p)}
 .gs-ind{position:absolute;right:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:linear-gradient(180deg,var(--a),var(--p) 45%,var(--s));box-shadow:0 0 12px rgba(var(--p-rgb),.8)}
 .gs-ic{position:relative;flex:none;display:grid;place-items:center}
