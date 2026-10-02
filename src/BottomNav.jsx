@@ -8,8 +8,10 @@ export const BOTTOM_ITEMS=[
   {k:"performance",ar:"الأداء",ic:"performance"},
 ];
 
-export default function BottomNav({active,allowed,onGo,onMore,badges={}}){
-  const items=BOTTOM_ITEMS.filter(x=>!allowed||allowed.includes(x.k));
+// navItems: عناصر NAV من الهيكل — يُؤخذ منها الاسم القصير (sh) فيبقى اسم الصفحة واحداً في الشريط السفلي والقائمة الجانبية
+export default function BottomNav({active,allowed,onGo,onMore,badges={},navItems}){
+  const label=x=>{const n=(navItems||[]).find(i=>i.k===x.k);return n?(n.sh||n.ar):x.ar;};
+  const items=BOTTOM_ITEMS.filter(x=>!allowed||allowed.includes(x.k)).map(x=>({...x,ar:label(x)}));
   const inBar=items.some(x=>x.k===active);
   return(<nav className="g-bnav" aria-label="التنقّل السريع">
     {items.map(x=><button key={x.k} type="button" className={"g-bnav-i"+(active===x.k?" on":"")} aria-current={active===x.k?"page":undefined} onClick={()=>onGo(x.k)}>

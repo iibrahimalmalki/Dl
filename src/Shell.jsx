@@ -45,7 +45,7 @@ const SUPERVISOR_POS=["sec_ops","ops1","field_sup"];
 
 const NAV=[
   {g:"الرئيسية"},
-  {k:"dashboard",ar:"لوحة القيادة",ic:"dashboard"},
+  {k:"dashboard",ar:"لوحة القيادة",sh:"الرئيسية",ic:"dashboard"},
   {g:"الموارد البشرية"},
   {k:"job_ad",ar:"إعلان التوظيف",ic:"send"},
   {k:"recruitment",ar:"المتقدّمون",ic:"applicants"},
@@ -56,9 +56,9 @@ const NAV=[
   {k:"offboarding",ar:"إنهاء الخدمة",ic:"logout"},
   {k:"tma",ar:"المواهب TMA",ic:"tma",lock:1},
   {g:"التشغيل"},
-  {k:"operations",ar:"العمليات اليومية",ic:"operations"},
-  {k:"performance",ar:"الأداء",ic:"performance"},
-  {k:"field_rounds",ar:"الجولات الميدانية",ic:"rounds"},
+  {k:"operations",ar:"العمليات اليومية",sh:"العمليات",ic:"operations"},
+  {k:"performance",ar:"الأداء",sh:"الأداء",ic:"performance"},
+  {k:"field_rounds",ar:"الجولات الميدانية",sh:"الجولات",ic:"rounds"},
   {k:"complaints",ar:"الشكاوى والمخالفات",ic:"complaints"},
   {k:"incidents",ar:"الحوادث والجزاءات",ic:"alert"},
   {k:"myteam",ar:"فريقي",ic:"bike",sup:1},
@@ -122,7 +122,7 @@ export default function Shell({onLogout,me}){
     <GlassSidebar items={nav} active={view} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={sbTheme}
       user={{name:nm,role:owner?"المالك · صلاحية كاملة":isSup?"مشرف ميداني":"مستخدم"}} onLogout={onLogout} onSettings={owner?()=>go("users"):undefined} onSearch={()=>setSearch(true)} extra={activeOps.length>1?opPicker:null}/>
     <GlobalSearch open={search} onClose={()=>setSearch(false)} items={nav} onGo={go}/>
-    <BottomNav active={view} allowed={nav.map(n=>n.k)} onGo={go} onMore={()=>setOpen(true)} badges={badges}/>
+    <BottomNav active={view} allowed={nav.map(n=>n.k)} navItems={nav} onGo={go} onMore={()=>setOpen(true)} badges={badges}/>
 
     <div className="sh-main">
       <header className="sh-top">

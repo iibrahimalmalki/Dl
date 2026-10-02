@@ -17,6 +17,13 @@ const EXPANDED=240,COLLAPSED=72;
 const SPRING={type:"spring",stiffness:300,damping:30};
 const STORE="dw.sidebar.collapsed";
 
+// ≤640px: نفس عتبة BottomNav — تُستخدم فيه الأسماء القصيرة (sh) لتطابق الشريط السفلي
+function useNarrow(){
+  const q="(max-width:640px)";const get=()=>typeof window!=="undefined"&&!!window.matchMedia&&window.matchMedia(q).matches;
+  const[v,setV]=useState(get);
+  useEffect(()=>{if(!window.matchMedia)return;const m=window.matchMedia(q);const h=()=>setV(m.matches);m.addEventListener?m.addEventListener("change",h):m.addListener(h);return()=>{m.removeEventListener?m.removeEventListener("change",h):m.removeListener(h);};},[]);
+  return v;
+}
 function useBreakpoint(){
   const get=()=>typeof window==="undefined"?"desktop":window.innerWidth>=1024?"desktop":window.innerWidth>=768?"tablet":"mobile";
   const[bp,setBp]=useState(get);
@@ -28,7 +35,7 @@ const writeStored=v=>{try{localStorage.setItem(STORE,v?"1":"0");}catch(_){}};
 const initials=n=>String(n||"").trim().split(/\s+/).slice(0,2).map(s=>s[0]||"").join("")||"—";
 
 export default function GlassSidebar({items,active,onGo,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,onSearch,extra,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
-  const bp=useBreakpoint();const reduce=useReducedMotion();
+  const bp=useBreakpoint();const narrow=useNarrow();const reduce=useReducedMotion();
   const[collapsed,setCollapsed]=useState(()=>readStored()??false);
   const[openState,setOpenState]=useState(false);
   const open=openProp??openState;
@@ -79,7 +86,7 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
         className={"gs-item"+(isActive?" on":"")+(showLabels?"":" icon-only")+(locked?" locked":"")+(bottom&&n.k==="logout"?" danger":"")}>
         {isActive&&<span aria-hidden className="gs-ind"/>}
         <span className="gs-ic"><Ic size={20} strokeWidth={1.9}/>{badge?<span className="gs-dot">{badge>99?"99+":badge}</span>:null}</span>
-        <AnimatePresence initial={false}>{showLabels&&<motion.span key="l" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:8}} transition={{duration:reduce?0:0.18}} className="gs-lbl">{n.ar}</motion.span>}</AnimatePresence>
+        <AnimatePresence initial={false}>{showLabels&&<motion.span key="l" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:8}} transition={{duration:reduce?0:0.18}} className="gs-lbl">{narrow&&n.sh?n.sh:n.ar}</motion.span>}</AnimatePresence>
         {showLabels&&locked&&<Lock size={13} className="gs-lock" aria-hidden/>}
         {showLabels&&badge&&!locked?<span className="gs-badge">{badge}</span>:null}
       </motion.button>
@@ -111,7 +118,7 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
         <nav ref={navRef} aria-label="القائمة الرئيسية" onKeyDown={onNavKey} className="gs-nav">
           {groups.length===0&&<div className="gs-empty">لا نتائج لـ «{query}»</div>}
           {groups.map((g,gi)=>(<div key={g.g||gi} className="gs-grp">
-            {g.g&&(showLabels?<div className="gs-cat">{g.g}</div>:<div aria-hidden className="gs-sep"/>)}
+            {g.g&&!(narrow&&g.items.length===1&&(g.items[0].sh||g.items[0].ar)===g.g)&&(showLabels?<div className="gs-cat">{g.g}</div>:<div aria-hidden className="gs-sep"/>)}
             {g.items.map(n=><Item key={n.k} n={n}/>)}
           </div>))}
         </nav>
@@ -140,6 +147,10 @@ const CSS=`
 .gs-panel button{font-family:inherit;-webkit-tap-highlight-color:transparent}
 .gs-gsrch{display:none}
 @media(max-width:640px){
+  /* الدرج فوق الشريط السفلي (z 60): بلا بطاقة مستخدم (موجودة في الشريط العلوي) ويحترم safe-area */
+  .gs-drawer .gs-prof{display:none}
+  .gs-drawer .gs-head{padding-bottom:10px}
+  .gs-drawer .gs-foot{padding-bottom:calc(8px + env(safe-area-inset-bottom))}
   .gs-gsrch{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:10px 12px;border:1px solid var(--gs-line);border-radius:12px;background:rgba(255,255,255,.05);color:var(--gs-mut);font:inherit;font-size:13px;text-align:start;cursor:pointer;min-height:44px}
   .gs-gsrch:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(var(--p-rgb),.35)}
   .gs-srch.has-g{display:none}
@@ -192,9 +203,9 @@ const CSS=`
 .gs-tip{position:absolute;top:50%;right:calc(100% + 10px);transform:translateY(-50%);z-index:50;white-space:nowrap;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;background:var(--gs-tipbg);color:var(--gs-txt);border:1px solid var(--gs-line);box-shadow:0 8px 24px -8px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .15s}
 .gs-wrap:hover .gs-tip,.gs-wrap:focus-within .gs-tip{opacity:1}
 .gs-foot{border-top:1px solid var(--gs-line);padding:8px}
-.gs-bd{position:fixed;inset:0;z-index:40;background:rgba(4,8,24,.45)}
+.gs-bd{position:fixed;inset:0;z-index:80;background:rgba(4,8,24,.45)}
 .gs-bd.blur{backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
-.gs-drawer{position:fixed;top:0;bottom:0;right:0;width:240px;z-index:50}
+.gs-drawer{position:fixed;top:0;bottom:0;right:0;width:240px;z-index:90}
 .gs-drawer .gs-panel{height:100%;position:relative}
 @media(prefers-reduced-motion:reduce){.gs-tip{transition:none}}
 @media print{.gs-panel,.gs-bd,.gs-drawer{display:none!important}}
