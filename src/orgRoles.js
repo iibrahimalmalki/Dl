@@ -5,7 +5,7 @@
 export const OWNER_ONLY=["tma","users"];
 
 export const MODULE_LABELS={
-  dashboard:"لوحة القيادة",recruitment:"المتقدّمون",interviews:"المقابلات",sourcing:"معايير الاستقطاب",
+  dashboard:"الرئيسية",recruitment:"المتقدّمون",interviews:"المقابلات",sourcing:"معايير الاستقطاب",
   onboarding:"التعاقد والإعداد",operations:"العمليات اليومية",performance:"الأداء",payroll:"الرواتب",
   complaints:"الشكاوى",field_rounds:"الجولات الميدانية",org:"الهيكل التنظيمي",employees:"الموظفون",
   vendors:"الموردون",reports:"التقارير",renewals:"الوثائق",

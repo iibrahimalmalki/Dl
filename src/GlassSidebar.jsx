@@ -125,7 +125,7 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
         <nav ref={navRef} aria-label="القائمة الرئيسية" onKeyDown={onNavKey} className="gs-nav">
           {groups.length===0&&<div className="gs-empty">لا نتائج لـ «{query}»</div>}
           {groups.map((g,gi)=>(<div key={g.g||gi} className="gs-grp">
-            {g.g&&!(narrow&&g.items.length===1&&(g.items[0].sh||g.items[0].ar)===g.g)&&(showLabels?<div className="gs-cat">{g.g}</div>:<div aria-hidden className="gs-sep"/>)}
+            {g.g&&!(g.items.length===1&&((narrow&&g.items[0].sh)||g.items[0].ar)===g.g)&&(showLabels?<div className="gs-cat">{g.g}</div>:<div aria-hidden className="gs-sep"/>)}
             {g.items.map(n=><Item key={n.k} n={n}/>)}
           </div>))}
         </nav>
