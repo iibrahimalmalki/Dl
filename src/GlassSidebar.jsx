@@ -99,7 +99,7 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
       <div className="gs-glass">
         <div className={"gs-head"+(showLabels?"":" c")}>
           <span className="gs-logo"><img src="/brand-mark.png" alt=""/></span>
-          {showLabels&&<div className="gs-brand"><b>{platform.name}</b><span>{platform.subtitle}</span></div>}
+          {showLabels&&<div className="gs-brand"><b>{platform.name}</b><span className="gs-sub">{String(platform.subtitle||"").split(" · ").map((t,i)=><i key={i}>{i?<em> · </em>:null}{t}</i>)}</span></div>}
           {isDocked
             ?<button type="button" onClick={()=>setCollapsed(c=>!c)} aria-expanded={!collapsed} aria-label={collapsed?"توسيع القائمة":"طيّ القائمة"} className={"gs-tgl"+(showLabels?"":" float")}>{collapsed?<PanelRightOpen size={18}/>:<PanelRightClose size={18}/>}</button>
             :<button type="button" onClick={()=>setOpen(false)} aria-label="إغلاق القائمة" className="gs-tgl"><X size={18}/></button>}
@@ -146,9 +146,15 @@ const CSS=`
 .gs-panel *{box-sizing:border-box}
 .gs-panel button{font-family:inherit;-webkit-tap-highlight-color:transparent}
 .gs-gsrch{display:none}
+.gs-sub i,.gs-sub em{font-style:normal}
 @media(max-width:640px){
   /* الدرج فوق الشريط السفلي (z 60): بلا بطاقة مستخدم (موجودة في الشريط العلوي) ويحترم safe-area */
   .gs-drawer .gs-prof{display:none}
+  /* السطر الفرعي يظهر كاملاً: التفاف على سطرين بدل القصّ */
+  .gs-drawer .gs-brand b,.gs-drawer .gs-brand span{white-space:normal;overflow:visible;text-overflow:clip}
+  .gs-drawer .gs-sub{line-height:1.45;margin-top:2px}
+  .gs-drawer .gs-sub i{display:block}.gs-drawer .gs-sub em{display:none}
+  .gs-drawer .gs-head{align-items:flex-start}
   .gs-drawer .gs-head{padding-bottom:10px}
   .gs-drawer .gs-foot{padding-bottom:calc(8px + env(safe-area-inset-bottom))}
   .gs-gsrch{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:10px 12px;border:1px solid var(--gs-line);border-radius:12px;background:rgba(255,255,255,.05);color:var(--gs-mut);font:inherit;font-size:13px;text-align:start;cursor:pointer;min-height:44px}
