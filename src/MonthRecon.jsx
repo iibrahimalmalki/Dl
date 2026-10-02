@@ -8,6 +8,13 @@ import DataTable from"./DataTable";
 import{useToast,Badge,EmptyState}from"./ui";
 import{reconcileMonth,claimFrom,num,r2,SWEATER_FIELDS}from"./monthRecon";
 import{MIN_GUARANTEE_ORDERS}from"./sweaterContract";
+import{parseBreakdown,fillFromBreakdown}from"./sspBreakdown";
+
+// كشف سويتر المرفوع يُحفظ في bucket خاص (legal-docs) بمسار sweater-breakdowns/{period}/…
+const BD_BUCKET="legal-docs",BD_PREFIX="sweater-breakdowns";
+const MAR=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+const periodAr=p=>{const[y,m]=String(p||"").split("-");return(MAR[+m-1]||m||"")+" "+(y||"");};
+const safeName=n=>String(n||"breakdown.pdf").replace(/[^\w.\-]+/g,"_").slice(-120);
 
 const f2=v=>v==null?"—":Number(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fi=v=>v==null?"—":Number(v).toLocaleString("en-US");
@@ -19,11 +26,12 @@ const COLS_MISSING=e=>e&&(e.code==="42703"||e.code==="PGRST204"||/recon/.test(St
 const opOr=op=>`operator_id.eq.${op},operator_id.is.null`;
 
 // حقل إدخال رقمي + شارة فرق: ✓ أخضر عند التطابق، أحمر بقيمة الفرق عند الاختلاف
-function NumIn({label,value,onChange,placeholder,diff,tol=0,fmt=f2,disabled}){
+function NumIn({label,value,onChange,placeholder,diff,tol=0,fmt=f2,disabled,auto}){
   const on=value!==""&&value!=null;
   return(<span className="mr-in">
     <input className="g-input" type="text" inputMode="decimal" dir="ltr" value={value??""} placeholder={placeholder} aria-label={label} disabled={disabled}
       onChange={e=>onChange(e.target.value.replace(/[^\d.,\-]/g,""))}/>
+    {auto&&on&&<span className="mr-auto" title="عُبّئ من كشف سويتر — قابل للتعديل">من الكشف</span>}
     {on&&diff!=null&&(Math.abs(diff)<=tol?<Badge tone="ok" aria-label="مطابق">✓</Badge>:<Badge tone="bad">{sg(diff,fmt)}</Badge>)}
   </span>);
 }
@@ -35,6 +43,9 @@ export default function MonthRecon({period,opId,me,owner,reloadKey,onStatus}){
   const[sw,setSw]=useState({});const[decision,setDecision]=useState("");const[note,setNote]=useState("");
   const[invRef,setInvRef]=useState("");const[invAmt,setInvAmt]=useState("");
   const[colMissing,setColMissing]=useState(false);const[saving,setSaving]=useState(false);
+  // كشف سويتر (PDF): المقروء، الحقول المعبّأة آلياً، التنبيهات، الملف بانتظار الرفع عند الحفظ، والملف المحفوظ
+  const[bd,setBd]=useState(null);const[filled,setFilled]=useState({});const[bdWarn,setBdWarn]=useState([]);
+  const[pdfFile,setPdfFile]=useState(null);const[pdfBusy,setPdfBusy]=useState(false);const[fileRec,setFileRec]=useState(null);
 
   // الصلاحية: المالك، أو settlement/payroll (عرض = can_view أو can_edit، حفظ = can_edit)
   useEffect(()=>{if(owner){setPerm({view:true,edit:true});return;}if(!me||!me.id){setPerm({view:false,edit:false});return;}
@@ -65,6 +76,7 @@ export default function MonthRecon({period,opId,me,owner,reloadKey,onStatus}){
     setColMissing(missing);
     setData({bikers,adjustments:adj.data||[],tickets:tk.data||[],violations,settlement,claim:cl.data||null});
     const rc=settlement&&settlement.recon;
+    setFileRec(rc&&rc.file?rc.file:null);setBd(null);setFilled({});setBdWarn([]);setPdfFile(null);
     setSw(rc&&rc.sweater?rc.sweater:{});setDecision(rc?rc.decision||"":"");setNote(rc?rc.note||"":"");
     setInvRef(settlement&&settlement.invoice_ref?settlement.invoice_ref:"");setInvAmt(settlement&&settlement.invoice_amount!=null?String(settlement.invoice_amount):"");
     setLoading(false);
@@ -80,7 +92,32 @@ export default function MonthRecon({period,opId,me,owner,reloadKey,onStatus}){
   if(!perm.view)return(<section className="g-card pad"><EmptyState compact variant="ring" title="المطابقة" text="عرض المطابقة متاح للمالك ولمن له صلاحية التسوية أو الرواتب."/></section>);
   if(loading||!res)return(<section className="g-card pad"><div className="g-skel" style={{height:180}}/></section>);
 
-  const setF=(id,f,v)=>setSw(p=>({...p,[id]:{...(p[id]||{}),[f]:v}}));
+  const setF=(id,f,v)=>{setSw(p=>({...p,[id]:{...(p[id]||{}),[f]:v}}));setFilled(p=>p[id]&&p[id].includes(f)?{...p,[id]:p[id].filter(x=>x!==f)}:p);};
+
+  // رفع كشف سويتر (PDF) ⇒ قراءة النص ⇒ تعبئة الحقول (بلا حفظ تلقائي؛ الملف يُرفع عند الحفظ)
+  const onPdf=async file=>{
+    if(!file)return;setPdfBusy(true);
+    try{
+      const{pdfLines}=await import("./pdfText");
+      const{lines,chars}=await pdfLines(file);
+      if(chars<20){toast.bad("الملف صورة ممسوحة ولا يمكن قراءته — أدخل الأرقام يدوياً",file.name,0);return;}
+      const br=parseBreakdown(lines);
+      if(!br.period){toast.bad("تعذّر معرفة شهر الكشف","لم يُعثر على سطر Period — أدخل الأرقام يدوياً",0);return;}
+      if(br.period!==period){toast.bad(`هذا كشف ${periodAr(br.period)} وأنت على ${periodAr(period)}`,"لم تُعبَّأ الحقول",0);return;}
+      if(!br.bikers.length){toast.bad("لم يُعثر على صفوف البايكرز في الكشف","أدخل الأرقام يدوياً",0);setBdWarn(br.warnings);return;}
+      const calc={};res.rows.forEach(r=>{if(r.inPlatform)calc[r.sweater_id]=r.netCalc;});
+      const f=fillFromBreakdown(br,calc);
+      setSw(p=>{const o={...p};Object.entries(f.sweater).forEach(([sid,v])=>{o[sid]={...(o[sid]||{}),...v};});return o;});
+      setFilled(f.filled);setBd(br);setBdWarn([...br.warnings,...f.warnings]);setPdfFile(file);
+      if(!lockRef&&!invRef.trim()&&f.invoice.ref)setInvRef(f.invoice.ref);
+      if(!lockAmt&&!invAmt&&f.invoice.amount!=null)setInvAmt(String(f.invoice.amount));
+      const nw=br.warnings.length+f.warnings.length;
+      (nw?toast.warn:toast.ok)(`عُبّئت حقول ${br.bikers.length} بايكر من الكشف — راجعها قبل الحفظ`,nw?`${nw} تنبيه — انظر أسفل الجدول`:br.reportNo||undefined,6000);
+    }catch(e){toast.bad("تعذّرت قراءة ملف PDF",String(e.message||e),0);}
+    finally{setPdfBusy(false);}
+  };
+  const viewPdf=async()=>{if(!fileRec)return;const{data:u,error}=await supabase.storage.from(BD_BUCKET).createSignedUrl(fileRec.path,600);
+    if(error||!u){toast.bad("تعذّر فتح الكشف",error?error.message:"",0);return;}window.open(u.signedUrl,"_blank","noopener");};
   const T=res.totals;const st=res.status;
   const stl=data.settlement;const lockRef=!!(stl&&stl.invoice_ref);const lockAmt=!!(stl&&stl.invoice_amount!=null);
   const inv=num(invAmt);const invDiff=inv!=null?r2(inv-T.exVat):null;
@@ -100,9 +137,18 @@ export default function MonthRecon({period,opId,me,owner,reloadKey,onStatus}){
         const{error}=await supabase.from("sweater_claims").upsert({period,claim_amount:claim.amount,claim_orders:claim.orders,status:"draft",notes:note||null,updated_by:me&&me.id||null,updated_at:now},{onConflict:"period"});
         if(error)return fail("sweater_claims",error);
       }
-      // 2) التسوية — لا قيد فريد على (operator_id, period): نحدّث الصف القائم بالمعرّف، وإلا ننشئ مسودة
+      // 2) ملف الكشف — يُرفع عند الحفظ فقط؛ إن رُفض (سياسة التخزين) تُحفظ المطابقة بدونه مع تنبيه واضح
+      let file=fileRec;
+      if(pdfFile){
+        const path=`${BD_PREFIX}/${period}/${Date.now()}-${safeName(pdfFile.name)}`;
+        const{error:ue}=await supabase.storage.from(BD_BUCKET).upload(path,pdfFile,{contentType:"application/pdf",upsert:false});
+        if(ue)toast.warn("لم يُحفظ ملف الكشف — حُفظت المطابقة بدونه",`${ue.message||ue} · يلزم سياسة التخزين في docs/sql/month_close_2b.sql`,0);
+        else file={path,name:pdfFile.name,size:pdfFile.size,uploaded_at:now,bucket:BD_BUCKET};
+      }
+      // 3) التسوية — لا قيد فريد على (operator_id, period): نحدّث الصف القائم بالمعرّف، وإلا ننشئ مسودة
       const recon={v:1,saved_at:now,saved_by:{id:me&&me.id||null,name:me&&me.display_name||null},decision,note:note.trim()||null,
-        rows:res.rows,totals:T,status:st,sweater:sw,claim:decision==="claim"?claim:null};
+        rows:res.rows,totals:T,status:st,sweater:sw,claim:decision==="claim"?claim:null,file:file||null,
+        source:bd?{report_no:bd.reportNo,period:bd.period,totals:bd.totals,warnings:bdWarn,parsed_at:now}:((saved&&saved.source)||null)};
       if(stl){
         const patch={recon};
         if(!stl.invoice_ref&&invRef.trim())patch.invoice_ref=invRef.trim();
@@ -121,7 +167,7 @@ export default function MonthRecon({period,opId,me,owner,reloadKey,onStatus}){
     setSaving(false);
   };
 
-  const inCol=(k,label,diffKey,o={})=>({k,label,sortable:false,render:r=><NumIn label={`${label} — ${r.biker_name}`} value={(sw[r.sweater_id]||{})[k]} onChange={v=>setF(r.sweater_id,k,v)}
+  const inCol=(k,label,diffKey,o={})=>({k,label,sortable:false,render:r=><NumIn label={`${label} — ${r.biker_name}`} value={(sw[r.sweater_id]||{})[k]} onChange={v=>setF(r.sweater_id,k,v)} auto={(filled[r.sweater_id]||[]).includes(k)}
     placeholder={o.ph?o.ph(r):""} diff={diffKey?r[diffKey]:null} tol={o.tol??0.05} fmt={o.fmt||f2} disabled={!perm.edit}/>});
   const alerts=[];
   res.rows.forEach(r=>{
@@ -137,7 +183,14 @@ export default function MonthRecon({period,opId,me,owner,reloadKey,onStatus}){
       {saved&&<Badge tone="ok">محفوظة: {DECISIONS[saved.decision]||saved.decision}</Badge>}</h3>
     {colMissing&&<div className="mr-bar bad" role="alert"><Icon n="alert" s={15}/> عمود المطابقة غير مُضاف بعد — شغّل أمر SQL المرفق (<span dir="ltr">docs/sql/month_close_2.sql</span>).</div>}
     {stl&&<p className="mr-note"><Icon n="lock" s={13}/> تسوية الشهر قائمة بحالة «{stl.status}» — المطابقة تُحفظ في سجلّها فقط ولا تغيّر حالتها ولا مبالغها.</p>}
-    <p className="g-mut mr-hint">أدخل أرقام كشف سويتر (Breakdown) لكل بايكر. الحقل الفارغ = غير مُدخل، وتظهر القيمة المحسوبة فيه رمادية للاسترشاد.</p>
+    <div className="mr-pdf">
+      {perm.edit&&<label className={"g-btn"+(pdfBusy?"":" primary")} aria-disabled={pdfBusy}>
+        <input type="file" accept="application/pdf,.pdf" className="g-sr" disabled={pdfBusy} onChange={e=>{onPdf(e.target.files[0]);e.target.value="";}}/>
+        <Icon n="doc" s={15}/> {pdfBusy?"جارٍ قراءة الكشف…":"رفع كشف سويتر (PDF)"}</label>}
+      {fileRec&&<button type="button" className="g-btn" onClick={viewPdf}><Icon n="eye" s={15}/> عرض الكشف</button>}
+      <small className="g-mut">{pdfFile?<>«<span dir="ltr">{pdfFile.name}</span>» — يُرفق عند الحفظ. </>:fileRec?<>مرفق: <span dir="ltr">{fileRec.name}</span>. </>:null}يعبّئ الحقول تلقائياً — راجعها قبل الحفظ.</small>
+    </div>
+    <p className="g-mut mr-hint">أو أدخل أرقام كشف سويتر (Breakdown) يدوياً لكل بايكر. الحقل الفارغ = غير مُدخل، وتظهر القيمة المحسوبة فيه رمادية للاسترشاد.</p>
 
     <DataTable caption="مطابقة البايكرز مع كشف سويتر" rows={res.rows} rowKey={r=>r.sweater_id} searchable={false} pageSize={50}
       columns={[
@@ -157,6 +210,17 @@ export default function MonthRecon({period,opId,me,owner,reloadKey,onStatus}){
         inCol("payable","المستحق","dPay",{ph:r=>f2(r.payableCalc)}),
         {k:"payableCalc",label:"المستحق المحسوب",num:true,render:r=>f2(r.payableCalc)},
       ]}/>
+
+    {bdWarn.length>0&&<ul className="mr-alerts" aria-label="تنبيهات قراءة الكشف">{bdWarn.map((w,i)=><li key={i} className="warn"><Icon n="doc" s={13}/><span>الكشف: {w.ar}</span></li>)}</ul>}
+
+    {bd&&<div className="mr-bdt">
+      <div className="mr-th"><span/><b>كشف سويتر</b><b>المنصة</b><b>الفرق</b></div>
+      {[["أونلاين",bd.totals.online,T.online],["+إضافة",bd.totals.add,T.add],["+ضمان",bd.totals.guarantee,T.guarantee],["−غسلة مجانية",bd.totals.freeWash,T.freeWash],
+        ["−خصم بايكر",bd.totals.deduct,T.deduct],["−صيانة",bd.totals.maintenance,T.maintenance],["الصافي",bd.totals.net,T.netBill]].map(([l,a,b])=>
+        <div key={l} className="mr-tr"><span>{l}</span><b dir="ltr">{fi(a)}</b><b dir="ltr">{fi(b)}</b>
+          <span dir="ltr">{a==null?"—":a===b?<Badge tone="ok">✓</Badge>:<Badge tone="bad">{sg(a-b,fi)}</Badge>}</span></div>)}
+      <small className="g-mut">إجماليات الكشف <span dir="ltr">{bd.reportNo||""}</span> مقابل ما حسبته المنصة؛ «+ضمان» في المنصة = مجموع غسلات الضمان المُدخلة.</small>
+    </div>}
 
     {alerts.length>0&&<ul className="mr-alerts" aria-label="تنبيهات المطابقة">{alerts.map((a,i)=><li key={i} className={a.tone}><Icon n="alert" s={13}/><span>{a.t}</span></li>)}</ul>}
 
@@ -194,6 +258,12 @@ export default function MonthRecon({period,opId,me,owner,reloadKey,onStatus}){
 const CSS=`
 .mr .mc-h .g-badge{font-size:11px}
 .mr-hint{font-size:12.5px;margin:0 0 10px}
+.mr-pdf{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;margin:0 0 10px}
+.mr-pdf .g-btn{min-height:44px;cursor:pointer}.mr-pdf label.g-btn:focus-within{box-shadow:var(--glow)}
+.mr-pdf small{flex:1 1 200px;min-width:0;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.mr-pdf small span[dir=ltr]{word-break:break-all}
+.mr-auto{font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;background:var(--info-bg);color:var(--info-ink);white-space:nowrap}
+.mr-bdt{margin:12px 0 0;padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:var(--glass-2);display:flex;flex-direction:column;gap:6px}
 .mr-note{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin:0 0 8px}
 .mr-bar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;font-size:13px;font-weight:700;margin-bottom:10px}
 .mr-bar.bad{background:var(--bad-bg);color:var(--bad-ink)}
@@ -219,6 +289,7 @@ const CSS=`
 @media(max-width:640px){
   /* الجوال: اسم السطر في سطر مستقل فوق القيم الثلاث حتى لا تتلاصق الأرقام */
   .mr-th,.mr-tr{grid-template-columns:repeat(3,minmax(0,1fr));font-size:12.5px;gap:4px 8px}
+  .mr-in{flex-wrap:wrap}.mr-pdf .g-btn{flex:1 1 100%;justify-content:center}
   .mr-th>span:first-child{display:none}
   .mr-tr>span:first-child{grid-column:1/-1;font-weight:700;color:var(--mut);font-size:12px}
   .mr-tr{padding-bottom:6px;border-bottom:1px dashed var(--line)}
