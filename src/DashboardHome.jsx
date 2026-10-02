@@ -549,7 +549,9 @@ const CSS=`
 .dh-hero-r{font-size:12px;color:var(--mut);margin-top:3px}.dh-hero-r span{color:var(--mut-2)}
 .dh-hero-na{color:var(--mut);font-size:13px;margin:8px 0 2px}
 .dh-hero-body{display:grid;grid-template-columns:minmax(0,1.3fr) auto minmax(0,1.5fr);gap:22px;align-items:center}
-.dh-hero-n{font-size:clamp(48px,7vw,76px);font-weight:800;line-height:1;letter-spacing:-2px;background:linear-gradient(135deg,var(--a),var(--p));-webkit-background-clip:text;background-clip:text;color:transparent}
+/* حجم الرقم من عرض خليته (container query) لا من عرض الشاشة — كان يُقصّ على سطح المكتب بين الشريط الجانبي واللوحة الجانبية */
+.dh-hero-main{container-type:inline-size;min-width:0;justify-self:stretch;width:100%}
+.dh-hero-n{font-size:clamp(48px,7vw,76px);font-size:clamp(34px,30cqi,76px);white-space:nowrap;font-weight:800;line-height:1;letter-spacing:-2px;background:linear-gradient(135deg,var(--a),var(--p));-webkit-background-clip:text;background-clip:text;color:transparent}
 .dh-hd{display:inline-block;margin-top:8px;font-size:12px;font-weight:800}.dh-hd.up{color:var(--ok-ink)}.dh-hd.down{color:var(--bad-ink)}.dh-hd.n{color:var(--mut)}
 .dh-hero-g{background:none;border:none;padding:0;cursor:pointer;border-radius:50%;font-family:inherit;color:inherit}
 .dh-hero-g:focus-visible,.dh-hm-i:focus-visible{outline:none;box-shadow:var(--glow)}
