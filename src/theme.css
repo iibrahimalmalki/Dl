@@ -218,7 +218,11 @@ kbd.g-kbd{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:3px 6p
   .g-bnav-ic{position:relative;display:flex}
   .g-bnav-b{position:absolute;top:-5px;inset-inline-end:-9px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--bad);color:#fff;font-size:9.5px;font-style:normal;font-weight:800;display:flex;align-items:center;justify-content:center}
   .sh-content{padding-bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom) + 16px)!important}
-  html .as-fab{bottom:calc(var(--bnav-h) + 16px + env(safe-area-inset-bottom))}
+  /* زر «رغوة»: أيقونة فقط (52px ≥ هدف لمس 44) على مسافة ثابتة 12px فوق الشريط السفلي */
+  html .as-fab{bottom:calc(var(--bnav-h) + 12px + env(safe-area-inset-bottom));inset-inline-start:12px;width:52px;height:52px;padding:0;justify-content:center;border-radius:50%}
+  html .as-fab>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  /* صفحة فيها الزر: حشوة إضافية بارتفاعه حتى لا يغطي آخر عنصر تفاعلي عند نهاية التمرير */
+  .sh-content:has(.as-fab){padding-bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom) + 12px + 52px + 16px)!important}
 }
 @media print{.g-bnav,.as-fab{display:none!important}}
 /* ── جدول البيانات (DataTable.jsx) ── */
