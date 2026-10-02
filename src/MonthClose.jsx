@@ -4,7 +4,7 @@ import{useState,useEffect,useMemo,useRef}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import DataTable from"./DataTable";
-import{useToast,Badge}from"./ui";
+import{useToast,Badge,EmptyState}from"./ui";
 import{KINDS,KIND_AR,detectKind,readSheet,buildMonth}from"./sspImport";
 
 const MAR=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
@@ -113,7 +113,7 @@ export default function MonthClose({opId,me,owner,onNav}){
       </ol>
     </div>
 
-    {!single?<div className="g-card"><div className="g-empty"><span className="g-ti"><Icon n="building" s={24}/></span><b>اختر مشغّلاً من الأعلى</b><p>الإقفال الشهري يُحفظ لمشغّل واحد؛ اختره من شريط الأعلى ثم ارفع ملفات سويتر.</p></div></div>:<>
+    {!single?<div className="g-card"><EmptyState variant="stack" title="اختر مشغّلاً من الأعلى" text="الإقفال الشهري يُحفظ لمشغّل واحد؛ اختره من شريط الأعلى ثم ارفع ملفات سويتر."/></div>:<>
 
     <section className="g-card pad" aria-labelledby="mc-s1">
       <h3 id="mc-s1" className="mc-h"><span className="mc-sn">1</span> استيراد ملفات سويتر — {periodAr(period)} {saved>0&&<Badge tone="ok">محفوظ: {saved} بايكر</Badge>}</h3>
@@ -179,7 +179,7 @@ export default function MonthClose({opId,me,owner,onNav}){
         <h4>آخر رفع — {periodAr(period)}</h4>
         {uploads.length?<div className="g-twrap"><table className="g-tbl"><thead><tr><th scope="col">الملف</th><th scope="col">النوع</th><th scope="col" className="num">الصفوف</th><th scope="col">الوقت</th></tr></thead>
           <tbody>{uploads.map((u,i)=><tr key={i}><td dir="ltr" className="mc-tf">{u.filename}</td><td>{KIND_AR[u.kind]||u.kind}</td><td className="num">{u.rows}</td><td dir="ltr">{fmtT(u.uploaded_at)}</td></tr>)}</tbody></table></div>
-          :<p className="g-mut">لا رفع مسجّل لهذا الشهر.</p>}
+          :<EmptyState compact variant="ring" title="لا رفع مسجّل لهذا الشهر" text="بعد الحفظ يظهر هنا كل ملف رُفع مع عدد صفوفه ووقته."/>}
       </div>
     </section>
 
