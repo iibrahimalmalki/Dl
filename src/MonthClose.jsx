@@ -1,16 +1,18 @@
-// الإقفال الشهري — خمس خطوات. المرحلة 1: استيراد ملفات سويتر (SSP) التسعة للشهر المختار فقط، بلا حذف إطلاقاً.
-// الخطوات 2–5 بطاقات «قريباً» تفتح الصفحات الحالية (المطابقة · التسوية · الرواتب).
+// الإقفال الشهري — خمس خطوات. 1: استيراد ملفات سويتر (SSP) التسعة للشهر المختار فقط، بلا حذف إطلاقاً.
+// 2: المطابقة مع كشف سويتر (MonthRecon.jsx) — تظهر عند وجود بيانات محفوظة للشهر.
+// الخطوات 3–5 بطاقات «قريباً» تفتح الصفحات الحالية (التسوية · الرواتب).
 import{useState,useEffect,useMemo,useRef}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import DataTable from"./DataTable";
 import{useToast,Badge,EmptyState}from"./ui";
 import{KINDS,KIND_AR,detectKind,readSheet,buildMonth}from"./sspImport";
+import MonthRecon,{DECISIONS}from"./MonthRecon";
 
 const MAR=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 const periodAr=p=>{const[y,m]=String(p||"").split("-");return(MAR[+m-1]||m||"")+" "+(y||"");};
 const prevMonth=()=>{const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");};
-const STEPS=[{n:1,t:"الملفات"},{n:2,t:"المطابقة",nav:"reconciliation"},{n:3,t:"التسوية",nav:"settlement"},{n:4,t:"الرواتب",nav:"payroll"},{n:5,t:"الإقفال"}];
+const STEPS=[{n:1,t:"الملفات"},{n:2,t:"المطابقة"},{n:3,t:"التسوية",nav:"settlement"},{n:4,t:"الرواتب",nav:"payroll"},{n:5,t:"القفل"}];
 const BLOCK=["no_bookings","empty_month","missing_cols"];
 const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
 const fmtT=s=>s?new Date(s).toLocaleString("en-GB",{dateStyle:"short",timeStyle:"short"}):"—";
@@ -25,6 +27,7 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
   const[uploads,setUploads]=useState([]);
   const[existing,setExisting]=useState(null);     // Set(booking_ref) من ops_tickets
   const[confirmTmp,setConfirmTmp]=useState(false);const[saving,setSaving]=useState(false);
+  const[recon,setRecon]=useState(null);           // حالة الخطوة 2 من MonthRecon
   const seq=useRef(0);const single=opId&&opId!=="all";
 
   const loadStatus=async()=>{
@@ -35,7 +38,7 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
     ]);
     setSaved(count||0);setUploads(up||[]);
   };
-  useEffect(()=>{loadStatus();setConfirmTmp(false);/*eslint-disable-next-line*/},[period,opId]);
+  useEffect(()=>{loadStatus();setConfirmTmp(false);setRecon(null);/*eslint-disable-next-line*/},[period,opId]);
   useEffect(()=>{(async()=>{const{data}=await supabase.from("employees").select("id,employee_id").not("employee_id","is",null);
     const m={};(data||[]).forEach(e=>{m[String(e.employee_id).trim()]=e.id;});setEmps(m);})();},[]);
 
@@ -107,9 +110,13 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
         <b className="mc-pl">{periodAr(period)}</b>
       </div>
       <ol className="mc-steps" aria-label="خطوات الإقفال">
-        {STEPS.map(st=>{const done=st.n===1&&saved>0;return<li key={st.n} className={(st.n===1?"on ":"")+(done?"done":"")}>
-          <span className="mc-sn">{done?<Icon n="check" s={14}/>:st.n}</span><span>{st.t}</span>
-          {st.n===1?<Badge tone={done?"ok":"warn"}>{done?"مكتملة":"بانتظار الرفع"}</Badge>:<Badge>قريباً</Badge>}</li>;})}
+        {STEPS.map(st=>{
+          const done=st.n===1?saved>0:st.n===2?!!(recon&&recon.saved):false;
+          const badge=st.n===1?<Badge tone={done?"ok":"warn"}>{done?"مكتملة":"بانتظار الرفع"}</Badge>
+            :st.n===2?(done?<Badge tone="ok">مكتملة · {DECISIONS[recon.decision]||recon.decision}</Badge>:saved>0?<Badge tone="warn">بانتظار المطابقة</Badge>:<Badge>بعد الملفات</Badge>)
+            :<Badge>قريباً</Badge>;
+          return<li key={st.n} className={(st.n<=2?"on ":"soon ")+(done?"done":"")}>
+          <span className="mc-sn">{done?<Icon n="check" s={14}/>:st.n}</span><span>{st.t}</span>{badge}</li>;})}
       </ol>
     </div>
 
@@ -186,8 +193,10 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
       </div>
     </section>
 
+    {saved>0&&<MonthRecon period={period} opId={opId} me={me} owner={owner} reloadKey={(uploads[0]&&uploads[0].uploaded_at)||saved} onStatus={setRecon}/>}
+
     <div className="mc-next">
-      {STEPS.slice(1).map(st=><div key={st.n} className="g-card pad mc-soon">
+      {STEPS.slice(2).map(st=><div key={st.n} className="g-card pad mc-soon">
         <div className="g-row"><span className="mc-sn">{st.n}</span><b>{st.t}</b><Badge>قريباً</Badge></div>
         <p className="g-mut">{st.nav?"تُدمج في الإقفال لاحقاً — استخدم الصفحة الحالية الآن.":"قفل الشهر بعد اكتمال الخطوات السابقة."}</p>
         {st.nav&&onNav&&<button className="g-btn sm" onClick={()=>onNav(st.nav)}><Icon n="fwd" s={13}/> افتح {st.t}</button>}
@@ -240,8 +249,10 @@ const CSS=`
 .mc-cf input{width:18px;height:18px;accent-color:var(--p)}
 .mc-last{margin-top:18px}.mc-last h4{margin:0 0 8px;font-size:13.5px}
 .mc-tf{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mc-next{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.mc-next{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.mc-steps li.soon{opacity:.55}
+.mc-soon{opacity:.8}
 .mc-soon p{font-size:12.5px;margin:8px 0 10px;line-height:1.7}
-@media(max-width:900px){.mc-next{grid-template-columns:1fr 1fr}.mc-steps{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:900px){.mc-next{grid-template-columns:1fr}.mc-steps{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:640px){.mc-pl{display:none}.mc-next{grid-template-columns:1fr}.mc-steps{grid-template-columns:1fr 1fr}.mc-eq span{min-width:60px}.mc-tf{max-width:150px}}
 `;
