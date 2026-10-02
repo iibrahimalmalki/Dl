@@ -73,6 +73,8 @@ export function splitBiker(s){
 // تاريخ التصدير من اسم الملف: ..._2026-09-26T20_44_57...
 export const exportDateOf=fn=>{const m=String(fn||"").match(/(\d{4}-\d{2}-\d{2})T\d{2}[_:]\d{2}/);return m?m[1]:null;};
 
+// عزل النص اللاتيني/التواريخ داخل الجمل العربية (FSI…PDI) حتى لا ينقلب ترتيبها
+const iso=t=>`\u2068${t}\u2069`;
 const numOrNull=v=>{if(v==null)return null;const s=String(v).trim();if(!s||/^n\/?a$/i.test(s))return null;const n=Number(s);return isFinite(n)?n:null;};
 const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length*100)/100:null;
 const status=v=>String(v??"").trim().toLowerCase().replace(/[\s-]+/g,"_");
@@ -92,13 +94,13 @@ export function buildMonth(files,period){
   const refs={ratings_cum:null,tips_cum:null,summary_cum:null};
   const by={};const usable={};const given=new Set();const noSid=new Set();let exportDate=null;
   (files||[]).forEach(f=>{
-    if(!f.kind){W("unknown_file",`ملف غير معروف: ${f.filename}`);return;}
+    if(!f.kind){W("unknown_file",`ملف غير معروف: ${iso(f.filename)}`);return;}
     given.add(f.kind);
     if(f.kind in refs){refs[f.kind]=(refs[f.kind]||[]).concat(f.rows||[]);return;}
     const rows=(f.rows||[]).map(normRow);
     const have=new Set(Object.keys(rows[0]||{}));
     const miss=(REQ[f.kind]||[]).filter(c=>!have.has(c));
-    if(rows.length&&miss.length){miss.forEach(c=>W("missing_cols",`عمود ناقص «${c}» في ${f.filename}`));return;}
+    if(rows.length&&miss.length){miss.forEach(c=>W("missing_cols",`عمود ناقص «${iso(c)}» في ${iso(f.filename)}`));return;}
     if(f.kind==="bookings"){const e=exportDateOf(f.filename);if(e&&(!exportDate||e>exportDate))exportDate=e;}
     (usable[f.kind]=usable[f.kind]||[]).push(...rows);
   });
@@ -159,7 +161,7 @@ export function buildMonth(files,period){
 
   if(!given.has("bookings"))W("no_bookings","لا يوجد ملف الحجوزات (bookings_report) — وهو إلزامي");
   else if(usable.bookings&&!seen.size)W("empty_month","ملف الحجوزات لا يحوي صفوفاً لهذا الشهر");
-  if(seen.size&&!complete)W("incomplete",`الشهر غير مكتمل — ${open} حجزاً مفتوحاً${open?` (${Object.entries(openBy).map(([k,v])=>`${k}: ${v}`).join("، ")})`:""}، آخر يوم فيه غسلة ${lastWash||"—"}`);
+  if(seen.size&&!complete)W("incomplete",`الشهر غير مكتمل — ${open} حجزاً مفتوحاً${open?` (${Object.entries(openBy).map(([k,v])=>iso(`${k}: ${v}`)).join("، ")})`:""}، آخر يوم فيه غسلة ${lastWash?iso(lastWash):"—"}`);
   if(noSid.size)W("no_sid",`بايكر بلا رقم سويتر بين قوسين: ${[...noSid].join("، ")}`);
 
   return{bikers,daily,adjustments,tickets,summary,coverage,refs,warnings};
