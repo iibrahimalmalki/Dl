@@ -111,9 +111,9 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
       </div>
       <ol className="mc-steps" aria-label="خطوات الإقفال">
         {STEPS.map(st=>{
-          const done=st.n===1?saved>0:st.n===2?!!(recon&&recon.saved):false;
+          const done=st.n===1?saved>0:st.n===2?!!(recon&&recon.saved&&!recon.inquiryOpen):false;
           const badge=st.n===1?<Badge tone={done?"ok":"warn"}>{done?"مكتملة":"بانتظار الرفع"}</Badge>
-            :st.n===2?(done?<Badge tone="ok">مكتملة · {DECISIONS[recon.decision]||recon.decision}</Badge>:saved>0?<Badge tone="warn">بانتظار المطابقة</Badge>:<Badge>بعد الملفات</Badge>)
+            :st.n===2?(recon&&recon.inquiryOpen?<Badge tone="warn">استفسار مفتوح</Badge>:done?<Badge tone="ok">مكتملة · {DECISIONS[recon.decision]||recon.decision}</Badge>:saved>0?<Badge tone="warn">بانتظار المطابقة</Badge>:<Badge>بعد الملفات</Badge>)
             :<Badge>قريباً</Badge>;
           return<li key={st.n} className={(st.n<=2?"on ":"soon ")+(done?"done":"")}>
           <span className="mc-sn">{done?<Icon n="check" s={14}/>:st.n}</span><span>{st.t}</span>{badge}</li>;})}
@@ -193,7 +193,7 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
       </div>
     </section>
 
-    {saved>0&&<MonthRecon period={period} opId={opId} me={me} owner={owner} reloadKey={(uploads[0]&&uploads[0].uploaded_at)||saved} onStatus={setRecon}/>}
+    {saved>0&&<MonthRecon period={period} opId={opId} opName={(ops.find(o=>o.id===opId)||{}).name} me={me} owner={owner} reloadKey={(uploads[0]&&uploads[0].uploaded_at)||saved} onStatus={setRecon}/>}
 
     <div className="mc-next">
       {STEPS.slice(2).map(st=><div key={st.n} className="g-card pad mc-soon">

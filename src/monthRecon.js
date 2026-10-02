@@ -97,12 +97,12 @@ export function alertsOf(res,period){
     if(r.dUnit!=null){const amount=r2((r.unitExp-r.unit)*r.netBill);
       if(amount>0)out.push({id:`unit:${r.sweater_id}`,sweater_id:r.sweater_id,biker_name:r.biker_name,kind:"unit",amount,orders:0,
         unit:r.unit,unitExp:r.unitExp,netBill:r.netBill,
-        ar:`${who}: سعر الوحدة المطبّق ${fm(r.unit)} ﷼ (${tierAr(r.tierSweater)})، والمتوقع وفق ملحق التسعير ${fm(r.unitExp)} ﷼ (${tierAr(r.tierExp)}) لصافي ${r.netBill} غسلة — الفرق ${fm(amount)} ﷼.`,
+        ar:`البايكر ${who}: سعر الوحدة المطبّق ${fm(r.unit)} ﷼ (${tierAr(r.tierSweater)})، والمتوقع وفق ملحق التسعير ${fm(r.unitExp)} ﷼ (${tierAr(r.tierExp)}) لصافي ${r.netBill} غسلة — الفرق ${fm(amount)} ﷼.`,
         en:`${who}: applied unit price SAR ${fm(r.unit)} (${tierEn(r.tierSweater)}); expected per the pricing appendix SAR ${fm(r.unitExp)} (${tierEn(r.tierExp)}) for ${r.netBill} net washes — difference SAR ${fm(amount)}.`});}
     if(tiersActive(period)&&r.inPlatform&&r.netBill<MIN_GUARANTEE_ORDERS){const orders=MIN_GUARANTEE_ORDERS-r.netBill,amount=r2(orders*r.unit);
       out.push({id:`min:${r.sweater_id}`,sweater_id:r.sweater_id,biker_name:r.biker_name,kind:"min_guarantee",amount,orders,
         unit:r.unit,netBill:r.netBill,
-        ar:`${who}: الصافي المطبّق ${r.netBill} غسلة، أقل من الحد الأدنى المضمون ${MIN_GUARANTEE_ORDERS} — الفارق ${orders} غسلة × ${fm(r.unit)} ﷼ = ${fm(amount)} ﷼.`,
+        ar:`البايكر ${who}: الصافي المطبّق ${r.netBill} غسلة، أقل من الحد الأدنى المضمون ${MIN_GUARANTEE_ORDERS} — الفارق ${orders} غسلة × ${fm(r.unit)} ﷼ = ${fm(amount)} ﷼.`,
         en:`${who}: applied net ${r.netBill} washes, below the guaranteed minimum of ${MIN_GUARANTEE_ORDERS} — shortfall ${orders} washes × SAR ${fm(r.unit)} = SAR ${fm(amount)}.`});}
   });
   return out;
