@@ -206,14 +206,19 @@ kbd.g-kbd{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:3px 6p
 /* ── شريط التنقّل السفلي للجوال (BottomNav.jsx) ── */
 .g-bnav{display:none}
 @media(max-width:640px){
-  .g-bnav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:60;padding:6px 6px calc(6px + env(safe-area-inset-bottom));gap:2px;background:var(--glass-3);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-top:1px solid var(--line);box-shadow:0 -8px 24px -16px rgba(16,24,40,.35)}
-  .g-bnav-i{flex:1;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;border-radius:12px;font-family:inherit;font-size:10.5px;font-weight:700;color:var(--mut);cursor:pointer;transition:color .2s var(--ease),background .2s var(--ease)}
-  .g-bnav-i.on{color:var(--p-ink);background:var(--p-50)}
-  .g-bnav-i:focus-visible{outline:none;box-shadow:var(--glow)}
+  /* ارتفاع ثابت يشترك فيه الشريط وحشوة المحتوى وزر «رغوة» */
+  :root{--bnav-h:60px}
+  .g-bnav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:60;height:calc(var(--bnav-h) + env(safe-area-inset-bottom));padding:0 4px env(safe-area-inset-bottom);gap:0;background:linear-gradient(var(--glass),var(--glass)),color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-top:1px solid var(--line)}
+  .g-bnav-i{position:relative;flex:1;height:var(--bnav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;border-radius:0;font-family:inherit;font-size:10.5px;font-weight:700;color:var(--mut);cursor:pointer;transition:color .2s var(--ease)}
+  /* العنصر النشط: لون العلامة للأيقونة (والنص بدرجته المقروءة AA) + شرطة صغيرة أعلى العنصر */
+  .g-bnav-i.on{color:var(--p-ink)}
+  .g-bnav-i.on .g-bnav-ic{color:var(--p)}
+  .g-bnav-i.on::before{content:"";position:absolute;top:0;left:50%;width:22px;height:3px;margin-left:-11px;border-radius:0 0 3px 3px;background:var(--p)}
+  .g-bnav-i:focus-visible{outline:none;box-shadow:inset 0 0 0 2px rgba(var(--p-rgb),.55);border-radius:12px}
   .g-bnav-ic{position:relative;display:flex}
   .g-bnav-b{position:absolute;top:-5px;inset-inline-end:-9px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--bad);color:#fff;font-size:9.5px;font-style:normal;font-weight:800;display:flex;align-items:center;justify-content:center}
-  .sh-content{padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
-  html .as-fab{bottom:calc(76px + env(safe-area-inset-bottom))}
+  .sh-content{padding-bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom) + 16px)!important}
+  html .as-fab{bottom:calc(var(--bnav-h) + 16px + env(safe-area-inset-bottom))}
 }
 @media print{.g-bnav,.as-fab{display:none!important}}
 /* ── جدول البيانات (DataTable.jsx) ── */
