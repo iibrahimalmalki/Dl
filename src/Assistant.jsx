@@ -103,15 +103,37 @@ function Panel({d,period,onNav,me,onClose}){
   </div>);
 }
 
+// الزر العائم لا يغطي عنصراً تفاعلياً أبداً: بعد كل تمرير/تغيير حجم نفحص ما تحت مساحته الكاملة؛
+// إن وُجد عنصر تفاعلي ينطوي إلى لسان رفيع داخل هامش الصفحة (الذي لا يحوي عناصر)، ويعود عند خلوّ المكان.
+const INTERACTIVE='a[href],button,select,input,textarea,label,summary,[role=button],[role=link],[role=tab],[role=radio],[tabindex]:not([tabindex="-1"])';
+function useFabAvoid(ref){
+  const[tuck,setTuck]=useState(false);const home=useRef(null);const tuckRef=useRef(false);
+  useEffect(()=>{
+    let raf=0;
+    const check=()=>{raf=0;const el=ref.current;if(!el||!el.getClientRects().length)return; // offsetParent دائماً null للعناصر fixed
+      if(!tuckRef.current||!home.current)home.current=el.getBoundingClientRect();
+      const r=home.current;const pts=[];for(let i=0;i<5;i++)for(let j=0;j<5;j++)pts.push([r.left-4+(r.width+8)*i/4,r.top-4+(r.height+8)*j/4]); // هامش 4px حول الزر
+      const hit=pts.some(([x,y])=>{const top=document.elementsFromPoint(x,y).find(n=>!el.contains(n)&&!n.closest(".g-bnav"));return!!(top&&top.closest(INTERACTIVE));});
+      if(hit!==tuckRef.current){tuckRef.current=hit;setTuck(hit);}
+    };
+    const q=()=>{if(!raf)raf=requestAnimationFrame(check);};
+    const rs=()=>{home.current=null;tuckRef.current=false;setTuck(false);setTimeout(q,60);};
+    window.addEventListener("scroll",q,{passive:true,capture:true});window.addEventListener("resize",rs);
+    const t=setTimeout(q,400);const mo=new MutationObserver(q);mo.observe(document.body,{childList:true,subtree:true});
+    return()=>{window.removeEventListener("scroll",q,{capture:true});window.removeEventListener("resize",rs);clearTimeout(t);mo.disconnect();if(raf)cancelAnimationFrame(raf);};
+  },[ref]);
+  return tuck;
+}
+
 // الحاوية: جانبية ثابتة على الشاشات ≥1280، وزر عائم + ورقة سفلية دونها
 export default function Assistant({d,period,onNav,me}){
-  const[sheet,setSheet]=useState(false);const closeRef=useRef(null);
+  const[sheet,setSheet]=useState(false);const closeRef=useRef(null);const tuck=useFabAvoid(closeRef);
   useEffect(()=>{if(!sheet)return;const h=e=>{if(e.key==="Escape")setSheet(false);};window.addEventListener("keydown",h);const prev=document.body.style.overflow;document.body.style.overflow="hidden";
     setTimeout(()=>{const el=document.querySelector(".as-sheet button");el&&el.focus();},50);
     return()=>{window.removeEventListener("keydown",h);document.body.style.overflow=prev;};},[sheet]);
   return(<>
     <aside className="as-side g-card" aria-label={`المساعد ${ASSISTANT.name}`}><Panel d={d} period={period} onNav={onNav} me={me}/></aside>
-    <button type="button" className="as-fab" onClick={()=>setSheet(true)} aria-label={`فتح المساعد ${ASSISTANT.name}`} ref={closeRef}><AssistantAvatar size={30}/><span>{ASSISTANT.name}</span></button>
+    <button type="button" className={"as-fab"+(tuck?" tuck":"")} onClick={()=>setSheet(true)} aria-label={`فتح المساعد ${ASSISTANT.name}`} ref={closeRef}><AssistantAvatar size={30}/><span>{ASSISTANT.name}</span></button>
     {sheet&&<div className="as-scrim" onMouseDown={e=>{if(e.target===e.currentTarget)setSheet(false);}}>
       <div className="as-sheet g-card" role="dialog" aria-modal="true" aria-label={`المساعد ${ASSISTANT.name}`}><Panel d={d} period={period} onNav={onNav} me={me} onClose={()=>setSheet(false)}/></div>
     </div>}
