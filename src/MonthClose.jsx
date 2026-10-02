@@ -15,7 +15,7 @@ const BLOCK=["no_bookings","empty_month","missing_cols"];
 const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
 const fmtT=s=>s?new Date(s).toLocaleString("en-GB",{dateStyle:"short",timeStyle:"short"}):"—";
 
-export default function MonthClose({opId,me,owner,onNav}){
+export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
   const toast=useToast();
   const[period,setPeriod]=useState(prevMonth());
   const[files,setFiles]=useState([]);            // [{id,filename,kind,rows,headers}]
@@ -113,7 +113,10 @@ export default function MonthClose({opId,me,owner,onNav}){
       </ol>
     </div>
 
-    {!single?<div className="g-card"><EmptyState variant="stack" title="اختر مشغّلاً من الأعلى" text="الإقفال الشهري يُحفظ لمشغّل واحد؛ اختره من شريط الأعلى ثم ارفع ملفات سويتر."/></div>:<>
+    {!single?<div className="g-card"><EmptyState variant="stack" title="اختر المشغّل" text="الإقفال الشهري يُحفظ لمشغّل واحد؛ اختره هنا ثم ارفع ملفات سويتر.">
+      {onOp&&ops.length>0&&<label className="mc-op"><span className="g-sr">المشغّل</span><select className="g-select" value="" onChange={e=>e.target.value&&onOp(e.target.value)}>
+        <option value="">اختر المشغّل…</option>{ops.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>}
+    </EmptyState></div>:<>
 
     <section className="g-card pad" aria-labelledby="mc-s1">
       <h3 id="mc-s1" className="mc-h"><span className="mc-sn">1</span> استيراد ملفات سويتر — {periodAr(period)} {saved>0&&<Badge tone="ok">محفوظ: {saved} بايكر</Badge>}</h3>
@@ -199,6 +202,7 @@ const CSS=`
 .mc-top{display:flex;flex-direction:column;gap:12px}
 .mc-month{display:inline-flex;align-items:center;gap:8px;color:var(--mut)}.mc-month .g-input{width:auto;min-width:160px}
 .mc-pl{font-size:15px;color:var(--ink)}
+.mc-op{display:block;margin:14px auto 0;max-width:280px}
 .mc-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .mc-steps li{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:var(--glass-2);font-weight:600;font-size:13px;color:var(--mut)}
 .mc-steps li.on{border-color:rgba(var(--p-rgb),.4);color:var(--ink)}
@@ -239,5 +243,5 @@ const CSS=`
 .mc-next{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .mc-soon p{font-size:12.5px;margin:8px 0 10px;line-height:1.7}
 @media(max-width:900px){.mc-next{grid-template-columns:1fr 1fr}.mc-steps{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:640px){.mc-next{grid-template-columns:1fr}.mc-steps{grid-template-columns:1fr 1fr}.mc-eq span{min-width:60px}.mc-tf{max-width:150px}}
+@media(max-width:640px){.mc-pl{display:none}.mc-next{grid-template-columns:1fr}.mc-steps{grid-template-columns:1fr 1fr}.mc-eq span{min-width:60px}.mc-tf{max-width:150px}}
 `;

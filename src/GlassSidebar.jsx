@@ -2,6 +2,7 @@
 // React + Framer Motion + lucide-react، CSS عادي (بدون Tailwind) ليتوافق مع بقية المنصة.
 // ≥1024px: مثبّت، يُطوى من 240 إلى 72 بكسل (تُحفظ الحالة) · <1024px: درج ينزلق من اليمين مع خلفية مضببة.
 // props: items[{k,ar,ic,g?,lock?,soon?}] (نفس NAV)، active، onGo(k)، user{name,role}، badges{k:n}، open، onOpenChange، theme ("light"|"dark")، onLogout، onSettings
+// extra: عقدة اختيارية تظهر أعلى القائمة في وضع الدرج على الجوال فقط (≤640px) — مثل اختيار المشغّل المخفي من الرأس
 import{useCallback,useEffect,useId,useMemo,useRef,useState}from"react";
 import{AnimatePresence,motion,useReducedMotion}from"framer-motion";
 import{LayoutDashboard,Megaphone,UserPlus,MessagesSquare,Compass,ClipboardCheck,Users,UserMinus,Sparkles,Activity,Gauge,MapPinned,MessageSquareWarning,ShieldAlert,UsersRound,Wallet,CalendarCheck,BadgeDollarSign,Scale,FileCheck2,CarFront,Receipt,ShieldCheck,Bike,House,FileBadge,Package,PackagePlus,KeyRound,Network,ChartColumn,UserCog,ScrollText,Settings,LogOut,Circle,Lock,PanelRightClose,PanelRightOpen,Search,X}from"lucide-react";
@@ -26,7 +27,7 @@ const readStored=()=>{try{const v=localStorage.getItem(STORE);return v==null?nul
 const writeStored=v=>{try{localStorage.setItem(STORE,v?"1":"0");}catch(_){}};
 const initials=n=>String(n||"").trim().split(/\s+/).slice(0,2).map(s=>s[0]||"").join("")||"—";
 
-export default function GlassSidebar({items,active,onGo,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,onSearch,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
+export default function GlassSidebar({items,active,onGo,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,onSearch,extra,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
   const bp=useBreakpoint();const reduce=useReducedMotion();
   const[collapsed,setCollapsed]=useState(()=>readStored()??false);
   const[openState,setOpenState]=useState(false);
@@ -105,6 +106,7 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
             ?<label className="gs-sbox"><Search size={16} aria-hidden/><input ref={searchRef} id={`${uid}-search`} value={query} onChange={e=>setQuery(e.target.value)} placeholder="ابحث في القائمة…" aria-label="بحث في القائمة"/><kbd dir="ltr" onClick={onSearch} style={onSearch?{cursor:"pointer"}:undefined}>⌘K</kbd></label>
             :<button type="button" aria-label="بحث" className="gs-sbtn" onClick={()=>{if(onSearch){onSearch();return;}setCollapsed(false);setTimeout(()=>searchRef.current&&searchRef.current.focus(),60);}}><Search size={18}/></button>}
         </div>
+        {extra&&!isDocked&&<div className="gs-extra">{extra}</div>}
         <nav ref={navRef} aria-label="القائمة الرئيسية" onKeyDown={onNavKey} className="gs-nav">
           {groups.length===0&&<div className="gs-empty">لا نتائج لـ «{query}»</div>}
           {groups.map((g,gi)=>(<div key={g.g||gi} className="gs-grp">
@@ -135,6 +137,7 @@ const CSS=`
 .gs-glass{display:flex;flex-direction:column;height:100%;background:var(--gs-glass);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%)}
 .gs-panel *{box-sizing:border-box}
 .gs-panel button{font-family:inherit;-webkit-tap-highlight-color:transparent}
+.gs-extra{padding:0 12px 10px}@media(min-width:641px){.gs-extra{display:none}}
 .gs-head{display:flex;align-items:center;gap:10px;padding:16px 12px 12px;position:relative}
 .gs-head.c{justify-content:center}
 .gs-logo{width:40px;height:40px;border-radius:12px;background:#fff;display:grid;place-items:center;flex:none;box-shadow:0 6px 16px rgba(var(--p-rgb),.3)}

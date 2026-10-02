@@ -101,7 +101,12 @@ export default function Shell({onLogout,me}){
   // شارات حيّة على القائمة: طلبات الإمداد المفتوحة | live badges (open supply requests)
   const[badges,setBadges]=useState({});
   useEffect(()=>{(async()=>{try{const{count}=await supabase.from("supply_requests").select("id",{count:"exact",head:true}).neq("status","completed");if(count)setBadges(b=>({...b,supply_requests:count}));}catch(_){}})();},[]);
-  useEffect(()=>{supabase.from("operators").select("id,name,active").order("created_at").then(({data})=>setOps(data||[]));},[]);
+  useEffect(()=>{supabase.from("operators").select("id,name,active").order("created_at").then(({data})=>{const l=data||[];setOps(l);
+    // مشغّل نشط واحد فقط → يُختار تلقائياً؛ "all" يبقى افتراضياً عند تعدّد المشغّلين
+    const act=l.filter(o=>o.active!==false);if(act.length===1)setOp(p=>p==="all"?act[0].id:p);});},[]);
+  const activeOps=ops.filter(o=>o.active!==false);
+  const opPicker=(<label className="sh-opm"><span><Icon n="building" s={15}/> المشغّل</span>
+    <select className="g-select" value={op} onChange={e=>setOp(e.target.value)} aria-label="المشغّل"><option value="all">كل المشغّلين</option>{ops.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>);
   const nm=(me&&me.display_name)||"إبراهيم المالكي";
   const owner=!!(me&&me.is_owner);
   const isSup=SUPERVISOR_POS.includes(me&&me.position);
@@ -115,7 +120,7 @@ export default function Shell({onLogout,me}){
     <style>{CSS}</style>
     <Orbs/>
     <GlassSidebar items={nav} active={view} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={sbTheme}
-      user={{name:nm,role:owner?"المالك · صلاحية كاملة":isSup?"مشرف ميداني":"مستخدم"}} onLogout={onLogout} onSettings={owner?()=>go("users"):undefined} onSearch={()=>setSearch(true)}/>
+      user={{name:nm,role:owner?"المالك · صلاحية كاملة":isSup?"مشرف ميداني":"مستخدم"}} onLogout={onLogout} onSettings={owner?()=>go("users"):undefined} onSearch={()=>setSearch(true)} extra={activeOps.length>1?opPicker:null}/>
     <GlobalSearch open={search} onClose={()=>setSearch(false)} items={nav} onGo={go}/>
     <BottomNav active={view} allowed={nav.map(n=>n.k)} onGo={go} onMore={()=>setOpen(true)} badges={badges}/>
 
@@ -145,7 +150,7 @@ export default function Shell({onLogout,me}){
         {view==="employees"&&<Suspense fallback={<Sk/>}><AdminDashboard embedded section="employees" onLogout={onLogout}/></Suspense>}
         {view==="reports"&&<Suspense fallback={<Sk/>}><Reports opId={op}/></Suspense>}
         {view==="users"&&owner&&<Suspense fallback={<Sk/>}><UserManagement/></Suspense>}
-        {view==="close"&&<Suspense fallback={<Sk/>}><MonthClose opId={op} me={me} owner={owner} onNav={go}/></Suspense>}
+        {view==="close"&&<Suspense fallback={<Sk/>}><MonthClose opId={op} ops={activeOps} onOp={setOp} me={me} owner={owner} onNav={go}/></Suspense>}
         {view==="payroll"&&<Suspense fallback={<Sk/>}><Payroll opId={op}/></Suspense>}
         {view==="pricing"&&<Suspense fallback={<Sk/>}><SweaterPricing/></Suspense>}
         {view==="settlement"&&<Suspense fallback={<Sk/>}><Settlement opId={op} me={me} owner={owner}/></Suspense>}
@@ -206,6 +211,7 @@ const CSS=`
 .sh-burger{display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink)}
 .sh-ttl h1{font-size:16px;font-weight:800;margin:0}.sh-sub{font-size:12px;color:var(--mut)}
 .sh-ops{margin-inline-start:auto;display:flex;align-items:center;gap:7px;background:var(--glass-2);border:1px solid var(--line-2);border-radius:11px;padding:6px 10px}
+.sh-opm{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:var(--mut)}.sh-opm>span{display:flex;align-items:center;gap:6px}
 .sh-ops-ic{display:flex;align-items:center;color:var(--mut)}
 .sh-ops select{border:none;background:none;outline:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
 .sh-ib{width:38px;height:38px;border-radius:11px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;position:relative}
