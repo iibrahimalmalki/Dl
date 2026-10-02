@@ -11,6 +11,9 @@ import{usePeriod}from"./period";
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
 const MN=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 const periodAr=p=>{if(!p)return"—";const[y,m]=String(p).split("-");return`${MN[(+m||1)-1]} ${y}`;};
+// نطاق أشهر بأسماء كاملة: «مايو — يوليو 2026»، وعبر سنتين «ديسمبر 2025 — فبراير 2026»
+const monthName=p=>MN[(+String(p).split("-")[1]||1)-1];
+const rangeMonths=(a,b)=>a===b?periodAr(a):String(a).slice(0,4)===String(b).slice(0,4)?`${monthName(a)} — ${monthName(b)} ${String(b).slice(0,4)}`:`${periodAr(a)} — ${periodAr(b)}`;
 const periodShort=p=>{if(!p)return"—";const[,m]=String(p).split("-");return MN[(+m||1)-1].slice(0,3);};
 const curMonth=()=>new Date().toISOString().slice(0,7);
 const maxPeriod=arr=>arr.reduce((mx,r)=>r.period&&r.period>mx?r.period:mx,"");
@@ -78,13 +81,13 @@ export default function DashboardHome({onNav,theme="light"}){
     const nMonths=P.length;
     const inRange=p=>P.indexOf(p)>=0;
     const rangeLabel=nMonths===1?periodAr(from):
-      `${periodShort(from)} — ${periodShort(to)} ${to.slice(0,4)}`;
+      rangeMonths(from,to);
 
     // ── نطاق المقارنة (نافذة سابقة بنفس الطول) ──
     const sIdx=allP.indexOf(from);
     const prevP=sIdx>0?allP.slice(Math.max(0,sIdx-nMonths),sIdx):[];
     const inPrev=p=>prevP.indexOf(p)>=0;
-    const prevLabel=prevP.length?(prevP.length===1?periodAr(prevP[0]):`${periodShort(prevP[0])} — ${periodShort(prevP[prevP.length-1])}`):null;
+    const prevLabel=prevP.length?rangeMonths(prevP[0],prevP[prevP.length-1]):null;
     const delta=(cur,pv)=>(pv==null||pv===0||!prevP.length)?null:Math.round((cur-pv)/Math.abs(pv)*100);
 
     // ── مُجمِّعات على قائمة أشهر ──
