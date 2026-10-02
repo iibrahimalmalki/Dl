@@ -5,8 +5,8 @@ import DashboardHome from"./DashboardHome";
 import Notifications from"./Notifications";
 import BottomNav from"./BottomNav";
 import GlassSidebar from"./GlassSidebar";
-import{Search}from"lucide-react";
-import{useTheme}from"./theme";
+import{Search,Sun,Moon,Monitor}from"lucide-react";
+import{useTheme,MODE_AR}from"./theme";
 import{ThemeToggle,Orbs}from"./ui";
 import GlobalSearch from"./GlobalSearch";
 const AdminDashboard=lazy(()=>import("./AdminDashboard"));
@@ -93,7 +93,7 @@ export default function Shell({onLogout,me}){
   const[menu,setMenu]=useState(false);
   const[tmaTarget,setTmaTarget]=useState(null);
   // الثيم العام (فاتح/داكن/تلقائي) من مزوّد الثيم — الشريط ولوحة القيادة يتبعانه
-  const{resolved:sbTheme}=useTheme();
+  const{resolved:sbTheme,mode:thMode,cycle:thCycle}=useTheme();const ThIc=thMode==="dark"?Moon:thMode==="auto"?Monitor:Sun;
   const[search,setSearch]=useState(false);
   // آخر حدث dw:open — للصفحات المحمّلة كسولاً التي تُركَّب بعد بثّ الحدث
   useEffect(()=>{const h=e=>{window.__dwLast={...(e.detail||{}),t:Date.now()};};window.addEventListener("dw:open",h);return()=>window.removeEventListener("dw:open",h);},[]);
@@ -140,7 +140,7 @@ export default function Shell({onLogout,me}){
         <Notifications me={me} onNav={go}/>
         <div style={{position:"relative"}}>
           <button className="sh-ib" onClick={()=>setMenu(!menu)}><div className="sh-av2">{nm.trim().charAt(0)}</div></button>
-          {menu&&<div className="sh-menu">{owner&&<div className="sh-mi" onClick={()=>{setMenu(false);go("users");}}><Icon n="users" s={16}/> المستخدمون</div>}<div className="sh-mi" onClick={onLogout}><Icon n="logout" s={16}/> تسجيل الخروج</div></div>}
+          {menu&&<div className="sh-menu"><div className="sh-mi sh-mi-th" role="button" tabIndex={0} onClick={thCycle} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();thCycle();}}}><ThIc size={16}/> المظهر: {MODE_AR[thMode]}</div>{owner&&<div className="sh-mi" onClick={()=>{setMenu(false);go("users");}}><Icon n="users" s={16}/> المستخدمون</div>}<div className="sh-mi" onClick={onLogout}><Icon n="logout" s={16}/> تسجيل الخروج</div></div>}
         </div>
       </header>
       <div className="sh-content">
@@ -209,6 +209,7 @@ const CSS=`
 .sh-main{display:flex;flex-direction:column;min-width:0;flex:1;position:relative;z-index:1;overflow-x:clip}
 .sh-top{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:30}
 .sh-burger{display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink)}
+.sh-mi-th{display:none!important}
 .sh-ttl h1{font-size:16px;font-weight:800;margin:0}.sh-sub{font-size:12px;color:var(--mut)}
 .sh-ops{margin-inline-start:auto;display:flex;align-items:center;gap:7px;background:var(--glass-2);border:1px solid var(--line-2);border-radius:11px;padding:6px 10px}
 .sh-opm{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:var(--mut)}.sh-opm>span{display:flex;align-items:center;gap:6px}
@@ -287,6 +288,9 @@ const CSS=`
 }
 /* بعد كتلة 900px حتى تغلب max-width:38vw؛ و.sh .nt-bell لأن CSS الإشعارات يُحقن بعد CSS الهيكل */
 @media(max-width:640px){
+  /* الشريط العلوي على الجوال: العنوان + الجرس + الصورة فقط — القائمة من «المزيد»، الثيم من قائمة الصورة، البحث أعلى القائمة الجانبية */
+  .sh-burger,.sh-top .sh-tt,.sh-top .sh-hm{display:none!important}
+  .sh-mi-th{display:flex!important}
   .sh-ib,.sh-tt,.sh .nt-bell{width:36px;height:36px}
   .sh-ttl{flex:1;min-width:0}
   .sh-ttl h1{max-width:none}

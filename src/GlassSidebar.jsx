@@ -101,7 +101,8 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
           <span className="gs-ring"><span className="gs-av">{user&&user.avatarUrl?<img src={user.avatarUrl} alt=""/>:initials(user&&user.name)}</span></span>
           {showLabels&&<div className="gs-who"><b>{(user&&user.name)||"—"}</b><span>{(user&&user.role)||""}</span></div>}
         </div>
-        <div className={"gs-srch"+(showLabels?"":" c")}>
+        {onSearch&&!isDocked&&<button type="button" className="gs-gsrch" onClick={()=>{setOpen(false);onSearch();}} aria-label="بحث شامل"><Search size={16} aria-hidden/><span>بحث شامل…</span></button>}
+        <div className={"gs-srch"+(showLabels?"":" c")+(onSearch?" has-g":"")}>
           {showLabels
             ?<label className="gs-sbox"><Search size={16} aria-hidden/><input ref={searchRef} id={`${uid}-search`} value={query} onChange={e=>setQuery(e.target.value)} placeholder="ابحث في القائمة…" aria-label="بحث في القائمة"/><kbd dir="ltr" onClick={onSearch} style={onSearch?{cursor:"pointer"}:undefined}>⌘K</kbd></label>
             :<button type="button" aria-label="بحث" className="gs-sbtn" onClick={()=>{if(onSearch){onSearch();return;}setCollapsed(false);setTimeout(()=>searchRef.current&&searchRef.current.focus(),60);}}><Search size={18}/></button>}
@@ -137,6 +138,12 @@ const CSS=`
 .gs-glass{display:flex;flex-direction:column;height:100%;background:var(--gs-glass);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%)}
 .gs-panel *{box-sizing:border-box}
 .gs-panel button{font-family:inherit;-webkit-tap-highlight-color:transparent}
+.gs-gsrch{display:none}
+@media(max-width:640px){
+  .gs-gsrch{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:10px 12px;border:1px solid var(--gs-line);border-radius:12px;background:rgba(255,255,255,.05);color:var(--gs-mut);font:inherit;font-size:13px;text-align:start;cursor:pointer;min-height:44px}
+  .gs-gsrch:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(var(--p-rgb),.35)}
+  .gs-srch.has-g{display:none}
+}
 .gs-extra{padding:0 12px 10px}@media(min-width:641px){.gs-extra{display:none}}
 .gs-head{display:flex;align-items:center;gap:10px;padding:16px 12px 12px;position:relative}
 .gs-head.c{justify-content:center}
