@@ -312,6 +312,14 @@ kbd.g-kbd{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:3px 6p
 .g-seg-b{min-height:34px;padding:6px 14px;border-radius:9px;border:none;background:transparent;color:var(--mut);font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:background .2s var(--ease),color .2s var(--ease)}
 .g-seg-b:hover{color:var(--ink)}.g-seg-b.on{background:var(--glass-3);color:var(--p-ink);box-shadow:var(--shadow)}
 .g-seg-b:focus-visible{outline:none;box-shadow:var(--glow)}
+/* محدّد الفترة: شريط واحد يتمرّر أفقياً إن لم يتّسع (بلا شريط تمرير ظاهر)، و«مخصّص» يفتح حقلي من/إلى */
+.g-pwrap{display:flex;flex-direction:column;gap:8px;min-width:0;max-width:100%}
+.g-seg.scroll{display:flex;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.g-seg.scroll::-webkit-scrollbar{display:none}
+.g-seg.scroll .g-seg-b{flex:none;white-space:nowrap;scroll-snap-align:center}
+.g-pcust{display:flex;gap:8px;flex-wrap:wrap}
+.g-pcust label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--mut);flex:1 1 140px;min-width:0}
+.g-pcust .g-input{min-height:38px;padding:6px 10px;min-width:0;flex:1}
 /* ── أرقام متحركة ومؤشر دائري ── */
 .g-num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
 .g-gauge{position:relative;display:flex;flex-direction:column;align-items:center;flex:none}

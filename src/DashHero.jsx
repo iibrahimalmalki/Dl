@@ -3,18 +3,24 @@
 import{useMemo}from"react";
 import Icon from"./Icon";
 import{AnimatedNumber,Gauge}from"./ui";
-import{periodRange,PeriodSelector}from"./period";
+import{periodRange,PeriodSelector,isMonthly}from"./period";
 import{bikerScore}from"./scorecard";
 import{complaintPct}from"./payrollEngine";
 
 const MA=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 const dAr=s=>{const[y,m,d]=s.split("-").map(Number);return`${d} ${MA[m-1]}`;};
-const rangeAr=r=>r.k==="day"?`${dAr(r.from)} ${r.from.slice(0,4)}`:r.k==="month"?`${MA[+r.to.slice(5,7)-1]} ${r.to.slice(0,4)}`:`${dAr(r.from)} — ${dAr(r.to)} ${r.to.slice(0,4)}`;
+// الفترات الشهرية بأسماء الأشهر («مايو — يوليو 2026»، وعبر سنتين «ديسمبر 2025 — فبراير 2026»)، واليوم/الأسبوع بالأيام
+const mAr=ym=>MA[+ym.slice(5,7)-1];
+const rangeAr=r=>{if(r.k==="day")return`${dAr(r.from)} ${r.from.slice(0,4)}`;
+  if(r.k==="week")return`${dAr(r.from)} — ${dAr(r.to)} ${r.to.slice(0,4)}`;
+  const f=r.months[0],t=r.months[r.months.length-1];
+  if(f===t)return`${mAr(f)} ${f.slice(0,4)}`;
+  return f.slice(0,4)===t.slice(0,4)?`${mAr(f)} — ${mAr(t)} ${t.slice(0,4)}`:`${mAr(f)} ${f.slice(0,4)} — ${mAr(t)} ${t.slice(0,4)}`;};
 const pctDelta=(c,p)=>c==null||p==null||!p?null:Math.round((c-p)/Math.abs(p)*1000)/10;
 
 // يحسب مؤشرات نطاق واحد
 function measure(d,r){
-  const monthly=r.k==="month"||r.k==="quarter";
+  const monthly=isMonthly(r.k);
   const inDays=x=>x>=r.from&&x<=r.to;
   const ops=d.ops.filter(o=>o.sweater_id!=null&&r.months.includes(o.period));
   let washes,rating=null,cPct=null,commission=null;
@@ -35,24 +41,24 @@ function measure(d,r){
   return{washes,rating,cPct,commission,compliance,nRounds:rounds.length,monthly};
 }
 
-export default function DashHero({d,period,onPeriod,onNav}){
+export default function DashHero({d,period,onPeriod,custom,onCustom,onNav}){
   const m=useMemo(()=>{
     if(!d)return null;
     const lastDay=(d.daily||[]).map(x=>String(x.day||"").slice(0,10)).filter(Boolean).sort().pop();
     const lastP=d.ops.map(o=>o.period).filter(Boolean).sort().pop();
-    const monthly=period==="month"||period==="quarter";
+    const monthly=isMonthly(period);
     // المرساة: آخر يوم بيانات (يومي) أو آخر يوم من آخر شهر بيانات (شهري)
     const anchor=monthly?(lastP?(()=>{const[y,mo]=lastP.split("-").map(Number);return`${lastP}-${String(new Date(y,mo,0).getDate()).padStart(2,"0")}`;})():lastDay):(lastDay||(lastP&&lastP+"-28"));
     if(!anchor)return{empty:true};
-    const r=periodRange(period,anchor);
+    const r=periodRange(period,anchor,custom);
     const cur=measure(d,r),prev=measure(d,{...r.prev,k:r.k});
     return{r,cur,prev,lastDay,lastP};
-  },[d,period]);
+  },[d,period,custom]);
   if(!m)return null;
   const head=(<div className="dh-hero-top">
     <div><div className="dh-hero-k"><Icon n="operations" s={14}/> الغسلات الصافية · الفريق</div>
       {m.r&&<div className="dh-hero-r">{rangeAr(m.r)}{m.r.k==="day"||m.r.k==="week"?<span> · آخر بيانات يومية متاحة</span>:null}</div>}</div>
-    <PeriodSelector value={period} onChange={onPeriod}/>
+    <PeriodSelector value={period} onChange={onPeriod} custom={custom} onCustom={onCustom} customDefault={m.lastP?{from:m.lastP,to:m.lastP}:undefined}/>
   </div>);
   if(m.empty)return<section className="g-card dh-hero" aria-label="ملخص الفترة">{head}<p className="dh-hero-na">لا بيانات عمليات بعد — ارفع تقرير سويتر في العمليات اليومية.</p></section>;
   const{cur,prev}=m;

@@ -6,7 +6,7 @@ import{bikerScore,trend}from"./scorecard";
 import DashHero from"./DashHero";
 import Assistant from"./Assistant";
 import ChartTip from"./ChartTip";
-import{usePeriod}from"./period";
+import{usePeriod,periodRange,isMonthly}from"./period";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
 const MN=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
@@ -29,10 +29,9 @@ export default function DashboardHome({onNav,theme="light"}){
   const[gran,setGran]=useState("month");        // شهري/يومي (اللوحة المالية)
   const[fBiker,setFBiker]=useState("");         // فلتر البايكر
   const[fCat,setFCat]=useState("");             // فلتر الفئة المالية
-  const[period,setPeriod]=usePeriod();          // الفترة المشتركة (البطل والمساعد)
-  // محدّد فترة واحد: نطاق الأقسام التفصيلية مشتق من الفترة المشتركة (PeriodSelector في البطل)
-  // «آخر 3 أشهر» ← آخر 3 أشهر فيها بيانات، وغيرها ← آخر شهر فيه بيانات
-  const preset=period==="quarter"?"m3":"this";
+  const[period,setPeriod,custom,setCustom]=usePeriod();   // الفترة المشتركة (البطل والمساعد والأقسام)
+  // محدّد فترة واحد (PeriodSelector في البطل): الأقسام التفصيلية تأخذ أشهرها من periodRange نفسه،
+  // واليوم/الأسبوع (بيانات يومية) تُعرض أقسامها الشهرية لشهر آخر البيانات
 
   useEffect(()=>{(async()=>{
     const q=(t,c)=>supabase.from(t).select(c).then(({data})=>data||[]).then(x=>x,()=>[]);
@@ -75,8 +74,10 @@ export default function DashboardHome({onNav,theme="light"}){
     const maxP=allP[allP.length-1]||curMonth();
 
     // ── حلّ النطاق المختار → قائمة أشهر P ──
-    let P=preset==="m3"?allP.slice(-3):[maxP];
-    if(!P.length)P=[maxP];
+    // المرساة نفسها التي يستخدمها البطل: آخر شهر عمليات (وإلا آخر شهر فيه أي بيانات)
+    const anchorP=d.ops.map(o=>o.period).filter(Boolean).sort().pop()||maxP;
+    const rng=periodRange(isMonthly(period)?period:"month",anchorP+"-01",custom);
+    const P=rng.months;
     const from=P[0],to=P[P.length-1];
     const nMonths=P.length;
     const inRange=p=>P.indexOf(p)>=0;
@@ -84,8 +85,8 @@ export default function DashboardHome({onNav,theme="light"}){
       rangeMonths(from,to);
 
     // ── نطاق المقارنة (نافذة سابقة بنفس الطول) ──
-    const sIdx=allP.indexOf(from);
-    const prevP=sIdx>0?allP.slice(Math.max(0,sIdx-nMonths),sIdx):[];
+    // نافذة المقارنة من periodRange (السنة ← المدة نفسها من السنة السابقة)؛ تُعرض فقط إن كان فيها بيانات
+    const prevP=rng.prev.months.some(p=>allP.indexOf(p)>=0)?rng.prev.months:[];
     const inPrev=p=>prevP.indexOf(p)>=0;
     const prevLabel=prevP.length?rangeMonths(prevP[0],prevP[prevP.length-1]):null;
     const delta=(cur,pv)=>(pv==null||pv===0||!prevP.length)?null:Math.round((cur-pv)/Math.abs(pv)*100);
@@ -244,7 +245,7 @@ export default function DashboardHome({onNav,theme="light"}){
       docExpired:docExpired.length,docSoon:docSoon.length,docD7,docD14,nVeh:fveh.length,stolen,fMaint,fIncOpen,gpsCov,
       hpNext,hpNextDl,hvOpen,houseMonthly,scPending,scLow,alerts,
       tPending,tReviewed,tTotal};
-  },[d,preset,fBiker,fCat]);
+  },[d,period,custom,fBiker,fCat]);
 
   if(!s)return(<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>{[...Array(6)].map((_,i)=><div key={i} className="dw-skel" style={{height:92}}/>)}</div>);
 
@@ -269,7 +270,7 @@ export default function DashboardHome({onNav,theme="light"}){
 
     <div className="dh-layout"><div className="dh-main">
     {/* البطل: الغسلات + الالتزام + المؤشرات الأساسية للفترة المشتركة */}
-    <DashHero d={d} period={period} onPeriod={setPeriod} onNav={nav}/>
+    <DashHero d={d} period={period} onPeriod={setPeriod} custom={custom} onCustom={setCustom} onNav={nav}/>
 
     {/* الفلاتر (الفترة من البطل أعلاه) */}
     <div className="dh-period">
@@ -501,7 +502,7 @@ export default function DashboardHome({onNav,theme="light"}){
     </div>
     </div>
     {/* مساعد العمليات: جانبي على الشاشات الواسعة، وورقة سفلية على الجوال */}
-    <Assistant d={d} period={period} onNav={nav}/>
+    <Assistant d={d} period={period} custom={custom} onNav={nav}/>
     </div>
   </div>);
 }

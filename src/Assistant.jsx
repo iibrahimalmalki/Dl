@@ -24,7 +24,7 @@ export function AssistantAvatar({size=44}){
   </svg>);
 }
 
-function Panel({d,period,onNav,me,onClose}){
+function Panel({d,period,custom,onNav,me,onClose}){
   const toast=useToast();
   const[feed,setFeed]=useState(null);const[auto,setAuto]=useState(undefined);const[act,setAct]=useState(null);
   const loadedAt=useRef(Date.now());
@@ -39,13 +39,13 @@ function Panel({d,period,onNav,me,onClose}){
       ...r.map(x=>({k:"r"+x.id,t:x.created_at||x.round_date,ic:"rounds",tone:x.compliance_pct>=80?"ok":x.compliance_pct>=60?"warn":"bad",text:`جولة ميدانية — ${x.biker_name||"#"+x.sweater_id}: ${x.compliance_pct!=null?x.compliance_pct+"%":"—"}`,go:()=>open(onNav,"field_rounds")})),
     ].sort((a,b)=>String(b.t).localeCompare(String(a.t))).slice(0,8);
     // نسبة الأتمتة للفترة المشتركة (تقويمياً حتى اليوم) — audit_log مقصور على المالك؛ إن رُفضت القراءة تُخفى
-    const pr=periodRange(period,null);
+    const pr=periodRange(period,null,custom);
     const base=()=>supabase.from("audit_log").select("id",{count:"exact",head:true}).gte("changed_at",pr.from+"T00:00:00").lte("changed_at",pr.to+"T23:59:59");
     const[tot,au]=await Promise.all([base(),base().is("actor_email",null)]);
     if(!live)return;
     setFeed(items);
     setAuto(tot.error||au.error?null:automationShare(au.count,tot.count));
-  })();return()=>{live=false;};},[period,onNav]);
+  })();return()=>{live=false;};},[period,custom,onNav]);
 
   const brief=useMemo(()=>d?dailyBrief({ops:d.ops,rounds:d.rounds,docs:d.docs,screq:d.screq},{today,name:me}):[],[d,today,me]);
   const run=useCallback(k=>{
@@ -126,16 +126,16 @@ function useFabAvoid(ref){
 }
 
 // الحاوية: جانبية ثابتة على الشاشات ≥1280، وزر عائم + ورقة سفلية دونها
-export default function Assistant({d,period,onNav,me}){
+export default function Assistant({d,period,custom,onNav,me}){
   const[sheet,setSheet]=useState(false);const closeRef=useRef(null);const tuck=useFabAvoid(closeRef);
   useEffect(()=>{if(!sheet)return;const h=e=>{if(e.key==="Escape")setSheet(false);};window.addEventListener("keydown",h);const prev=document.body.style.overflow;document.body.style.overflow="hidden";
     setTimeout(()=>{const el=document.querySelector(".as-sheet button");el&&el.focus();},50);
     return()=>{window.removeEventListener("keydown",h);document.body.style.overflow=prev;};},[sheet]);
   return(<>
-    <aside className="as-side g-card" aria-label={`المساعد ${ASSISTANT.name}`}><Panel d={d} period={period} onNav={onNav} me={me}/></aside>
+    <aside className="as-side g-card" aria-label={`المساعد ${ASSISTANT.name}`}><Panel d={d} period={period} custom={custom} onNav={onNav} me={me}/></aside>
     <button type="button" className={"as-fab"+(tuck?" tuck":"")} onClick={()=>setSheet(true)} aria-label={`فتح المساعد ${ASSISTANT.name}`} ref={closeRef}><AssistantAvatar size={30}/><span>{ASSISTANT.name}</span></button>
     {sheet&&<div className="as-scrim" onMouseDown={e=>{if(e.target===e.currentTarget)setSheet(false);}}>
-      <div className="as-sheet g-card" role="dialog" aria-modal="true" aria-label={`المساعد ${ASSISTANT.name}`}><Panel d={d} period={period} onNav={onNav} me={me} onClose={()=>setSheet(false)}/></div>
+      <div className="as-sheet g-card" role="dialog" aria-modal="true" aria-label={`المساعد ${ASSISTANT.name}`}><Panel d={d} period={period} custom={custom} onNav={onNav} me={me} onClose={()=>setSheet(false)}/></div>
     </div>}
   </>);
 }
