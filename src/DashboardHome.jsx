@@ -41,6 +41,7 @@ export default function DashboardHome({onNav,theme="light"}){
   const[fCat,setFCat]=useState("");             // فلتر الفئة المالية
   const[period,setPeriod]=usePeriod();          // الفترة المشتركة (البطل والمساعد)
   // مزامنة نطاق اللوحات التفصيلية مع الفترة المشتركة: الربع ← آخر 3 أشهر، وغيره ← الشهر الحالي
+  // (على الجوال ≤640px شريط النطاق مخفي، فتتبع الأقسام هذه المزامنة وحدها)
   useEffect(()=>{setPreset(period==="quarter"?"m3":"this");},[period]);
 
   useEffect(()=>{(async()=>{
@@ -743,5 +744,7 @@ const CSS=`
 .dh-q-ic{width:38px;height:38px;border-radius:11px;background:rgba(var(--p-rgb),.14);color:var(--p);display:flex;align-items:center;justify-content:center}
 .dh-q:hover .dh-q-ic{filter:drop-shadow(0 0 6px rgba(var(--p-rgb),.7))}
 @media(max-width:1100px){.dh-kpis{grid-template-columns:repeat(3,1fr)}.dh-ops{grid-template-columns:repeat(2,1fr)}.dh-quick{grid-template-columns:repeat(4,1fr)}.dh-al-list{grid-template-columns:1fr}.dh-ins-list{grid-template-columns:1fr}.dh-targets{grid-template-columns:repeat(2,1fr)}.dh-sm-grid{grid-template-columns:repeat(3,1fr)}}
+/* الجوال: محدّد فترة واحد (PeriodSelector في البطل) — شريط النطاق التفصيلي مخفي والأقسام تتبع الفترة المشتركة عبر preset */
+@media(max-width:640px){.dh-pchips,.dh-custom{display:none!important}.dh-period .dh-filters{margin-top:0!important;padding-top:0!important;border-top:none!important}}
 @media(max-width:640px){.dh-kpis{grid-template-columns:repeat(2,1fr)}.dh-ops{grid-template-columns:repeat(2,1fr)}.dh-quick{grid-template-columns:repeat(4,1fr)}.dh-targets{grid-template-columns:repeat(2,1fr)}.dh-tg-k{min-height:0}.dh-sm-grid{grid-template-columns:repeat(2,1fr)}.dh-cat-k{width:34%}.dh-orb{filter:blur(50px)}}
 `;
