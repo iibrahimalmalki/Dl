@@ -85,8 +85,64 @@ export function reconcileMonth({bikers=[],adjustments=[],tickets=[],violations=[
   return{rows,totals,status};
 }
 
-// مبلغ المطالبة = مجموع الفروق السالبة علينا (كشف سويتر أقل من المحسوب)
-export function claimFrom({rows=[]}){
+// ── تنبيهات تعاقدية (ليست مطالبة مؤكدة): أسئلة عن تفسير ملحق التسعير ──
+const fm=v=>Number(v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const tierAr=t=>t==null?"—":typeof t==="number"?`الشريحة ${t}`:t==="Golden Guarantee"?"الحد الأدنى المضمون":String(t);
+const tierEn=t=>t==null?"—":typeof t==="number"?`Tier ${t}`:String(t);
+// unit: السعر المطبّق أقل من المتوقع من العقد · min_guarantee: الصافي أقل من الحد الأدنى المضمون (من 2026-08)
+export function alertsOf(res,period){
+  const out=[];
+  (res&&res.rows||[]).forEach(r=>{
+    const who=`${r.biker_name} (${r.sweater_id})`;
+    if(r.dUnit!=null){const amount=r2((r.unitExp-r.unit)*r.netBill);
+      if(amount>0)out.push({id:`unit:${r.sweater_id}`,sweater_id:r.sweater_id,biker_name:r.biker_name,kind:"unit",amount,orders:0,
+        unit:r.unit,unitExp:r.unitExp,netBill:r.netBill,
+        ar:`${who}: سعر الوحدة المطبّق ${fm(r.unit)} ﷼ (${tierAr(r.tierSweater)})، والمتوقع وفق ملحق التسعير ${fm(r.unitExp)} ﷼ (${tierAr(r.tierExp)}) لصافي ${r.netBill} غسلة — الفرق ${fm(amount)} ﷼.`,
+        en:`${who}: applied unit price SAR ${fm(r.unit)} (${tierEn(r.tierSweater)}); expected per the pricing appendix SAR ${fm(r.unitExp)} (${tierEn(r.tierExp)}) for ${r.netBill} net washes — difference SAR ${fm(amount)}.`});}
+    if(tiersActive(period)&&r.inPlatform&&r.netBill<MIN_GUARANTEE_ORDERS){const orders=MIN_GUARANTEE_ORDERS-r.netBill,amount=r2(orders*r.unit);
+      out.push({id:`min:${r.sweater_id}`,sweater_id:r.sweater_id,biker_name:r.biker_name,kind:"min_guarantee",amount,orders,
+        unit:r.unit,netBill:r.netBill,
+        ar:`${who}: الصافي المطبّق ${r.netBill} غسلة، أقل من الحد الأدنى المضمون ${MIN_GUARANTEE_ORDERS} — الفارق ${orders} غسلة × ${fm(r.unit)} ﷼ = ${fm(amount)} ﷼.`,
+        en:`${who}: applied net ${r.netBill} washes, below the guaranteed minimum of ${MIN_GUARANTEE_ORDERS} — shortfall ${orders} washes × SAR ${fm(r.unit)} = SAR ${fm(amount)}.`});}
+  });
+  return out;
+}
+
+const MAR=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+const MEN=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const pAr=p=>{const[y,m]=String(p||"").split("-");return`${MAR[+m-1]||m} ${y}`;};
+const pEn=p=>{const[y,m]=String(p||"").split("-");return`${MEN[+m-1]||m} ${y}`;};
+// رسالة استفسار (لا مطالبة) — نص عادي، عربي ثم إنجليزي، بالبنود المختارة فقط
+export function inquiryEmail({period,reportNo,alerts=[],operatorName}){
+  const ref=reportNo?` (${reportNo})`:"";
+  const total=r2(alerts.reduce((a,x)=>a+(x.amount||0),0));
+  const hasUnit=alerts.some(a=>a.kind==="unit"),hasMin=alerts.some(a=>a.kind==="min_guarantee");
+  const sign=operatorName||"دلو ورغوة";
+  const askAr=[hasUnit&&"آلية احتساب الشريحة وسعر الوحدة",hasMin&&`شرط الحد الأدنى المضمون (${MIN_GUARANTEE_ORDERS} غسلة شهرياً لكل بايكر) وكيفية تطبيقه`].filter(Boolean).join("، و");
+  const askEn=[hasUnit&&"how the pricing tier and unit price are determined",hasMin&&`how the guaranteed minimum (${MIN_GUARANTEE_ORDERS} washes per biker per month) is applied`].filter(Boolean).join(", and ");
+  const subject=`استفسار عن كشف ${pAr(period)} — الشريك 47${ref}`;
+  const body=[
+    "السلام عليكم ورحمة الله وبركاته،","فريق سويتر المحترم،","",
+    `راجعنا كشف ${pAr(period)}${ref} وأعداد الغسلات مطابقة لسجلاتنا، ونودّ الاستفسار عن البنود التالية:`,"",
+    ...alerts.map((a,i)=>`${i+1}) ${a.ar}`),"",
+    `إجمالي المبلغ محل الاستفسار: ${fm(total)} ﷼ (غير شامل الضريبة).`,
+    `نرجو توضيح ${askAr} وفق ملحق التسعير الموقّع بتاريخ 30/07/2026.`,"",
+    "شاكرين تعاونكم،",sign,"شريك سويتر رقم 47","",
+    "———","",
+    "Dear Sweater team,","",
+    `We have reviewed the ${pEn(period)} statement${ref} and the wash counts match our records. We would appreciate clarification on the following items:`,"",
+    ...alerts.map((a,i)=>`${i+1}) ${a.en}`),"",
+    `Total amount in question: SAR ${fm(total)} (excl. VAT).`,
+    `Could you please clarify ${askEn}, according to the pricing appendix signed on 30/07/2026?`,"",
+    "Thank you,",sign,"Sweater Partner #47",
+  ].join("\n");
+  return{subject,body,total};
+}
+
+// مبلغ المطالبة = مجموع الفروق السالبة علينا (كشف سويتر أقل من المحسوب) + مبالغ التنبيهات المختارة (picked)
+export function claimFrom({rows=[]},picked=[]){
   const neg=rows.filter(r=>r.dPay!=null&&r.dPay<-PAY_TOL);
-  return{amount:r2(neg.reduce((a,r)=>a-r.dPay,0)),orders:rows.reduce((a,r)=>a+(r.dNet!=null&&r.dNet<0?-r.dNet:0),0),bikers:neg.map(r=>r.sweater_id)};
+  const base=r2(neg.reduce((a,r)=>a-r.dPay,0)),baseOrders=rows.reduce((a,r)=>a+(r.dNet!=null&&r.dNet<0?-r.dNet:0),0);
+  const pa=r2((picked||[]).reduce((a,x)=>a+(x.amount||0),0)),po=(picked||[]).reduce((a,x)=>a+(x.orders||0),0);
+  return{amount:r2(base+pa),orders:baseOrders+po,bikers:[...new Set([...neg.map(r=>r.sweater_id),...(picked||[]).map(x=>x.sweater_id)])],diffAmount:base,alertAmount:pa,items:(picked||[]).map(x=>x.id)};
 }

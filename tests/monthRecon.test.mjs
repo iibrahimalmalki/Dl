@@ -6,7 +6,7 @@ const ok=(l,c)=>{console.log((c?'✓':'✗ FAIL')+' '+l);if(!c)process.exitCode=
 const tmp=fs.mkdtempSync(path.join(process.cwd(),'.mr-test-'));
 try{
 execSync(`npx esbuild src/monthRecon.js --bundle --format=esm --platform=node --outfile=${tmp}/m.mjs --log-level=error`,{stdio:'inherit'});
-const{reconcileMonth,claimFrom,tierOfUnit}=await import(`${tmp}/m.mjs`);
+const{reconcileMonth,claimFrom,tierOfUnit,alertsOf,inquiryEmail}=await import(`${tmp}/m.mjs`);
 
 // ── بيانات أغسطس 2026 ──
 const bikers=[{sweater_id:'1624',biker_name:'Ariful Islam',net_washes:186},{sweater_id:'1648',biker_name:'Midul Hassan',net_washes:134},{sweater_id:'1700',biker_name:'Mohamad Rakib',net_washes:226}];
@@ -59,4 +59,21 @@ const jul=reconcileMonth({...base,period:'2026-07',sweater:{}});
 ok('قبل 2026-08: سعر 20 ثابت بلا تنبيه حد أدنى',jul.rows.every(r=>r.unitExp===20&&r.unit===20&&!r.belowMin)&&jul.rows.find(r=>r.sweater_id==='1700').gross===4520);
 const vd=reconcileMonth({...base,sweater:{...sweater,'1624':{...sweater['1624'],violations:300,payable:3460}}});
 ok('مخالفات سويتر ≠ مخالفات المنصة ⇒ dViol',vd.rows.find(r=>r.sweater_id==='1624').dViol===90&&vd.rows.find(r=>r.sweater_id==='1648').dViol===0&&vd.status==='matched');
+
+// ── 2ج: التنبيهات التعاقدية + الاستفسار ──
+const al=alertsOf(m,'2026-08');const by=id=>al.find(a=>a.id===id);
+ok('أغسطس ⇒ ثلاثة تنبيهات: سعر Rakib 99.44 · حد أدنى Midul 1,240 (62) · Ariful 160 (8)',al.length===3&&by('unit:1700').amount===99.44&&by('unit:1700').orders===0
+  &&by('min:1648').amount===1240&&by('min:1648').orders===62&&by('min:1624').amount===160&&by('min:1624').orders===8);
+ok('مجموع التنبيهات 1,499.44',Math.round(al.reduce((a,x)=>a+x.amount,0)*100)/100===1499.44);
+ok('claimFrom بلا اختيار ⇒ 0',claimFrom(m).amount===0&&claimFrom(m,[]).orders===0);
+ok('claimFrom باختيار الثلاثة ⇒ 1,499.44 و70 غسلة',(()=>{const c=claimFrom(m,al);return c.amount===1499.44&&c.orders===70&&c.items.length===3;})());
+ok('claimFrom ببند السعر فقط ⇒ 99.44',claimFrom(m,[by('unit:1700')]).amount===99.44&&claimFrom(m,[by('unit:1700')]).orders===0);
+ok('claimFrom يجمع فروق الأرقام + التنبيهات',claimFrom(d1,[by('unit:1700')]).amount===119.44);
+const em=inquiryEmail({period:'2026-08',reportNo:'RPT-BUCKET-20260908',alerts:[by('unit:1700'),by('min:1648')],operatorName:'مؤسسة دلو ورغوة التجارية'});
+ok('موضوع الاستفسار',em.subject==='استفسار عن كشف أغسطس 2026 — الشريك 47 (RPT-BUCKET-20260908)');
+ok('الرسالة: رقم التقرير + البنود المختارة فقط بالعربية والإنجليزية',em.body.includes('RPT-BUCKET-20260908')&&em.body.includes('Mohamad Rakib (1700)')&&em.body.includes('Midul Hassan (1648)')&&!em.body.includes('Ariful')
+  &&em.body.includes('19.57')&&em.body.includes('SAR 99.44')&&em.body.includes('1,240.00 ﷼')&&em.body.includes('Dear Sweater team')&&em.body.includes('30/07/2026')&&em.body.includes('مطابقة لسجلاتنا')&&em.body.includes('مؤسسة دلو ورغوة التجارية'));
+ok('الرسالة لا تحوي «مطالبة» ولا claim',!/مطالب/.test(em.subject+em.body)&&!/claim/i.test(em.subject+em.body));
+ok('قبل 2026-08 ⇒ بلا تنبيهات',alertsOf(reconcileMonth({...base,period:'2026-07',sweater:{}}),'2026-07').length===0);
+ok('سعر سويتر أعلى من المتوقع ⇒ لا تنبيه unit',(()=>{const hi=reconcileMonth({...base,sweater:{...sweater,'1700':{...sweater['1700'],unit:20,payable:4505}}});return !alertsOf(hi,'2026-08').some(a=>a.kind==='unit');})());
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
