@@ -1,9 +1,9 @@
-// الفترة المشتركة بين الصفحات (اليوم · الأسبوع · الشهر · الربع)
+// الفترة المشتركة بين الصفحات (اليوم · الأسبوع · الشهر · آخر 3 أشهر — المفتاح quarter)
 // تُحفظ في localStorage وتُبثّ بحدث window «dw:period» فتتزامن كل الصفحات المفتوحة.
 // const[period,setPeriod]=usePeriod();  <PeriodSelector value={period} onChange={setPeriod}/>
 import{useState,useEffect,useCallback,useRef}from"react";
 
-export const PERIODS=[{k:"day",ar:"اليوم"},{k:"week",ar:"الأسبوع"},{k:"month",ar:"الشهر"},{k:"quarter",ar:"الربع"}];
+export const PERIODS=[{k:"day",ar:"اليوم"},{k:"week",ar:"الأسبوع"},{k:"month",ar:"الشهر"},{k:"quarter",ar:"آخر 3 أشهر"}];
 const KEY="dw.period";
 const valid=k=>PERIODS.some(p=>p.k===k);
 const read=()=>{try{const v=localStorage.getItem(KEY);return valid(v)?v:"month";}catch(_){return"month";}};
