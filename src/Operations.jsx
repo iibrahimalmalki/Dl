@@ -9,7 +9,7 @@ const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.get
 const periodLabel=p=>{const[y,m]=p.split("-");return`${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m} ${y}`;};
 const readRows=file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:"array",cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];res(XLSX.utils.sheet_to_json(ws,{defval:""}));}catch(err){rej(err);}};r.onerror=rej;r.readAsArrayBuffer(file);});
 
-export default function Operations({opId}){
+export default function Operations({opId,onNav}){
   const[period,setPeriod]=useState(nowPeriod());
   const[loading,setLoading]=useState(true);
   const[emps,setEmps]=useState([]);
@@ -98,6 +98,11 @@ export default function Operations({opId}){
     {msg&&<div className={"op-msg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
 
     {/* رفع التقارير */}
+    <div className="g-card pad op-moved" role="note">
+      <Icon n="calendar" s={18}/>
+      <div><b>رفع ملفات سويتر الشهرية صار من صفحة الإقفال الشهري</b><small>تقرأ الملفات التسعة كما تُصدَّر، وتأخذ الشهر المختار فقط، ولا تحذف قرارات مراجعة التذاكر.</small></div>
+      {onNav&&<button className="g-btn primary sm" onClick={()=>onNav("close")}>افتح الإقفال الشهري</button>}
+    </div>
     <div className="op-up">
       <Drop kind="bookings" ic="operations" t="تقرير الحجوزات" d="bookings_report" f={files.bookings} busy={busy} onFile={onFile}/>
       <Drop kind="qc" ic="star" t="تقرير الجودة" d="biker_qc_report" f={files.qc} busy={busy} onFile={onFile}/>
@@ -158,6 +163,8 @@ function Drop({kind,ic,t,d,f,busy,onFile}){
 function K({ic,c,bg,t,v}){return(<div className="op-kpi"><span className="op-ki" style={{background:bg,color:c}}><Icon n={ic} s={17}/></span><div><div className="op-kv">{v}</div><div className="op-kl">{t}</div></div></div>);}
 
 const CSS=`
+.op-moved{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;color:var(--p-ink)}
+.op-moved>div{flex:1 1 220px;display:flex;flex-direction:column;gap:2px;color:var(--ink)}.op-moved small{color:var(--mut);font-size:12px}
 .op{--b:var(--p)}
 .op-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .op-month{display:flex;align-items:center;gap:7px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:11px;padding:7px 11px;color:var(--mut)}
