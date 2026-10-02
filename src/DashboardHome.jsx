@@ -17,32 +17,19 @@ const maxPeriod=arr=>arr.reduce((mx,r)=>r.period&&r.period>mx?r.period:mx,"");
 const fmtD=d=>d?new Date(d+"T00:00:00").toLocaleDateString("en-GB"):"—";
 const RATE=20; // ﷼ لكل غسلة (السعر الثابت قبل أغسطس 2026 حسب العقد)
 
-const PRESETS=[
-  {k:"this",label:"هذا الشهر"},
-  {k:"prev",label:"الشهر الماضي"},
-  {k:"m3",label:"آخر ٣ أشهر"},
-  {k:"m6",label:"آخر ٦ أشهر"},
-  {k:"year",label:"السنة"},
-  {k:"all",label:"من البداية"},
-  {k:"custom",label:"مخصّص"},
-];
-
 // لوحة القيادة الشاملة — بيانات حيّة من كل وحدات النظام، مع نطاق زمني وفلاتر ومقارنة
 export default function DashboardHome({onNav,theme="light"}){
   const nav=k=>onNav&&onNav(k);
   // فتح بطاقة أداء البايكر مباشرة (Performance يقرأ dw:open أو window.__dwLast)
   const openPerf=sid=>{nav("performance");if(sid)setTimeout(()=>window.dispatchEvent(new CustomEvent("dw:open",{detail:{view:"performance",table:"ops_biker_month",id:sid}})),300);};
   const[d,setD]=useState(null);
-  const[preset,setPreset]=useState("this");    // النطاق الزمني
-  const[cFrom,setCFrom]=useState("");           // مخصّص — من
-  const[cTo,setCTo]=useState("");               // مخصّص — إلى
   const[gran,setGran]=useState("month");        // شهري/يومي (اللوحة المالية)
   const[fBiker,setFBiker]=useState("");         // فلتر البايكر
   const[fCat,setFCat]=useState("");             // فلتر الفئة المالية
   const[period,setPeriod]=usePeriod();          // الفترة المشتركة (البطل والمساعد)
-  // مزامنة نطاق اللوحات التفصيلية مع الفترة المشتركة: الربع ← آخر 3 أشهر، وغيره ← الشهر الحالي
-  // (على الجوال ≤640px شريط النطاق مخفي، فتتبع الأقسام هذه المزامنة وحدها)
-  useEffect(()=>{setPreset(period==="quarter"?"m3":"this");},[period]);
+  // محدّد فترة واحد: نطاق الأقسام التفصيلية مشتق من الفترة المشتركة (PeriodSelector في البطل)
+  // «آخر 3 أشهر» ← آخر 3 أشهر فيها بيانات، وغيرها ← آخر شهر فيه بيانات
+  const preset=period==="quarter"?"m3":"this";
 
   useEffect(()=>{(async()=>{
     const q=(t,c)=>supabase.from(t).select(c).then(({data})=>data||[]).then(x=>x,()=>[]);
@@ -83,24 +70,14 @@ export default function DashboardHome({onNav,theme="light"}){
     // ── قائمة كل الفترات المتاحة ──
     const allP=[...new Set([...d.ops.map(o=>o.period),...(d.fin||[]).map(f=>f.period),...(d.setts||[]).map(x=>x.period),...(d.tix||[]).map(t=>t.period),...d.pay.map(p=>p.period),...d.rounds.map(r=>r.period)].filter(Boolean))].sort();
     const maxP=allP[allP.length-1]||curMonth();
-    const yr=maxP.slice(0,4);
 
     // ── حلّ النطاق المختار → قائمة أشهر P ──
-    let P;
-    if(preset==="this")P=[maxP];
-    else if(preset==="prev")P=allP.length>=2?[allP[allP.length-2]]:[maxP];
-    else if(preset==="m3")P=allP.slice(-3);
-    else if(preset==="m6")P=allP.slice(-6);
-    else if(preset==="year")P=allP.filter(p=>p.slice(0,4)===yr);
-    else if(preset==="all")P=allP.slice();
-    else{const a=cFrom||maxP,b=cTo||maxP;const lo=a<=b?a:b,hi=a<=b?b:a;P=allP.filter(p=>p>=lo&&p<=hi);}
+    let P=preset==="m3"?allP.slice(-3):[maxP];
     if(!P.length)P=[maxP];
     const from=P[0],to=P[P.length-1];
     const nMonths=P.length;
     const inRange=p=>P.indexOf(p)>=0;
     const rangeLabel=nMonths===1?periodAr(from):
-      preset==="year"?`سنة ${yr}`:
-      preset==="all"?"منذ البداية":
       `${periodShort(from)} — ${periodShort(to)} ${to.slice(0,4)}`;
 
     // ── نطاق المقارنة (نافذة سابقة بنفس الطول) ──
@@ -264,7 +241,7 @@ export default function DashboardHome({onNav,theme="light"}){
       docExpired:docExpired.length,docSoon:docSoon.length,docD7,docD14,nVeh:fveh.length,stolen,fMaint,fIncOpen,gpsCov,
       hpNext,hpNextDl,hvOpen,houseMonthly,scPending,scLow,alerts,
       tPending,tReviewed,tTotal};
-  },[d,preset,cFrom,cTo,fBiker,fCat]);
+  },[d,preset,fBiker,fCat]);
 
   if(!s)return(<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>{[...Array(6)].map((_,i)=><div key={i} className="dw-skel" style={{height:92}}/>)}</div>);
 
@@ -282,7 +259,6 @@ export default function DashboardHome({onNav,theme="light"}){
   const stCls=x=>x==="accepted"?"p-acc":x==="rejected"?"p-rej":"p-pend";
   const av=i=>["var(--warn)","var(--ok)","var(--info)","var(--info)","var(--mut)","var(--p)"][i%6];
   const sevC={crit:["var(--bad-bg)","var(--bad-ink)"],warn:["var(--warn-bg)","var(--warn-ink)"],info:["var(--info-bg)","var(--info-ink)"]};
-  const monthOpts=allP;
 
   return(<div className="dh" data-theme={theme}>
     <style>{CSS}</style>
@@ -292,20 +268,8 @@ export default function DashboardHome({onNav,theme="light"}){
     {/* البطل: الغسلات + الالتزام + المؤشرات الأساسية للفترة المشتركة */}
     <DashHero d={d} period={period} onPeriod={setPeriod} onNav={nav}/>
 
-    {/* شريط النطاق الزمني + الفلاتر */}
+    {/* الفلاتر (الفترة من البطل أعلاه) */}
     <div className="dh-period">
-      <div className="dh-pchips">
-        <span className="dh-pcap"><Icon n="clock" s={15}/> الفترة</span>
-        {PRESETS.map(p=>(
-          <button key={p.k} className={"dh-chip"+(preset===p.k?" on":"")} onClick={()=>setPreset(p.k)}>{p.label}</button>))}
-      </div>
-      {preset==="custom"&&
-        <div className="dh-custom">
-          <label>من</label>
-          <select value={cFrom||maxP} onChange={e=>setCFrom(e.target.value)}>{monthOpts.map(p=><option key={p} value={p}>{periodAr(p)}</option>)}</select>
-          <label>إلى</label>
-          <select value={cTo||maxP} onChange={e=>setCTo(e.target.value)}>{monthOpts.map(p=><option key={p} value={p}>{periodAr(p)}</option>)}</select>
-        </div>}
       <div className="dh-filters">
         <div className="dh-fsel">
           <Icon n="bike" s={13}/>
@@ -627,15 +591,8 @@ const CSS=`
 .dh .dh-donut-track{stroke:var(--dh-track)}.dh .dh-donut-n{fill:var(--dh-ink)}.dh .dh-donut-l{fill:var(--dh-mut)}
 /* الفترة والفلاتر */
 .dh-period{padding:12px 14px;margin-bottom:14px}
-.dh-pchips{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
-.dh-pcap{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--dh-ink);margin-inline-end:4px}
-.dh-chip{border:1px solid var(--dh-line);background:var(--dh-soft);color:var(--dh-mut);font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .12s}
-.dh-chip:hover{border-color:rgba(var(--p-rgb),.5);color:var(--dh-ink)}
-.dh-chip.on{background:linear-gradient(135deg,var(--a),var(--p));border-color:transparent;color:#fff;box-shadow:0 6px 18px -8px rgba(var(--p-rgb),.8)}
-.dh-custom{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
-.dh-custom label{font-size:12px;font-weight:700;color:var(--dh-mut)}
-.dh-custom select,.dh-fsel select{max-width:100%;min-width:0;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--dh-ink);border:1px solid var(--dh-line);border-radius:9px;padding:6px 8px;background:var(--dh-glass2);cursor:pointer}
-.dh-filters{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-top:11px;padding-top:11px;border-top:1px dashed var(--dh-line)}
+.dh-fsel select{max-width:100%;min-width:0;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--dh-ink);border:1px solid var(--dh-line);border-radius:9px;padding:6px 8px;background:var(--dh-glass2);cursor:pointer}
+.dh-filters{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
 .dh-fsel{display:flex;align-items:center;gap:6px;color:var(--dh-mut);min-width:0;max-width:100%}.dh-fsel select{flex:1;min-width:0}
 .dh-clear{border:none;background:var(--bad-bg);color:var(--bad-ink);font-family:inherit;font-size:11.5px;font-weight:700;padding:6px 11px;border-radius:9px;cursor:pointer}
 /* ملخّص الفترة (بطل) */
@@ -744,7 +701,5 @@ const CSS=`
 .dh-q-ic{width:38px;height:38px;border-radius:11px;background:rgba(var(--p-rgb),.14);color:var(--p);display:flex;align-items:center;justify-content:center}
 .dh-q:hover .dh-q-ic{filter:drop-shadow(0 0 6px rgba(var(--p-rgb),.7))}
 @media(max-width:1100px){.dh-kpis{grid-template-columns:repeat(3,1fr)}.dh-ops{grid-template-columns:repeat(2,1fr)}.dh-quick{grid-template-columns:repeat(4,1fr)}.dh-al-list{grid-template-columns:1fr}.dh-ins-list{grid-template-columns:1fr}.dh-targets{grid-template-columns:repeat(2,1fr)}.dh-sm-grid{grid-template-columns:repeat(3,1fr)}}
-/* الجوال: محدّد فترة واحد (PeriodSelector في البطل) — شريط النطاق التفصيلي مخفي والأقسام تتبع الفترة المشتركة عبر preset */
-@media(max-width:640px){.dh-pchips,.dh-custom{display:none!important}.dh-period .dh-filters{margin-top:0!important;padding-top:0!important;border-top:none!important}}
 @media(max-width:640px){.dh-kpis{grid-template-columns:repeat(2,1fr)}.dh-ops{grid-template-columns:repeat(2,1fr)}.dh-quick{grid-template-columns:repeat(4,1fr)}.dh-targets{grid-template-columns:repeat(2,1fr)}.dh-tg-k{min-height:0}.dh-sm-grid{grid-template-columns:repeat(2,1fr)}.dh-cat-k{width:34%}.dh-orb{filter:blur(50px)}}
 `;
