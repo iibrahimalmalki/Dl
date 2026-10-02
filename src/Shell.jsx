@@ -105,6 +105,8 @@ export default function Shell({onLogout,me}){
     // مشغّل نشط واحد فقط → يُختار تلقائياً؛ "all" يبقى افتراضياً عند تعدّد المشغّلين
     const act=l.filter(o=>o.active!==false);if(act.length===1)setOp(p=>p==="all"?act[0].id:p);});},[]);
   const activeOps=ops.filter(o=>o.active!==false);
+  // مشغّل نشط واحد: سطر للقراءة فقط في القائمة الجانبية على الجوال
+  const opLine=activeOps.length===1?<div className="sh-opl"><Icon n="building" s={15}/><span>المشغّل: <b>{activeOps[0].name}</b></span></div>:null;
   const opPicker=(<label className="sh-opm"><span><Icon n="building" s={15}/> المشغّل</span>
     <select className="g-select" value={op} onChange={e=>setOp(e.target.value)} aria-label="المشغّل"><option value="all">كل المشغّلين</option>{ops.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>);
   const nm=(me&&me.display_name)||"إبراهيم المالكي";
@@ -120,7 +122,7 @@ export default function Shell({onLogout,me}){
     <style>{CSS}</style>
     <Orbs/>
     <GlassSidebar items={nav} active={view} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={sbTheme}
-      user={{name:nm,role:owner?"المالك · صلاحية كاملة":isSup?"مشرف ميداني":"مستخدم"}} onLogout={onLogout} onSettings={owner?()=>go("users"):undefined} onSearch={()=>setSearch(true)} extra={activeOps.length>1?opPicker:null}/>
+      user={{name:nm,role:owner?"المالك · صلاحية كاملة":isSup?"مشرف ميداني":"مستخدم"}} onLogout={onLogout} onSettings={owner?()=>go("users"):undefined} onSearch={()=>setSearch(true)} extra={activeOps.length>1?opPicker:activeOps.length===1?opLine:null}/>
     <GlobalSearch open={search} onClose={()=>setSearch(false)} items={nav} onGo={go}/>
     <BottomNav active={view} allowed={nav.map(n=>n.k)} navItems={nav} onGo={go} onMore={()=>setOpen(true)} badges={badges}/>
 
@@ -212,6 +214,7 @@ const CSS=`
 .sh-mi-th{display:none!important}
 .sh-ttl h1{font-size:16px;font-weight:800;margin:0}.sh-sub{font-size:12px;color:var(--mut)}
 .sh-ops{margin-inline-start:auto;display:flex;align-items:center;gap:7px;background:var(--glass-2);border:1px solid var(--line-2);border-radius:11px;padding:6px 10px}
+.sh-opl{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;font-size:12.5px;color:var(--mut)}.sh-opl b{color:var(--ink)}
 .sh-opm{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:var(--mut)}.sh-opm>span{display:flex;align-items:center;gap:6px}
 .sh-ops-ic{display:flex;align-items:center;color:var(--mut)}
 .sh-ops select{border:none;background:none;outline:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
