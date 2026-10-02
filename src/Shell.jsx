@@ -5,7 +5,7 @@ import DashboardHome from"./DashboardHome";
 import Notifications from"./Notifications";
 import BottomNav from"./BottomNav";
 import GlassSidebar from"./GlassSidebar";
-import{Search,Sun,Moon,Monitor}from"lucide-react";
+import{Search,Sun,Moon,Monitor,ChevronDown}from"lucide-react";
 import{useTheme,MODE_AR}from"./theme";
 import{ThemeToggle,Orbs}from"./ui";
 import GlobalSearch from"./GlobalSearch";
@@ -105,10 +105,13 @@ export default function Shell({onLogout,me}){
     // مشغّل نشط واحد فقط → يُختار تلقائياً؛ "all" يبقى افتراضياً عند تعدّد المشغّلين
     const act=l.filter(o=>o.active!==false);if(act.length===1)setOp(p=>p==="all"?act[0].id:p);});},[]);
   const activeOps=ops.filter(o=>o.active!==false);
-  // مشغّل نشط واحد: سطر للقراءة فقط في القائمة الجانبية على الجوال
-  const opLine=activeOps.length===1?<div className="sh-opl"><Icon n="building" s={15}/><span>المشغّل: <b>{activeOps[0].name}</b></span></div>:null;
-  const opPicker=(<label className="sh-opm"><span><Icon n="building" s={15}/> المشغّل</span>
-    <select className="g-select" value={op} onChange={e=>setOp(e.target.value)} aria-label="المشغّل"><option value="all">كل المشغّلين</option>{ops.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>);
+  // خيارات المشغّل الموحّدة للشريط العلوي (سطح المكتب) والقائمة الجانبية (الجوال): «كل المشغّلين» + النشطون
+  // (ويبقى المختار ظاهراً حتى لو أصبح غير نشط). القيمة نفسها: حالة op.
+  const opOptions=ops.filter(o=>o.active!==false||o.id===op);
+  const opOpts=<><option value="all">كل المشغّلين</option>{opOptions.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</>;
+  // الجوال: قائمة اختيار دائماً (حتى مع مشغّل نشط واحد) — أيقونة المبنى، حدّ زجاجي، سهم، ارتفاع ≥44px
+  const opPicker=(<label className="sh-opm"><span>المشغّل</span>
+    <span className="sh-opf"><Icon n="building" s={16}/><select value={op} onChange={e=>setOp(e.target.value)} aria-label="المشغّل">{opOpts}</select><ChevronDown size={16} aria-hidden className="sh-opc"/></span></label>);
   const nm=(me&&me.display_name)||"إبراهيم المالكي";
   const owner=!!(me&&me.is_owner);
   const isSup=SUPERVISOR_POS.includes(me&&me.position);
@@ -122,7 +125,7 @@ export default function Shell({onLogout,me}){
     <style>{CSS}</style>
     <Orbs/>
     <GlassSidebar items={nav} active={view} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={sbTheme}
-      user={{name:nm,role:owner?"المالك · صلاحية كاملة":isSup?"مشرف ميداني":"مستخدم"}} onLogout={onLogout} onSettings={owner?()=>go("users"):undefined} onSearch={()=>setSearch(true)} extra={activeOps.length>1?opPicker:activeOps.length===1?opLine:null}/>
+      user={{name:nm,role:owner?"المالك · صلاحية كاملة":isSup?"مشرف ميداني":"مستخدم"}} onLogout={onLogout} onSettings={owner?()=>go("users"):undefined} onSearch={()=>setSearch(true)} extra={ops.length?opPicker:null}/>
     <GlobalSearch open={search} onClose={()=>setSearch(false)} items={nav} onGo={go}/>
     <BottomNav active={view} allowed={nav.map(n=>n.k)} navItems={nav} onGo={go} onMore={()=>setOpen(true)} badges={badges}/>
 
@@ -133,8 +136,7 @@ export default function Shell({onLogout,me}){
         <div className="sh-ops">
           <span className="sh-ops-ic"><Icon n="building" s={16}/></span>
           <select value={op} onChange={e=>setOp(e.target.value)}>
-            <option value="all">كل المشغّلين</option>
-            {ops.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+            {opOpts}
           </select>
         </div>
         <button className="sh-ib sh-hm" onClick={()=>setSearch(true)} title="بحث شامل (⌘K)" aria-label="بحث شامل"><Search size={17}/></button>
@@ -214,8 +216,13 @@ const CSS=`
 .sh-mi-th{display:none!important}
 .sh-ttl h1{font-size:16px;font-weight:800;margin:0}.sh-sub{font-size:12px;color:var(--mut)}
 .sh-ops{margin-inline-start:auto;display:flex;align-items:center;gap:7px;background:var(--glass-2);border:1px solid var(--line-2);border-radius:11px;padding:6px 10px}
-.sh-opl{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;font-size:12.5px;color:var(--mut)}.sh-opl b{color:var(--ink)}
-.sh-opm{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:var(--mut)}.sh-opm>span{display:flex;align-items:center;gap:6px}
+.sh-opm{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:var(--mut)}
+.sh-opf{position:relative;display:flex;align-items:center;min-height:44px;border:1px solid var(--line-2);border-radius:12px;background:var(--glass-2);color:var(--mut);transition:border-color .15s}
+.sh-opf>svg:first-child{position:absolute;inset-inline-start:12px;pointer-events:none}
+.sh-opf select{appearance:none;-webkit-appearance:none;width:100%;min-height:44px;border:none;background:transparent;font-family:inherit;font-size:13.5px;font-weight:700;color:var(--ink);padding:0 38px;cursor:pointer;outline:none}
+.sh-opf select option{color:#0F172A;background:#fff}
+.sh-opc{position:absolute;inset-inline-end:12px;pointer-events:none}
+.sh-opf:focus-within{border-color:var(--p);box-shadow:var(--glow)}
 .sh-ops-ic{display:flex;align-items:center;color:var(--mut)}
 .sh-ops select{border:none;background:none;outline:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
 .sh-ib{width:38px;height:38px;border-radius:11px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;position:relative}
