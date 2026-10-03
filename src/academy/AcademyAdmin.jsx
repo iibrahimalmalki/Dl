@@ -210,7 +210,7 @@ function Videos({ owner }) {
   if (!v) return <div className="g-card aa-card"><div className="g-skel box" style={{ height: 120 }} /></div>;
   return <>
     <div className="aa-note">ثلاثة ملفات أصلية؛ كل مرحلة في الدروس تُعرض من ملفها بتوقيتها. الحد الأقصى للملف <span className="aa-num">{MAX_MB}</span> ميجا. إن لم يُرفع ملف تعمل الدروس بخطواتها مع رسالة «المقطع لم يُرفع بعد».{!owner && " الرفع للمالك فقط."}</div>
-    {v.missing && <div className="aa-note warn">جدول الفيديو لم يُنشأ بعد.</div>}
+    {v.missing && <div className="aa-note warn">زر الرفع معطّل لأن جدول الفيديو ومخزن «training» لم يُنشآ بعد. يعمل الرفع مباشرة بعد تطبيق docs/sql/academy.sql.</div>}
     <div className="aa-grid">{VIDEO_FILES.map(f => { const row = v.map[f.key], p = prog[f.key], m = msg[f.key], clips = Object.entries(CLIPS).filter(([, c]) => c.file === f.key);
       return <div key={f.key} className="g-card aa-card aa-vid">
         <div className="aa-top"><h3>{f.name.ar}</h3>{row ? <span className="g-badge ok"><i />مرفوع</span> : <span className="g-badge warn"><i />غير مرفوع</span>}</div>
@@ -218,7 +218,8 @@ function Videos({ owner }) {
         <div className="aa-clips">{clips.map(([id, c]) => <span key={id} className="g-badge aa-num">{id} · {fmtTime(c.from)}–{fmtTime(c.to)}</span>)}</div>
         {p != null && <div><div className="g-track"><i style={{ width: p + "%" }} /></div><span className="aa-mut aa-num">{p}%</span></div>}
         {m && <div className={"aa-note " + (m.bad ? "bad" : "ok")} role="status">{m.t}</div>}
-        {owner && <label className="aa-up" aria-disabled={p != null}><input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v" disabled={p != null || v.missing} onChange={e => { const fl = e.target.files && e.target.files[0]; e.target.value = ""; up(f.key, fl); }} />{row ? "استبدال الملف" : "رفع الملف"}</label>}
+        {owner && v.missing && <button type="button" className="g-btn block" disabled>الرفع متاح بعد تطبيق academy.sql</button>}
+        {owner && !v.missing && <label className="aa-up" aria-disabled={p != null}><input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v" disabled={p != null || v.missing} onChange={e => { const fl = e.target.files && e.target.files[0]; e.target.value = ""; up(f.key, fl); }} />{row ? "استبدال الملف" : "رفع الملف"}</label>}
       </div>; })}</div>
   </>;
 }
