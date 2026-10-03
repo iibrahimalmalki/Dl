@@ -5,10 +5,11 @@
 // extra: عقدة اختيارية تظهر أعلى القائمة في وضع الدرج على الجوال فقط (≤640px) — مثل اختيار المشغّل المخفي من الرأس
 import{useCallback,useEffect,useId,useMemo,useRef,useState}from"react";
 import{AnimatePresence,motion,useReducedMotion}from"framer-motion";
-import{GraduationCap,PackageCheck,LayoutDashboard,Megaphone,UserPlus,MessagesSquare,Compass,ClipboardCheck,Users,UserMinus,Sparkles,Activity,Gauge,MapPinned,MessageSquareWarning,ShieldAlert,UsersRound,Wallet,CalendarCheck,BadgeDollarSign,Scale,FileCheck2,CarFront,Receipt,ShieldCheck,Bike,House,FileBadge,Package,PackagePlus,KeyRound,Network,ChartColumn,UserCog,ScrollText,Settings,LogOut,Circle,Lock,PanelRightClose,PanelRightOpen,Search,X}from"lucide-react";
+import{GraduationCap,PackageCheck,CircleUser,Fuel,LayoutDashboard,Megaphone,UserPlus,MessagesSquare,Compass,ClipboardCheck,Users,UserMinus,Sparkles,Activity,Gauge,MapPinned,MessageSquareWarning,ShieldAlert,UsersRound,Wallet,CalendarCheck,BadgeDollarSign,Scale,FileCheck2,CarFront,Receipt,ShieldCheck,Bike,House,FileBadge,Package,PackagePlus,KeyRound,Network,ChartColumn,UserCog,ScrollText,Settings,LogOut,Circle,Lock,PanelRightClose,PanelRightOpen,Search,X}from"lucide-react";
 
 // أيقونة كل صفحة حسب مفتاحها في NAV | Lucide icon per NAV key
-const ICON_BY_KEY={dashboard:LayoutDashboard,job_ad:Megaphone,recruitment:UserPlus,interviews:MessagesSquare,sourcing:Compass,onboarding:ClipboardCheck,academy:GraduationCap,daily:PackageCheck,employees:Users,offboarding:UserMinus,tma:Sparkles,
+const ICON_BY_KEY={dashboard:LayoutDashboard,job_ad:Megaphone,recruitment:UserPlus,interviews:MessagesSquare,sourcing:Compass,onboarding:ClipboardCheck,academy:GraduationCap,daily:PackageCheck,
+  profile:CircleUser,handover:Bike,fuel:Fuel,perf:Gauge,docs:FileBadge,assets:KeyRound,employees:Users,offboarding:UserMinus,tma:Sparkles,
   operations:Activity,performance:Gauge,field_rounds:MapPinned,complaints:MessageSquareWarning,incidents:ShieldAlert,myteam:UsersRound,
   close:CalendarCheck,payroll:Wallet,pricing:BadgeDollarSign,settlement:Scale,reconciliation:FileCheck2,damage_claims:CarFront,vendors:Receipt,gosi:ShieldCheck,
   fleet:Bike,housing:House,renewals:FileBadge,supply:Package,supply_requests:PackagePlus,custody:KeyRound,
@@ -41,7 +42,7 @@ const readStored=()=>{try{const v=localStorage.getItem(STORE);return v==null?nul
 const writeStored=v=>{try{localStorage.setItem(STORE,v?"1":"0");}catch(_){}};
 const initials=n=>String(n||"").trim().split(/\s+/).slice(0,2).map(s=>s[0]||"").join("")||"—";
 
-export default function GlassSidebar({items,active,onGo,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,onSearch,extra,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
+export default function GlassSidebar({items,active,onGo,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,onSearch,extra,noSettings,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
   const bp=useBreakpoint();const narrow=useNarrow();const canHover=useCanHover();const reduce=useReducedMotion();
   const[collapsed,setCollapsed]=useState(()=>readStored()??false);
   const[openState,setOpenState]=useState(false);
@@ -93,7 +94,7 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
         className={"gs-item"+(isActive?" on":"")+(showLabels?"":" icon-only")+(locked?" locked":"")+(bottom&&n.k==="logout"?" danger":"")}>
         {isActive&&<span aria-hidden className="gs-ind"/>}
         <span className="gs-ic"><Ic size={20} strokeWidth={1.9}/>{badge?<span className="gs-dot">{badge>99?"99+":badge}</span>:null}</span>
-        <AnimatePresence initial={false}>{showLabels&&<motion.span key="l" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:8}} transition={{duration:reduce?0:0.18}} className="gs-lbl">{narrow&&n.sh?n.sh:n.ar}</motion.span>}</AnimatePresence>
+        <AnimatePresence initial={false}>{showLabels&&<motion.span key="l" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:8}} transition={{duration:reduce?0:0.18}} className="gs-lbl">{narrow&&n.sh?n.sh:n.ar}{n.bn?<small className="gs-bn" lang="bn">{n.bn}</small>:null}</motion.span>}</AnimatePresence>
         {showLabels&&locked&&<Lock size={13} className="gs-lock" aria-hidden/>}
         {showLabels&&badge&&!locked?<span className="gs-badge">{badge}</span>:null}
       </motion.button>
@@ -130,7 +131,7 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
           </div>))}
         </nav>
         <div className="gs-foot">
-          <Item n={{k:"settings",ar:"الإعدادات"}} bottom/>
+          {!noSettings&&<Item n={{k:"settings",ar:"الإعدادات"}} bottom/>}
           <Item n={{k:"logout",ar:"تسجيل الخروج"}} bottom/>
         </div>
       </div>
@@ -211,6 +212,7 @@ const CSS=`
 @media(hover:hover){.gs-item:hover:not([disabled]) .gs-ic{color:var(--p);filter:drop-shadow(0 0 6px rgba(var(--p-rgb),.85))}}
 .gs-dot{position:absolute;top:-6px;left:-6px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--p);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;line-height:1;font-variant-numeric:tabular-nums}
 .gs-lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gs-bn{display:block;font-size:10.5px;font-weight:600;opacity:.75;line-height:1.3;font-family:system-ui,-apple-system,"Noto Sans Bengali","Segoe UI",sans-serif}
 .gs-lock{flex:none;opacity:.7}
 .gs-badge{flex:none;border-radius:99px;background:rgba(var(--p-rgb),.18);color:var(--p);font-size:10.5px;font-weight:800;padding:1px 7px;font-variant-numeric:tabular-nums}
 .gs-tip{position:absolute;top:50%;right:calc(100% + 10px);transform:translateY(-50%);z-index:50;white-space:nowrap;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;background:var(--gs-tipbg);color:var(--gs-txt);border:1px solid var(--gs-line);box-shadow:0 8px 24px -8px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .15s}

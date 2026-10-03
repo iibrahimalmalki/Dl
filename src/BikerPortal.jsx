@@ -6,6 +6,9 @@ import { daysLeft, docStatus, docBn, dayText, dayTextBn, pickContact } from "./r
 import { bikerScore, nextHints } from "./scorecard";
 import { dailySVG } from "./perfCharts";
 import ChartTip from "./ChartTip";
+import GlassSidebar from "./GlassSidebar";
+import BottomNav from "./BottomNav";
+import { useTheme } from "./theme";
 import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, validateHandover, receivedRecord, itemsOk } from "./handover";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
@@ -20,7 +23,33 @@ const DailyReceive = lazy(() => import("./daily/DailyReceive"));
 
 const CSS = `
 .bp-wrap{font-family:var(--font);direction:rtl;background:var(--bg);min-height:100dvh;color:var(--ink);padding:66px 10px 70px;position:relative}
-.bp-wrap>*:not(.g-orbs):not(.g-corner){position:relative;z-index:1}
+.bp-wrap:not(.bp-shell)>*:not(.g-orbs):not(.g-corner){position:relative;z-index:1}
+/* ── هيكل البوابة: شريط علوي + قائمة جانبية (≥1024) أو درج + شريط سفلي (≤640) — نفس GlassSidebar و g-bnav في النظام الرئيسي ── */
+.bp-shell{padding:0;display:flex;align-items:flex-start}
+.bp-main{flex:1;min-width:0;min-height:100dvh;display:flex;flex-direction:column;position:relative;z-index:1}
+.bp-top{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:10px;padding:8px 14px;padding-top:max(8px,env(safe-area-inset-top));background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-bottom:1px solid var(--line)}
+.bp-brand{flex:1;min-width:0;display:flex;align-items:center;gap:9px}
+.bp-brand>div{min-width:0;line-height:1.3}
+.bp-brand b{display:block;font-size:14.5px;font-weight:900;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bp-brand .bn{display:block;font-size:10.5px;font-weight:600;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bp-mark{width:34px;height:34px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 4px 12px rgba(232,113,43,.3)}
+.bp-mark img{width:24px;height:24px;object-fit:contain}
+.bp-who{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;min-width:0;max-width:34vw}
+.bp-who b{font-size:12.5px;font-weight:800;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.bp-num{font-size:11px;color:var(--mut);font-weight:700;direction:ltr;unicode-bidi:isolate}
+.bp-burger{display:none;width:40px;height:40px;border-radius:11px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink);font-size:18px;cursor:pointer;flex:none}
+.bp-burger:focus-visible{outline:none;box-shadow:var(--glow)}
+.bp-content{padding:14px 10px 28px;width:100%;max-width:720px;margin:0 auto}
+@media(min-width:641px) and (max-width:1023px){.bp-burger{display:block}}
+@media(max-width:640px){
+  .bp-content{padding-bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom) + 24px)}
+  .bp-who{max-width:28vw}
+}
+.bp-wrap .g-bnav-i{gap:1px}
+.bp-wrap .g-bnav-bn{font-size:9px;font-weight:600;line-height:1.1;color:inherit;opacity:.8;font-family:system-ui,-apple-system,'Noto Sans Bengali','Segoe UI',sans-serif}
+/* حقول الإدخال لا تتجاوز بطاقتها (Safari يفرض عرضاً داخلياً لحقول التاريخ والوقت) */
+.bp-wrap input,.bp-wrap select,.bp-wrap textarea{max-width:100%;min-width:0;box-sizing:border-box}
+.bp-wrap input[type=date],.bp-wrap input[type=time],.bp-wrap input[type=datetime-local]{width:100%;-webkit-appearance:none;appearance:none;min-height:48px}
 .bp-wrap .bn,.bp-wrap :lang(bn){font-family:system-ui,-apple-system,'Noto Sans Bengali','Segoe UI',sans-serif}
 .bp-card{max-width:560px;margin:0 auto 14px;border-radius:18px;overflow:hidden}
 .bp-head{background:linear-gradient(135deg,var(--a),var(--p));color:#fff;padding:18px 18px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -130,6 +159,17 @@ const CSS = `
 
 /* قائمة التحقق الأساسية للدراجة (أفضل الممارسات) */
 /* خلفية الكرات + زر الثيم في الزاوية — مرة واحدة في جذر كل شاشة */
+// تنقّل البوابة: القائمة الجانبية/«المزيد» (كل التبويبات) والشريط السفلي للجوال (أربعة + المزيد)
+const BP_NAV = [
+  { k: "profile", ar: "ملفي", bn: "প্রোফাইল" }, { k: "handover", ar: "الدراجة", bn: "বাইক" },
+  { k: "fuel", ar: "الوقود", bn: "জ্বালানি" }, { k: "perf", ar: "أدائي", bn: "আমার কাজ" },
+  { k: "docs", ar: "وثائقي", bn: "আমার কাগজপত্র" }, { k: "assets", ar: "العهدة", bn: "সরঞ্জাম" },
+  { k: "daily", ar: "الاستلام", bn: "ডেলিভারি" }, { k: "academy", ar: "الأكاديمية", bn: "একাডেমি" },
+];
+const BP_BOTTOM = [
+  { k: "profile", ar: "الرئيسية", bn: "হোম", ic: "home" }, { k: "handover", ar: "الدراجة", bn: "বাইক", ic: "bike" },
+  { k: "daily", ar: "الاستلام", bn: "ডেলিভারি", ic: "inbox" }, { k: "academy", ar: "الأكاديمية", bn: "একাডেমি", ic: "star" },
+];
 const Chrome = () => <><Orbs /><div className="g-corner"><ThemeToggle /></div></>;
 
 
@@ -239,6 +279,15 @@ function Portal() {
   const [myBike, setMyBike] = useState(null);
   const [temp, setTemp] = useState(false);   // حائز مؤقت (بديل)
   const [tab, setTab] = useState("profile");
+  const [open, setOpen] = useState(false);           // قائمة «المزيد» / الدرج
+  const [opName, setOpName] = useState("دلو ورغوة");  // اسم المشغّل (operators.name)
+  const [pending, setPending] = useState(0);         // أنصبة الاستلام بانتظار تأكيدي
+  const dirty = React.useRef(false);                 // نموذج فيه مدخلات (تسليم الدراجة / استلام المندوب)
+  const { resolved: theme } = useTheme();
+  // شارة «الاستلام»: أنصبة بانتظار تأكيدي (يتجاهل الخطأ قبل/بدون جداول الاستلام)
+  useEffect(() => { if (!me || !me.emp_id) return;
+    supabase.from("daily_shares").select("id", { count: "exact", head: true }).eq("employee_id", me.emp_id).eq("status", "pending")
+      .then(({ count, error }) => { if (!error) setPending(count || 0); }, () => {}); }, [me, tab]);
   const [err, setErr] = useState("");
 
   useEffect(() => { (async () => {
@@ -254,6 +303,8 @@ function Portal() {
       const empId = emp ? emp.id : null;
       m.emp_id = empId;
       setMe(m);
+      // اسم المشغّل: سياسة operators_self_select تسمح للبايكر بقراءة مشغّله (my_operator() = app_users.operator_id)
+      if (au.operator_id) supabase.from("operators").select("name").eq("id", au.operator_id).maybeSingle().then(({ data }) => { if (data && data.name) setOpName(data.name); }, () => {});
       if (empId) {
         // الدراجة التي يحوزها هذا البايكر حالياً: إمّا حائز مؤقت، أو مخصّصة له ولا يحوزها أحد مؤقتاً
         const { data: bk } = await supabase.from("fleet_vehicles")
@@ -270,70 +321,86 @@ function Portal() {
   if (err) return <div className="bp-wrap"><style>{CSS}</style><Chrome /><div className="bp-card g-card"><div className="bp-sec"><div className="bp-msg bp-err">{err}</div><button className="bp-btn" onClick={() => supabase.auth.signOut()}>خروج · লগআউট</button></div></div></div>;
   if (!me) return <div className="bp-wrap"><style>{CSS}</style><Chrome /><div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div></div>;
 
+  // التنقّل: نموذج فيه مدخلات يطلب تأكيداً قبل مغادرته
+  const go = k => {
+    if (k === tab) { setOpen(false); return; }
+    if (dirty.current && !window.confirm("ستفقد ما أدخلته · যা লিখেছেন তা হারাবে")) return;
+    dirty.current = false; setTab(k); setOpen(false); try { window.scrollTo(0, 0); } catch (e) { /* */ }
+  };
+  const badges = { handover: myBike && myBike.needs_receipt_update ? 1 : 0, daily: pending };
+  const loading = <div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div>;
+  const setDirty = v => { dirty.current = !!v; };
+  const tempCard = temp && myBike && (
+    <div className="bp-card g-card" style={{ marginBottom: 14 }}>
+      <div className="bp-sec" style={{ padding: "12px 16px" }}>
+        <div className="bp-msg bp-ok" style={{ margin: 0 }}>
+          🔁 حيازة مؤقتة: دراجة {myBike.plate} بعهدتك حالياً كبديل{myBike.held_until ? ` حتى ${myBike.held_until}` : ""}.<br />
+          <span className="bn">অস্থায়ী দায়িত্ব: বাইক {myBike.plate} বর্তমানে আপনার কাছে (বদলি)।</span>
+        </div>
+      </div>
+    </div>);
+
   return (
-    <div className="bp-wrap">
-      <style>{CSS}</style><Chrome />
-      <div className="bp-card g-card">
-        <div className="bp-head">
-          <div>
-            <h1>بوابة البايكر</h1>
-            <div className="s">أهلاً {me.name} · স্বাগতম<br />رقمك · আপনার নম্বর: {me.biker_employee_id}</div>
-          </div>
-          <button className="bp-logout" onClick={() => supabase.auth.signOut()}>خروج<br />লগআউট</button>
-        </div>
-      </div>
+    <div className="bp-wrap bp-shell">
+      <style>{CSS}</style><Orbs />
+      <GlassSidebar items={BP_NAV} active={tab} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={theme} noSettings
+        user={{ name: me.name, role: "بايكر · " + me.biker_employee_id }} onLogout={() => supabase.auth.signOut()}
+        platform={{ name: opName, subtitle: "بوابة البايكر · বাইকার পোর্টাল" }} />
+      <BottomNav items={BP_BOTTOM} active={tab} onGo={go} onMore={() => setOpen(true)} badges={badges} />
 
-      <div className="bp-prof">
-        <div className="bp-pcell"><div className="k">الاسم · নাম</div><div className="v" style={{ fontSize: 13 }}>{me.name || "—"}</div></div>
-        <div className="bp-pcell"><div className="k">رقم البايكر · নম্বর</div><div className="v">{me.biker_employee_id}</div></div>
-        <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div></div>
-      </div>
+      <div className="bp-main">
+        <header className="bp-top">
+          <button type="button" className="bp-burger" onClick={() => setOpen(true)} aria-label="القائمة"><span aria-hidden="true">☰</span></button>
+          <div className="bp-brand"><span className="bp-mark"><img src="/brand-mark.png" alt="" /></span>
+            <div><b>{opName}</b><span className="bn">বাইকার পোর্টাল · Biker portal</span></div></div>
+          <div className="bp-who"><b>{String(me.name || "").split(" ")[0] || "—"}</b><span className="bp-num">{me.biker_employee_id}</span></div>
+          <ThemeToggle />
+        </header>
 
-      {myBike && myBike.needs_receipt_update && (
-        <div className="bp-card g-card" style={{ marginBottom: 14 }}>
-          <div className="bp-sec" style={{ padding: "12px 16px" }}>
-            <div className="bp-msg bp-err" style={{ margin: 0 }}>
-              <span className="g-badge warn" style={{ marginBottom: 6 }}><i />مطلوب · <span className="bn">প্রয়োজন</span></span><br />
-              ⚠️ مطلوب تحديث الاستلام: افتح تبويب «الدراجة» وسجّل استلامًا فعليًا بقراءة العدّاد والصور.<br />
-              রিসিট আপডেট প্রয়োজন: «বাইক» ট্যাবে গিয়ে প্রকৃত ওডোমিটার ও ছবিসহ গ্রহণ রেকর্ড করুন।
+        <div className="bp-content">
+          {tab === "profile" && <>
+            <div className="bp-card g-card">
+              <div className="bp-head">
+                <div>
+                  <h1>بوابة البايكر</h1>
+                  <div className="s">أهلاً {me.name} · স্বাগতম<br />رقمك · আপনার নম্বর: {me.biker_employee_id}</div>
+                </div>
+                <button className="bp-logout" onClick={() => supabase.auth.signOut()}>خروج<br />লগআউট</button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {temp && myBike && (
-        <div className="bp-card g-card" style={{ marginBottom: 14 }}>
-          <div className="bp-sec" style={{ padding: "12px 16px" }}>
-            <div className="bp-msg bp-ok" style={{ margin: 0 }}>
-              🔁 حيازة مؤقتة: دراجة {myBike.plate} بعهدتك حالياً كبديل{myBike.held_until ? ` حتى ${myBike.held_until}` : ""}.<br />
-              অস্থায়ী দায়িত্ব: বাইক {myBike.plate} বর্তমানে আপনার কাছে (বদলি)।
+            <div className="bp-prof">
+              <div className="bp-pcell"><div className="k">الاسم · নাম</div><div className="v" style={{ fontSize: 13 }}>{me.name || "—"}</div></div>
+              <div className="bp-pcell"><div className="k">رقم البايكر · নম্বর</div><div className="v">{me.biker_employee_id}</div></div>
+              <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div></div>
             </div>
-          </div>
+            {myBike && myBike.needs_receipt_update && (
+              <div className="bp-card g-card" style={{ marginBottom: 14 }}>
+                <div className="bp-sec" style={{ padding: "12px 16px" }}>
+                  <div className="bp-msg bp-err" style={{ margin: 0 }}>
+                    <span className="g-badge warn" style={{ marginBottom: 6 }}><i />مطلوب · <span className="bn" style={{ display: "inline" }}>প্রয়োজন</span></span><br />
+                    ⚠️ مطلوب تحديث الاستلام: افتح «الدراجة» وسجّل استلامًا فعليًا بقراءة العدّاد والصور.
+                    <span className="bn" style={{ display: "block" }}>রিসিট আপডেট প্রয়োজন: «বাইক» খুলে প্রকৃত ওডোমিটার ও ছবিসহ গ্রহণ রেকর্ড করুন।</span>
+                  </div>
+                  <button className="bp-btn bp-call" onClick={() => go("handover")}>🏍️ افتح الدراجة · <span className="bn" style={{ display: "inline" }}>বাইক খুলুন</span></button>
+                </div>
+              </div>
+            )}
+            {tempCard}
+            <Profile me={me} myBike={myBike} onGo={go} />
+          </>}
+          {tab === "handover" && <>{tempCard}<Handover me={me} myBike={myBike} onDirty={setDirty} /></>}
+          {tab === "fuel" && <Fuel me={me} myBike={myBike} />}
+          {tab === "assets" && <Assets me={me} />}
+          {tab === "docs" && <Docs me={me} />}
+          {tab === "perf" && <MyPerf me={me} />}
+          {tab === "daily" && <Suspense fallback={loading}><DailyReceive me={me} onDirty={setDirty} onPending={setPending} /></Suspense>}
+          {tab === "academy" && <Suspense fallback={loading}><Academy me={me} /></Suspense>}
         </div>
-      )}
-
-      <div className="bp-tabs" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === "profile"} className={"bp-tab" + (tab === "profile" ? " on" : "")} onClick={() => setTab("profile")}>ملفي<span className="bn">প্রোফাইল</span></button>
-        <button type="button" role="tab" aria-selected={tab === "handover"} className={"bp-tab" + (tab === "handover" ? " on" : "")} onClick={() => setTab("handover")}>الدراجة<span className="bn">বাইক হস্তান্তর</span></button>
-        <button type="button" role="tab" aria-selected={tab === "fuel"} className={"bp-tab" + (tab === "fuel" ? " on" : "")} onClick={() => setTab("fuel")}>الوقود<span className="bn">জ্বালানি</span></button>
-        <button type="button" role="tab" aria-selected={tab === "perf"} className={"bp-tab" + (tab === "perf" ? " on" : "")} onClick={() => setTab("perf")}>أدائي<span className="bn">আমার কাজ</span></button>
-        <button type="button" role="tab" aria-selected={tab === "docs"} className={"bp-tab" + (tab === "docs" ? " on" : "")} onClick={() => setTab("docs")}>وثائقي<span className="bn">আমার কাগজপত্র</span></button>
-        <button type="button" role="tab" aria-selected={tab === "assets"} className={"bp-tab" + (tab === "assets" ? " on" : "")} onClick={() => setTab("assets")}>العهدة<span className="bn">সরঞ্জাম</span></button>
-        <button type="button" role="tab" aria-selected={tab === "daily"} className={"bp-tab" + (tab === "daily" ? " on" : "")} onClick={() => setTab("daily")}>الاستلام<span className="bn">ডেলিভারি</span></button>
-        <button type="button" role="tab" aria-selected={tab === "academy"} className={"bp-tab" + (tab === "academy" ? " on" : "")} onClick={() => setTab("academy")}>الأكاديمية<span className="bn">একাডেমি</span></button>
       </div>
-
-      {tab === "profile" && <Profile me={me} myBike={myBike} onGo={setTab} />}
-      {tab === "handover" && <Handover me={me} myBike={myBike} />}
-      {tab === "fuel" && <Fuel me={me} myBike={myBike} />}
-      {tab === "assets" && <Assets me={me} />}
-      {tab === "docs" && <Docs me={me} />}
-      {tab === "perf" && <MyPerf me={me} />}
-      {tab === "daily" && <Suspense fallback={<div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div>}><DailyReceive me={me} /></Suspense>}
-      {tab === "academy" && <Suspense fallback={<div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div>}><Academy me={me} /></Suspense>}
     </div>
   );
 }
+
 
 /* ================= أدائي ================= */
 const PM = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
@@ -526,7 +593,7 @@ function NoBike() {
 }
 
 /* ================= تسليم/استلام ================= */
-function Handover({ me, myBike }) {
+function Handover({ me, myBike, onDirty }) {
   const [direction, setDirection] = useState("receive");
   const [odometer, setOdometer] = useState("");
   const [checks, setChecks] = useState(() => Object.fromEntries(CHECKLIST.map(c => [c.id, true])));
@@ -553,6 +620,9 @@ function Handover({ me, myBike }) {
     setRecent(data || []);
   }
   useEffect(() => { loadRecent(); }, []);
+  // مدخلات غير محفوظة ⇒ تأكيد قبل الانتقال لتبويب آخر
+  useEffect(() => { onDirty && onDirty(!!(odometer || notes || damages.length || Object.values(ph).some(Boolean) || RECEIVED_ITEMS.some(it => received[it.id] != null))); }, [odometer, notes, damages, ph, received]);
+  useEffect(() => () => { onDirty && onDirty(false); }, []);
 
   if (!myBike) return <NoBike />;
 
