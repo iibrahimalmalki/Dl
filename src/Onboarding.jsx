@@ -12,6 +12,7 @@ export default function Onboarding({opId}){
   const[recId,setRecId]=useState(null);
   const[items,setItems]=useState({});
   const[notes,setNotes]=useState("");
+  const[acad,setAcad]=useState(null);    // حالة الأكاديمية (عرض فقط)
   const toast=useToast();const[msg,setMsgRaw]=useState(null);
   // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
   const setMsg=m=>{if(m&&m.ok){toast.ok(m.t,undefined,m.t.length>60?7000:undefined);setMsgRaw(null);}else setMsgRaw(m);};const[saving,setSaving]=useState(false);
@@ -27,7 +28,8 @@ export default function Onboarding({opId}){
   })();},[opId]);
 
   const open=async(emp)=>{
-    setSel(emp);setMsg(null);
+    setSel(emp);setMsg(null);setAcad(null);
+    import("./academy/status").then(m=>m.academyStatus(emp.id)).then(a=>setAcad(a)).catch(()=>setAcad({ready:false}));
     const ex=list.find(o=>o.employee_id===emp.id);
     if(ex){setRecId(ex.id);setItems(ex.items||{});setNotes(ex.notes||"");}
     else{setRecId(null);setItems({});setNotes("");}
@@ -72,6 +74,12 @@ export default function Onboarding({opId}){
       </div>
       <div className="ob-track"><div style={{width:prog.pct+"%",background:prog.pct>=100?"var(--ok)":"var(--p)"}}/></div>
       {prog.pct>=100&&<div className="ob-ready"><Icon n="check" s={15}/> مكتمل — البايكر جاهز للعمل المستقل بعد اعتماد المشرف والمالك</div>}
+
+      {/* الأكاديمية — يُقرأ تلقائياً من حالة الاعتماد، للعرض فقط ولا يدخل في نسبة القائمة */}
+      <div className={"ob-item ob-acad"+(acad&&acad.certified?" on":"")} aria-readonly="true">
+        <span className="ob-ck">{acad&&acad.certified&&<Icon n="check" s={14}/>}</span>
+        <div className="ob-it-txt"><div className="ob-it-ar">اجتاز الأكاديمية</div><div className="ob-it-resp">{!acad?"جارٍ التحقق…":!acad.ready?"حفظ نتائج الأكاديمية غير مفعّل بعد":acad.certified?"بايكر معتمد — تلقائياً من الأكاديمية":`${acad.done}/10 محطات — يُحدَّث تلقائياً من الأكاديمية`}</div></div>
+      </div>
 
       {/* المراحل */}
       {PHASES.map((ph,pi)=>{const pp=phaseProgress(items,pi);return(
@@ -127,6 +135,8 @@ const CSS=`
 .ob-ph-pct.done{background:var(--ok-bg);color:var(--ok-ink)}
 .ob-item{display:flex;align-items:flex-start;gap:11px;padding:10px 2px;border-bottom:1px solid var(--line);cursor:pointer}
 .ob-item:last-child{border-bottom:none}
+.ob-item.ob-acad{cursor:default;background:var(--soft);border:1px dashed var(--line-2);border-radius:12px;padding:10px 12px;margin:4px 0 6px}
+.ob-item.ob-acad.on .ob-it-ar{color:var(--ok-ink);text-decoration:none}
 .ob-ck{width:22px;height:22px;border-radius:7px;border:1.5px solid var(--line);background:var(--glass-2);display:flex;align-items:center;justify-content:center;color:#fff;flex:none;margin-top:1px}
 .ob-item.on .ob-ck{background:var(--ok);border-color:var(--ok)}
 .ob-it-txt{flex:1;min-width:0}
