@@ -22,16 +22,17 @@ const flatShare = s => ({ ...s, received_by: s.daily_deliveries && s.daily_deliv
 
 // بوابة البايكر: الأصناف، المندوبون، فريق المشغّل، آخر التسليمات، الأنصبة المرتبطة بي، تسوياتي
 export async function loadBiker(empId) {
-  const [it, co, tm, dl, sh, ad] = await Promise.all([
+  const [it, co, tm, dl, sh, ad, op] = await Promise.all([
     supabase.from("daily_items").select("*").order("sort"),
     supabase.from("sweater_couriers").select("id,operator_id,name,phone,active").eq("active", true).order("name"),
     supabase.rpc("daily_team"),
     supabase.from("daily_deliveries").select(DEL_SEL).order("received_at", { ascending: false }).limit(40),
     supabase.from("daily_shares").select(SHARE_SEL).limit(2000),
     supabase.from("daily_adjustments").select("id,employee_id,item_key,delta,reason,created_at").eq("employee_id", empId).limit(1000),
+    supabase.rpc("my_operator_id"),
   ]);
   const R = [it, co, tm, dl, sh, ad].map(res);
-  return { items: R[0].data, couriers: R[1].data, team: R[2].data, deliveries: R[3].data, shares: R[4].data.map(flatShare), adjustments: R[5].data,
+  return { items: R[0].data, couriers: R[1].data, team: R[2].data, deliveries: R[3].data, shares: R[4].data.map(flatShare), adjustments: R[5].data, operatorId: op.error ? null : op.data,
     ready: !R.some(r => r.missing), error: (R.find(r => r.error) || {}).error || null };
 }
 

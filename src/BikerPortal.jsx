@@ -8,6 +8,7 @@ import { dailySVG } from "./perfCharts";
 import ChartTip from "./ChartTip";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
+const DailyReceive = lazy(() => import("./daily/DailyReceive"));
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
     هوية دلو ورغوة (برتقالي) · ثنائية اللغة (عربي + বাংলা)
@@ -322,6 +323,7 @@ function Portal() {
         <button type="button" role="tab" aria-selected={tab === "perf"} className={"bp-tab" + (tab === "perf" ? " on" : "")} onClick={() => setTab("perf")}>أدائي<span className="bn">আমার কাজ</span></button>
         <button type="button" role="tab" aria-selected={tab === "docs"} className={"bp-tab" + (tab === "docs" ? " on" : "")} onClick={() => setTab("docs")}>وثائقي<span className="bn">আমার কাগজপত্র</span></button>
         <button type="button" role="tab" aria-selected={tab === "assets"} className={"bp-tab" + (tab === "assets" ? " on" : "")} onClick={() => setTab("assets")}>العهدة<span className="bn">সরঞ্জাম</span></button>
+        <button type="button" role="tab" aria-selected={tab === "daily"} className={"bp-tab" + (tab === "daily" ? " on" : "")} onClick={() => setTab("daily")}>الاستلام<span className="bn">ডেলিভারি</span></button>
         <button type="button" role="tab" aria-selected={tab === "academy"} className={"bp-tab" + (tab === "academy" ? " on" : "")} onClick={() => setTab("academy")}>الأكاديمية<span className="bn">একাডেমি</span></button>
       </div>
 
@@ -331,6 +333,7 @@ function Portal() {
       {tab === "assets" && <Assets me={me} />}
       {tab === "docs" && <Docs me={me} />}
       {tab === "perf" && <MyPerf me={me} />}
+      {tab === "daily" && <Suspense fallback={<div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div>}><DailyReceive me={me} /></Suspense>}
       {tab === "academy" && <Suspense fallback={<div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div>}><Academy me={me} /></Suspense>}
     </div>
   );
