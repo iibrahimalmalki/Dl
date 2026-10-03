@@ -2,6 +2,8 @@
 // القراءة تُرجع ready:false والكتابة تُرجع {missing:true}.
 import { supabase, SUPA_URL, SUPA_ANON, ensureFreshToken } from "../supabase";
 import { normPhone } from "./engine";
+import { compressImage } from "./compress";
+export { compressImage };
 
 export const BUCKET = "daily-receipts";
 const MISSING = e => !!e && (e.code === "42P01" || e.code === "PGRST205" || e.code === "PGRST202" || e.code === "42883"
@@ -51,18 +53,6 @@ export async function loadAdmin() {
   const R = [it, co, dl, sh, ad, em].map(res);
   return { items: R[0].data, couriers: R[1].data, deliveries: R[2].data, shares: R[3].data.map(flatShare), adjustments: R[4].data,
     employees: R[5].data.filter(e => e.staff_role !== "manager"), ready: !R.slice(0, 5).some(r => r.missing), error: (R.find(r => r.error) || {}).error || null };
-}
-
-// ضغط صورة في المتصفح: أطول ضلع 1600px، JPEG جودة 0.8
-export async function compressImage(file, max = 1600, q = 0.8) {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error("تعذّر قراءة الصورة")); i.src = url; });
-    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-    return await new Promise((ok, bad) => c.toBlob(b => b ? ok(b) : bad(new Error("تعذّر ضغط الصورة")), "image/jpeg", q));
-  } finally { URL.revokeObjectURL(url); }
 }
 
 async function uploadPhoto(path, blob) {
