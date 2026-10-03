@@ -201,7 +201,7 @@ begin
   values ('📦', 'استلام يومي جديد من مندوب سويتر',
     coalesce(v_who, '—') || ' استلم الساعة ' || to_char(new.received_at at time zone 'Asia/Riyadh', 'HH24:MI') || ' من ' || coalesce(v_cour, '—')
       || case when v_h >= 23 or v_h < 8 then ' · متأخر' else '' end,
-    'daily', 'owner', 'daily', case when v_h >= 23 or v_h < 8 then 'warn' else 'info' end, 'daily', new.id::text, 'daily-del-' || new.id)
+    'daily', 'owner', 'supply', case when v_h >= 23 or v_h < 8 then 'warn' else 'info' end, 'daily', new.id::text, 'daily-del-' || new.id)
   on conflict (dedupe_key) do nothing;
   return new;
 end $$;
@@ -217,7 +217,7 @@ begin
     insert into public.notifications (icon, title, body, type, audience, category, severity, module, entity_id, dedupe_key)
     values ('⚠️', 'بلاغ «ناقص» في الاستلام اليومي',
       coalesce(v_who, '—') || ' أبلغ أن نصيبه ناقص' || coalesce(' — ' || nullif(new.note, ''), ''),
-      'daily', 'owner', 'daily', 'warn', 'daily', new.delivery_id::text, 'daily-short-' || new.delivery_id || '-' || new.employee_id)
+      'daily', 'owner', 'supply', 'warn', 'daily', new.delivery_id::text, 'daily-short-' || new.delivery_id || '-' || new.employee_id)
     on conflict (dedupe_key) do nothing;
   end if;
   return new;

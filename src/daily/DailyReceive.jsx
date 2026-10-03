@@ -1,7 +1,6 @@
 // الاستلام اليومي من مندوب سويتر — تبويب «الاستلام» في بوابة البايكر.
 // أي بايكر حاضر يسجّل الشحنة (وقت، مندوب، كميات، مناشف مُرجَعة، صور، ملاحظة) ثم يوزّعها، وكل بايكر يؤكد نصيبه.
 import { useEffect, useMemo, useState } from "react";
-import Icon from "../Icon";
 import { splitAll, splitErrors, normPhone, validateReceive, balances, isLate, riyadhHM, riyadhDay, toLocalInput, MAX_BACK_H } from "./engine";
 import { loadBiker, createDelivery, saveDistribution, confirmShares, photoUrl } from "./store";
 
@@ -51,6 +50,13 @@ export const DR_CSS = `
 .dr-dist{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
 `;
 
+// أيقونات مضمّنة (من Icon.jsx) حتى لا يصير Icon حزمة مشتركة تكبّر خريطة التحميل في الحزمة الرئيسية
+const P = { check: "M20 6 9 17l-5-5", inbox: "M22 12h-6l-2 3h-4l-2-3H2 M5.5 5h13a1 1 0 0 1 .9.6L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6l2.6-6.4A1 1 0 0 1 5.5 5z",
+  ruler: "M5 3h4l12 12-6 6L3 9V5a2 2 0 0 1 2-2z M9 7l2 2 M13 11l2 2", star: "M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 6.1 20.5l1.2-6.5L2.5 9.4l6.6-.9z",
+  camera: "M4 8a2 2 0 0 1 2-2h1.5l1.2-1.8A1 1 0 0 1 9.5 4h5a1 1 0 0 1 .8.2L16.5 6H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z",
+  doc: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5 M9 13h6 M9 17h6", bucket: "M4 8h16l-1.5 11a2 2 0 0 1-2 1.8H7.5a2 2 0 0 1-2-1.8z M3 8a9 4 0 0 1 18 0 M8 8a7 3 0 0 1 8 0",
+  shirt: "M8 3l4 3 4-3 4 4-3 3v10H7V10L4 7z" };
+const Icon = ({ n, s = 20 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flex: "none" }} aria-hidden="true">{(P[n] || "").split(" M").map((seg, i) => <path key={i} d={(i ? "M" : "") + seg} />)}</svg>;
 const ICON = { freshener: "star", mat: "ruler", tissue: "doc", seat_cover: "shirt", wet_wipes: "bucket", towel_clean: "check" };
 const Bn = ({ children }) => <span className="bn" lang="bn">{children}</span>;
 export const fmtWhen = t => { try { return riyadhDay(t).slice(5).split("-").reverse().join("/") + " · " + riyadhHM(t); } catch { return "—"; } };
