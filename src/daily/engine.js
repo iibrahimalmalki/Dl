@@ -102,3 +102,67 @@ export function monthSummary(deliveries = []) {
 // تحويل وقت محلي من حقل datetime-local إلى ISO والعكس
 export const toLocalInput = t => { const d = new Date(t); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
 export const csvCell = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+
+/* ── رسالتا واتساب بعد الاستلام ── */
+// صيغ مختصرة للأصناف المعروفة في الرسالة (الوحدة في المناشف = الربطة لكل غسلة)
+const SHORT_AR = { freshener: "فواحة", mat: "دعاسة", tissue: "مناديل", seat_cover: "غطاء مقعد", wet_wipes: "مناديل مبللة", towel_clean: "ربطات مناشف" };
+const SHORT_EN = { freshener: "Air freshener", mat: "Floor mat", tissue: "Tissues", seat_cover: "Seat cover", wet_wipes: "Wet wipes", towel_clean: "Towel bundles" };
+const stripParen = s => String(s || "").replace(/\s*\([^)]*\)\s*/g, " ").trim();
+export const itemLabel = (it, lang) => {
+  if (lang === "en") return it.name_en ? (SHORT_EN[it.key] || (it.kind === "towel" ? "Towel bundles" : stripParen(it.name_en))) : (SHORT_AR[it.key] || stripParen(it.name_ar));
+  return SHORT_AR[it.key] || (it.kind === "towel" ? "ربطات مناشف" : stripParen(it.name_ar));
+};
+// التاريخ DD/MM/YYYY والوقت 12 ساعة بتوقيت الرياض، بأرقام لاتينية
+export function riyadhStamp(t) {
+  const d = new Date(new Date(t).getTime() + 3 * 3600e3), p = n => String(n).padStart(2, "0");
+  const h = d.getUTCHours(), h12 = h % 12 || 12, pm = h >= 12;
+  return { date: `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`, ar: `${p(h12)}:${p(d.getUTCMinutes())} ${pm ? "م" : "ص"}`, en: `${p(h12)}:${p(d.getUTCMinutes())} ${pm ? "PM" : "AM"}` };
+}
+const who = p => p ? `${p.full_name || "—"}${p.employee_id ? ` (${p.employee_id})` : ""}` : "—";
+
+// kind: "sweater" (تأكيد + الإجمالي) | "ops" (الإجمالي + التوزيع + من لم يؤكد)
+// lines [{item_key, qty}] · items [{key,name_ar,name_en,kind,sort}] · courier {name, phone} · receiver {full_name, employee_id}
+// shares [{employee_id,item_key,qty,status}] · team [{id, full_name, employee_id}]
+export function waMessage({ delivery, lines, items, courier, receiver, shares = [], team = [] }, kind) {
+  const byKey = Object.fromEntries((items || []).map(i => [i.key, i]));
+  const order = k => (byKey[k] ? byKey[k].sort : 9999);
+  const qtyLines = (lines || []).filter(l => l.qty > 0).sort((a, b) => order(a.item_key) - order(b.item_key));
+  const it = k => byKey[k] || { key: k, name_ar: k, name_en: k };
+  const list = (rows, lang) => rows.map(l => `${itemLabel(it(l.item_key), lang)} ${l.qty}`).join(" · ");
+  const st = riyadhStamp(delivery.received_at), tr = delivery.towels_returned || 0, note = String(delivery.note || "").trim();
+  const c = courier ? `${courier.name} — ${courier.phone}` : "—";
+  // التوزيع لكل بايكر له نصيب
+  const people = [];
+  if (kind === "ops") {
+    const per = {};
+    shares.filter(s => s.qty > 0).forEach(s => { (per[s.employee_id] = per[s.employee_id] || []).push(s); });
+    Object.keys(per).forEach(id => {
+      const p = team.find(t => t.id === id) || (receiver && receiver.id === id ? receiver : { full_name: "—" });
+      const rows = per[id].sort((a, b) => order(a.item_key) - order(b.item_key));
+      people.push({ name: p.full_name || "—", label: who(p), rows, confirmed: rows.every(s => s.status === "confirmed"), short: rows.some(s => s.status === "short"), pending: rows.some(s => s.status === "pending") });
+    });
+    people.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const section = lang => {
+    const A = lang === "ar", out = [];
+    out.push(A ? "✅ تم الاستلام من المندوب" : "✅ Delivery received from courier");
+    out.push(A ? "📦 استلام يومي — دلو ورغوة (شريك 47)" : "📦 Daily delivery — Dalu Warghwah (SSP ID47)");
+    out.push(A ? `التاريخ: ${st.date} — الوقت: ${st.ar}` : `Date: ${st.date} — Time: ${st.en}`);
+    out.push((A ? "المستلم: " : "Received by: ") + who(receiver));
+    out.push((A ? "المندوب: " : "Courier: ") + c);
+    out.push((A ? "الكميات المستلمة: " : "Received: ") + (qtyLines.length ? list(qtyLines, lang) : "—"));
+    if (tr > 0) out.push(A ? `المُرجَع للمندوب: ربطات مناشف مستعملة ${tr}` : `Returned to courier: Used towel bundles ${tr}`);
+    if (note) out.push((A ? "ملاحظة: " : "Note: ") + note);
+    if (kind === "ops") {
+      if (people.length) {
+        out.push(A ? "التوزيع:" : "Distribution:");
+        people.forEach(p => out.push(`- ${p.label}: ${list(p.rows, lang)}${p.short ? (A ? " (ناقص)" : " (short)") : p.confirmed ? " ✓" : ""}`));
+        const pend = people.filter(p => p.pending).map(p => p.name);
+        if (pend.length) out.push(A ? `بانتظار التأكيد من: ${pend.join("، ")}` : `Pending confirmation: ${pend.join(", ")}`);
+      }
+    } else out.push(A ? "أي فرق عن الكمية المُرسلة نرجو إبلاغنا اليوم." : "Please report any difference from the dispatched quantity today.");
+    return out.join("\n");
+  };
+  return section("ar") + "\n\n" + section("en");
+}
+export const waLink = msg => "https://wa.me/?text=" + encodeURIComponent(msg);

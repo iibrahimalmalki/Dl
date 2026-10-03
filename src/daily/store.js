@@ -17,7 +17,7 @@ async function session() {
 }
 
 const SHARE_SEL = "id,delivery_id,employee_id,item_key,qty,status,qty_actual,note,confirmed_at,daily_deliveries(received_by,received_at,status,courier_id)";
-const DEL_SEL = "id,operator_id,received_by,courier_id,received_at,towels_returned,photos,note,status,created_at,daily_delivery_lines(item_key,qty)";
+const DEL_SEL = "id,operator_id,received_by,courier_id,received_at,towels_returned,photos,note,status,created_at,shared_sweater_at,shared_ops_at,daily_delivery_lines(item_key,qty)";
 const flatShare = s => ({ ...s, received_by: s.daily_deliveries && s.daily_deliveries.received_by, received_at: s.daily_deliveries && s.daily_deliveries.received_at });
 
 // بوابة البايكر: الأصناف، المندوبون، فريق المشغّل، آخر التسليمات، الأنصبة المرتبطة بي، تسوياتي
@@ -141,6 +141,15 @@ export async function confirmShares(shares, actual, note) {
 /* ── إدارة (المالك/المشرف) ── */
 export async function addAdjustment(row) { const s = await session(); const r = await supabase.from("daily_adjustments").insert({ ...row, created_by: s.user.id }); return r.error ? { error: r.error } : { ok: true }; }
 export async function saveItem(row, isNew) { const r = isNew ? await supabase.from("daily_items").insert(row) : await supabase.from("daily_items").update(row).eq("key", row.key); return r.error ? { error: r.error } : { ok: true }; }
+// تسجيل أول ضغطة «نسخ/إرسال» لرسالة القروب (للمستلم فقط؛ فشلها لا يمنع النسخ)
+export async function markShared(deliveryId, kind) { try { const r = await supabase.rpc("mark_daily_shared", { p_delivery: deliveryId, p_kind: kind }); return r.error ? { error: r.error } : { ok: true }; } catch (e) { return { error: e }; } }
+
+// نسخ نص إلى الحافظة مع بديل textarea + execCommand
+export async function copyText(t) {
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(t); return true; } } catch { /* بديل */ }
+  try { const a = document.createElement("textarea"); a.value = t; a.setAttribute("readonly", ""); a.style.cssText = "position:fixed;top:0;left:0;opacity:0"; document.body.appendChild(a); a.select(); a.setSelectionRange(0, t.length); const ok = document.execCommand("copy"); a.remove(); return ok; } catch { return false; }
+}
+
 // المشمولون بالتوزيع (للمالك والمشرف)
 export async function loadSplit() { const r = await supabase.rpc("daily_split_list"); return r.error ? { list: [], missing: MISSING(r.error), error: MISSING(r.error) ? null : r.error } : { list: r.data || [] }; }
 export async function setSplit(empId, on) { const r = await supabase.rpc("set_daily_split", { p_employee: empId, p_on: on }); return r.error ? { error: r.error } : { ok: true, n: r.data }; }

@@ -1,8 +1,8 @@
 // الاستلام اليومي من مندوب سويتر — تبويب «الاستلام» في بوابة البايكر.
 // أي بايكر حاضر يسجّل الشحنة (وقت، مندوب، كميات، مناشف مُرجَعة، صور، ملاحظة) ثم يوزّعها، وكل بايكر يؤكد نصيبه.
 import { useEffect, useMemo, useState } from "react";
-import { splitAll, splitList, splitErrors, normPhone, validateReceive, balances, isLate, riyadhHM, riyadhDay, toLocalInput, MAX_BACK_H } from "./engine";
-import { loadBiker, createDelivery, saveDistribution, confirmShares, photoUrl } from "./store";
+import { waMessage, waLink, splitAll, splitList, splitErrors, normPhone, validateReceive, balances, isLate, riyadhHM, riyadhDay, toLocalInput, MAX_BACK_H } from "./engine";
+import { loadBiker, createDelivery, saveDistribution, confirmShares, photoUrl, markShared, copyText } from "./store";
 
 export const DR_CSS = `
 .dr{display:flex;flex-direction:column;gap:12px;max-width:560px;margin:0 auto;min-width:0;font-size:15px;line-height:1.6}
@@ -47,6 +47,8 @@ export const DR_CSS = `
 .dr-hist>div{padding:9px 0;border-top:1px solid var(--line)}.dr-hist>div:first-child{border-top:none}
 .dr-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:800;background:var(--soft);color:var(--mut)}
 .dr-pill.ok{background:var(--ok-bg);color:var(--ok-ink)}.dr-pill.bad{background:var(--bad-bg);color:var(--bad-ink)}.dr-pill.warn{background:var(--warn-bg);color:var(--warn-ink)}
+.dr-msg{margin:0;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;font-family:inherit;font-size:13.5px;line-height:1.7;padding:12px;border-radius:12px;background:var(--soft);border:1px solid var(--line);color:var(--ink);unicode-bidi:plaintext;text-align:start}
+.dr-wa{background:linear-gradient(135deg,#128C7E,#075E54)!important;border-color:transparent!important;color:#fff!important}
 .dr-dist{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
 `;
 
@@ -94,19 +96,19 @@ export default function DailyReceive({ me }) {
   const operatorId = d.operatorId ?? null;
   const done = (m, ok = true) => { setMsg({ ok, t: m }); setView(null); setReload(x => x + 1); try { window.scrollTo(0, 0); } catch { /* */ } };
 
-  const ctx = { d, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD };
+  const ctx = { d, me, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD };
   return <div className="dr"><style>{DR_CSS}</style>
     {!d.ready && <div className="dr-note warn">الاستلام اليومي لم يُفعَّل بعد في القاعدة — لا يمكن الحفظ حتى يعتمده المالك. · <Bn>এখনও চালু হয়নি — মালিকের অনুমোদনের অপেক্ষায়</Bn></div>}
     {d.error && <div className="dr-note bad">تعذّر تحميل بعض البيانات: {String(d.error.message || d.error)}</div>}
     {msg && <div className={"dr-note " + (msg.ok ? "ok" : "bad")} role="status">{msg.t}</div>}
-    {!view ? <Home ctx={ctx} /> : view.k === "form" ? <Form ctx={ctx} /> : view.k === "dist" ? <Dist delivery={view.delivery} ctx={ctx} /> : null}
+    {!view ? <Home ctx={ctx} /> : view.k === "form" ? <Form ctx={ctx} /> : view.k === "dist" ? <Dist delivery={view.delivery} ctx={ctx} /> : view.k === "wa" ? <WaShare v={view} ctx={ctx} /> : null}
   </div>;
 
 }
 
 /* ── الشاشة الرئيسية ── */
 function Home({ ctx }) {
-  const { d, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
+  const { d, me, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
   const mine = d.shares.filter(s => s.employee_id === empId && s.status === "pending");
   const groups = Object.values(mine.reduce((a, s) => { (a[s.delivery_id] = a[s.delivery_id] || { id: s.delivery_id, at: s.received_at, by: s.received_by, rows: [] }).rows.push(s); return a; }, {}));
   const undist = d.deliveries.filter(x => x.received_by === empId && x.status === "received");
@@ -126,14 +128,15 @@ function Home({ ctx }) {
     <section className="dr-card g-card"><h2>آخر الاستلامات · <Bn>সাম্প্রতিক ডেলিভারি</Bn></h2>
       {d.deliveries.length ? <div className="dr-hist">{d.deliveries.slice(0, 7).map(x => { const c = courierOf(x.courier_id); return <div key={x.id}>
         <div className="dr-row"><b className="dr-num">{fmtWhen(x.received_at)}</b>{isLate(x.received_at) && <span className="dr-pill warn">متأخر</span>}<span className="dr-grow" /><span className={"dr-pill " + (x.status === "distributed" ? "ok" : "warn")}>{x.status === "distributed" ? "وُزّع" : "بانتظار التوزيع"}</span></div>
-        <div className="dr-mut">المستلم: {nameOf(x.received_by)} · المندوب: {c ? c.name : "—"}</div></div>; })}</div>
+        <div className="dr-mut">المستلم: {nameOf(x.received_by)} · المندوب: {c ? c.name : "—"}</div>
+        {x.received_by === empId && x.status === "distributed" && <button className="g-btn sm" style={{ minHeight: 44, marginTop: 6 }} onClick={() => { setMsg(null); setView({ k: "wa", deliveryId: x.id }); }}>الرسائل · <Bn>বার্তা</Bn>{x.shared_sweater_at && x.shared_ops_at ? " ✓" : ""}</button>}</div>; })}</div>
         : <span className="dr-mut">لا استلامات بعد · <Bn>এখনও কোনো ডেলিভারি নেই</Bn></span>}</section>
   </>;
 }
 
 /* ── تأكيد النصيب ── */
 function Share({ g, ctx }) {
-  const { d, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
+  const { d, me, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
   const [short, setShort] = useState(false), [act, setAct] = useState(() => Object.fromEntries(g.rows.map(s => [s.id, s.qty]))), [note, setNote] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const submit = async isShort => {
     setErr("");
@@ -157,7 +160,7 @@ function Share({ g, ctx }) {
 
 /* ── نموذج الاستلام: خطوة في كل شاشة ── */
 function Form({ ctx }) {
-  const { d, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
+  const { d, me, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
   const [st, setSt] = useState(0);
   const [f, setF] = useState(() => ({ received_at: toLocalInput(Date.now()), courier_id: d.couriers.length ? "" : null, newCourier: d.couriers.length ? null : { name: "", phone: "" }, qty: {}, towels_returned: 0, photos: [], note: "" }));
   const [prev, setPrev] = useState([]), [busy, setBusy] = useState(""), [err, setErr] = useState("");
@@ -205,8 +208,8 @@ function Form({ ctx }) {
         {d.couriers.length > 0 && <button type="button" className="g-btn block" onClick={() => set({ newCourier: null, courier_id: "" })}>اختيار من القائمة · <Bn>তালিকা থেকে</Bn></button>}</>}</>;
   else if (st === 2) body = <><Q ar="الكميات المستلمة" bn="কত পেয়েছ" />
     {items.map(i => <div key={i.key} className="dr-it"><ItemIcon item={i} img={towelImg} /><div className="dr-l">{i.name_ar}<Bn>{i.name_bn}</Bn></div><Stepper label={i.name_ar} value={f.qty[i.key]} onChange={n => set({ qty: { ...f.qty, [i.key]: n } })} /></div>)}</>;
-  else if (st === 3) body = <><Q ar="المناشف المتسخة المُرجَعة للمندوب" bn="ময়লা তোয়ালে ফেরত দেওয়া হয়েছে" />
-    <div className="dr-it"><ItemIcon item={{ key: "towel", kind: "towel" }} img={towelImg} /><div className="dr-l">مناشف متسخة<Bn>ময়লা তোয়ালে</Bn></div><Stepper label="المناشف المُرجَعة" value={f.towels_returned} onChange={n => set({ towels_returned: n })} /></div></>;
+  else if (st === 3) body = <><Q ar="ربطات مناشف مستعملة مُرجَعة للمندوب" bn="ফেরত দেওয়া ব্যবহৃত বান্ডেল" />
+    <div className="dr-it"><ItemIcon item={{ key: "towel", kind: "towel" }} img={towelImg} /><div className="dr-l">ربطات مستعملة<Bn>ব্যবহৃত বান্ডেল</Bn></div><Stepper label="ربطات المناشف المُرجَعة" value={f.towels_returned} onChange={n => set({ towels_returned: n })} /></div></>;
   else if (st === 4) body = <><Q ar="صور الشحنة (إلزامي)" bn="ছবি তোলো (বাধ্যতামূলক)" />
     <div className="dr-photos">{prev.map((u, i) => <div key={u} className="dr-ph"><img src={u} alt={"صورة " + (i + 1)} /><button type="button" aria-label="حذف الصورة" onClick={() => set({ photos: f.photos.filter((_, j) => j !== i) })}>×</button></div>)}
       {f.photos.length < 4 && <label className="dr-cap"><input type="file" accept="image/*" capture="environment" onChange={e => { addPhotos(e.target.files); e.target.value = ""; }} /><Icon n="camera" s={28} />صوّر · <Bn>ছবি তোলো</Bn></label>}</div>
@@ -216,7 +219,7 @@ function Form({ ctx }) {
     <div><div className="dr-sum"><span>الوقت</span><b className="dr-num">{fmtWhen(at)}</b></div>
       <div className="dr-sum"><span>المندوب</span><b>{f.newCourier ? (dup ? dup.name : f.newCourier.name + " (جديد)") : c ? c.name : "—"} <span className="dr-num">{f.newCourier ? phone : c ? c.phone : ""}</span></b></div>
       {items.filter(i => f.qty[i.key] > 0).map(i => <div key={i.key} className="dr-sum"><span>{i.name_ar}</span><b className="dr-num">{f.qty[i.key]}</b></div>)}
-      <div className="dr-sum"><span>مناشف متسخة مُرجَعة</span><b className="dr-num">{f.towels_returned}</b></div>
+      <div className="dr-sum"><span>ربطات مستعملة مُرجَعة</span><b className="dr-num">{f.towels_returned}</b></div>
       <div className="dr-sum"><span>الصور</span><b className="dr-num">{f.photos.length}</b></div>
       {f.note.trim() && <div className="dr-sum"><span>ملاحظة</span><span>{f.note}</span></div>}</div></>;
   return <>
@@ -233,7 +236,7 @@ function Form({ ctx }) {
 
 /* ── التوزيع ── */
 function Dist({ delivery, ctx }) {
-  const { d, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
+  const { d, me, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
   const lines = Object.fromEntries((delivery.daily_delivery_lines || []).map(l => [l.item_key, l.qty]));
   // المشمولون فقط؛ المستلم المتدرب المرافق خارج القسمة ونصيبه صفر
   const { ids, receiver } = useMemo(() => splitList(d.team, empId, d.inSplit !== false), []);
@@ -241,7 +244,12 @@ function Dist({ delivery, ctx }) {
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const bad = splitErrors(lines, plan);
   const save = async () => { if (bad.length) return; setBusy(true); const r = await saveDistribution(delivery, plan, empId); setBusy(false);
-    if (r.error) return setErr("تعذّر حفظ التوزيع: " + (r.error.message || r.error)); done("اعتُمد التوزيع ✓ — كل بايكر سيرى نصيبه · বিতরণ সম্পন্ন"); };
+    if (r.error) return setErr("تعذّر حفظ التوزيع: " + (r.error.message || r.error));
+    // الأنصبة كما حُفظت (نصيب المستلم مؤكد تلقائياً) ← شاشة «أرسل للقروبات»
+    const now = new Date().toISOString(), local = [];
+    Object.entries(plan).forEach(([item_key, per]) => Object.entries(per).forEach(([employee_id, qty]) => { if (qty > 0) local.push({ id: "tmp-" + item_key + employee_id, delivery_id: delivery.id, employee_id, item_key, qty, status: employee_id === empId ? "confirmed" : "pending", received_by: empId, received_at: delivery.received_at, confirmed_at: employee_id === empId ? now : null }); }));
+    setD(x => ({ ...x, shares: [...local, ...x.shares], deliveries: x.deliveries.map(y => y.id === delivery.id ? { ...y, status: "distributed" } : y) }));
+    setMsg({ ok: true, t: "اعتُمد التوزيع ✓ — أرسل الرسالتين للقروبين · বিতরণ সম্পন্ন" }); setView({ k: "wa", deliveryId: delivery.id, shares: local }); try { window.scrollTo(0, 0); } catch { /* */ } };
   return <>
     <div className="dr-row"><button className="g-btn sm" style={{ minHeight: 44 }} onClick={() => setView(null)}>→ رجوع</button></div>
     <section className="dr-card g-card"><h2>توزيع الشحنة · <Bn>ভাগ করো</Bn></h2>
@@ -255,6 +263,46 @@ function Dist({ delivery, ctx }) {
     {bad.length > 0 && <div className="dr-note bad" role="alert">المجموع لا يساوي الكمية المستلمة في: {bad.map(k => itemOf(k).name_ar).join("، ")}</div>}
     {err && <div className="dr-note bad" role="alert">{err}</div>}
     <button className="g-btn primary block dr-big" disabled={busy || bad.length > 0 || !ids.length} onClick={save}>{busy ? "جارٍ الحفظ…" : "اعتماد التوزيع · বিতরণ নিশ্চিত"}</button>
+  </>;
+}
+
+/* ── أرسل للقروبات: رسالتان جاهزتان (نسخ / واتساب) ── */
+function WaShare({ v, ctx }) {
+  const { d, me, empId, nameOf, courierOf, done, setView, setD } = ctx;
+  const x = d.deliveries.find(y => y.id === v.deliveryId);
+  const [sent, setSent] = useState(() => ({ sweater: !!(x && x.shared_sweater_at), ops: !!(x && x.shared_ops_at) }));
+  const [copied, setCopied] = useState(null), [warn, setWarn] = useState(false);
+  const shares = x ? (v.shares || d.shares.filter(s => s.delivery_id === x.id)) : [];
+  const msgs = useMemo(() => { if (!x) return { sweater: "", ops: "" }; const input = { delivery: x, lines: x.daily_delivery_lines || [], items: d.items, courier: courierOf(x.courier_id), receiver: { id: empId, full_name: (me && me.name) || nameOf(empId), employee_id: me && me.biker_employee_id }, shares, team: d.team };
+    return { sweater: waMessage(input, "sweater"), ops: waMessage(input, "ops") }; }, [x, shares]);
+  const mark = kind => {
+    setSent(p => ({ ...p, [kind]: true })); setWarn(false);
+    const col = kind === "sweater" ? "shared_sweater_at" : "shared_ops_at";
+    if (!x[col]) { const t = new Date().toISOString(); setD(dd => ({ ...dd, deliveries: dd.deliveries.map(y => y.id === x.id ? { ...y, [col]: y[col] || t } : y) })); }
+    markShared(x.id, kind); // فشلها لا يمنع النسخ أو فتح واتساب
+  };
+  const copy = async kind => { const ok = await copyText(msgs[kind]); setCopied(ok ? kind : "fail:" + kind); mark(kind); setTimeout(() => setCopied(c => c === kind || c === "fail:" + kind ? null : c), 2500); };
+  const open = kind => { mark(kind); window.open(waLink(msgs[kind]), "_blank", "noopener"); };
+  if (!x) return <div className="dr-note bad">لم يُعثر على التسليم.</div>;
+  const missing = [!sent.sweater && "سويتر", !sent.ops && "العمليات"].filter(Boolean);
+  const finish = force => { if (missing.length && !force) return setWarn(true); done("حُفظ الاستلام والتوزيع ✓ · সম্পন্ন"); };
+  const Card = ({ kind, ar, bn }) => <section className="dr-card g-card">
+    <div className="dr-row"><h2 className="dr-grow">{ar} · <Bn>{bn}</Bn></h2>{sent[kind] && <span className="dr-pill ok">✓ تم</span>}</div>
+    <pre className="dr-msg" dir="auto">{msgs[kind]}</pre>
+    {copied === kind && <div className="dr-note ok" role="status">تم النسخ · কপি হয়েছে</div>}
+    {copied === "fail:" + kind && <div className="dr-note bad" role="status">تعذّر النسخ — حدّد النص وانسخه يدوياً</div>}
+    <div className="dr-btns"><button className="g-btn block" onClick={() => copy(kind)}>نسخ · <Bn>কপি</Bn></button>
+      <button className="g-btn primary block dr-wa" onClick={() => open(kind)}>إرسال واتساب · <Bn>পাঠান</Bn></button></div>
+  </section>;
+  return <>
+    <section className="dr-card g-card"><h2>أرسل للقروبات · <Bn>গ্রুপে পাঠাও</Bn></h2>
+      <span className="dr-mut">انسخ كل رسالة أو أرسلها بواتساب ثم اختر القروب. · <Bn>কপি করো বা হোয়াটসঅ্যাপে পাঠাও</Bn></span>
+      <span className="dr-mut">📷 أرفق صورة الشحنة يدوياً في واتساب · <Bn>ছবি নিজে যোগ করুন</Bn></span></section>
+    <Card kind="sweater" ar="قروب سويتر" bn="সুইটার গ্রুপ" />
+    <Card kind="ops" ar="قروب العمليات" bn="অপারেশন গ্রুপ" />
+    {warn && <div className="dr-note warn" role="alert">لم ترسل لقروب {missing.join(" و")} بعد · <Bn>এখনও পাঠানো হয়নি</Bn>
+      <div className="dr-btns" style={{ marginTop: 8 }}><button className="g-btn block" onClick={() => setWarn(false)}>أرسل الآن</button><button className="g-btn block" onClick={() => finish(true)}>متابعة الخروج</button></div></div>}
+    <button className="g-btn primary block dr-big" onClick={() => finish(false)}>تم · <Bn>সম্পন্ন</Bn></button>
   </>;
 }
 export { photoUrl };

@@ -68,13 +68,41 @@ alter table public.daily_shares add constraint daily_shares_actual_ck check (qty
 alter table public.sweater_couriers add constraint sweater_couriers_phone_ck check (phone ~ '^05[0-9]{8}$');
 
 -- ── الأصناف المبدئية ──
-insert into public.daily_items (key, name_ar, name_bn, kind, sort) values
-  ('freshener',   'فواحة',            'এয়ার ফ্রেশনার',     'addon', 1),
-  ('mat',         'دعاسة (قطعتين)',   'পা-দানি (২ পিস)',    'addon', 2),
-  ('tissue',      'مناديل',           'টিস্যু',             'addon', 3),
-  ('seat_cover',  'غطاء مقعد سيارة',  'সিট কভার',           'addon', 4),
-  ('wet_wipes',   'مناديل مبللة',     'ভেজা টিস্যু',        'addon', 5),
-  ('towel_clean', 'مناشف نظيفة',      'পরিষ্কার তোয়ালে',    'towel', 6);
+-- name_en للقسم الإنجليزي في رسائل واتساب (فارغ ⇒ يُستعمل الاسم العربي)
+alter table public.daily_items add column name_en text;
+insert into public.daily_items (key, name_ar, name_bn, name_en, kind, sort) values
+  ('freshener',   'فواحة',                  'এয়ার ফ্রেশনার',            'Air freshener',            'addon', 1),
+  ('mat',         'دعاسة (قطعتين)',         'পা-দানি (২ পিস)',           'Floor mat (2 pcs)',        'addon', 2),
+  ('tissue',      'مناديل',                 'টিস্যু',                    'Tissues',                  'addon', 3),
+  ('seat_cover',  'غطاء مقعد سيارة',        'সিট কভার',                  'Seat cover',               'addon', 4),
+  ('wet_wipes',   'مناديل مبللة',           'ভেজা টিস্যু',               'Wet wipes',                'addon', 5),
+  -- الوحدة هي الربطة (ربطة واحدة لكل غسلة)، لا المنشفة بالحبة
+  ('towel_clean', 'ربطة مناشف (لكل غسلة)',  'তোয়ালে বান্ডেল (প্রতি ওয়াশ)', 'Towel bundle (per wash)',  'towel', 6);
+
+-- ── تتبّع إرسال رسالتي واتساب (أول ضغطة هي المسجَّلة) ──
+alter table public.daily_deliveries
+  add column shared_sweater_at timestamptz,
+  add column shared_ops_at timestamptz;
+
+-- يضبط العمود المقابل على now() فقط إن كان فارغاً، وللمستلم نفسه فقط، ولا يمس أي عمود آخر.
+-- لا update مباشر على العمودين: صلاحية العمود status وحدها تبقى كما هي.
+create or replace function public.mark_daily_shared(p_delivery uuid, p_kind text)
+returns boolean language plpgsql security definer set search_path to 'public' as $$
+declare n integer;
+begin
+  if p_kind not in ('sweater', 'ops') then raise exception 'invalid kind'; end if;
+  if p_kind = 'sweater' then
+    update public.daily_deliveries set shared_sweater_at = now()
+      where id = p_delivery and received_by = public.my_employee_uuid() and shared_sweater_at is null;
+  else
+    update public.daily_deliveries set shared_ops_at = now()
+      where id = p_delivery and received_by = public.my_employee_uuid() and shared_ops_at is null;
+  end if;
+  get diagnostics n = row_count;
+  return n > 0;
+end $$;
+revoke all on function public.mark_daily_shared(uuid, text) from public, anon;
+grant execute on function public.mark_daily_shared(uuid, text) to authenticated;
 
 -- ── دوال مساعدة ──
 create or replace function public.daily_staff(p_edit boolean default false)

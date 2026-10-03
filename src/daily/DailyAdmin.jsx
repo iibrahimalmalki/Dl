@@ -1,7 +1,7 @@
 // الاستلام اليومي — صفحة المتابعة للمالك والمشرف: اليوم، الأرصدة، سجل التسليمات، المناشف، الإعدادات.
 import { useEffect, useMemo, useState } from "react";
-import { balances, isLate, monthSummary, riyadhDay, riyadhHM, normPhone, csvCell } from "./engine";
-import { loadAdmin, photoUrl, addAdjustment, saveItem, saveCourier, loadSplit, setSplit } from "./store";
+import { balances, isLate, monthSummary, riyadhDay, riyadhHM, normPhone, csvCell, waMessage } from "./engine";
+import { loadAdmin, photoUrl, addAdjustment, saveItem, saveCourier, loadSplit, setSplit, copyText } from "./store";
 
 const CSS = `
 .da{display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -71,7 +71,19 @@ export default function DailyAdmin({ me, owner }) {
 }
 
 const Lines = ({ x, c }) => <div className="da-kv">{(x.daily_delivery_lines || []).filter(l => l.qty > 0).map(l => <span key={l.item_key} className="g-badge brand">{c.item(l.item_key).name_ar} <b className="da-num">{l.qty}</b></span>)}
-  {x.towels_returned > 0 && <span className="g-badge">متسخة مُرجَعة <b className="da-num">{x.towels_returned}</b></span>}</div>;
+  {x.towels_returned > 0 && <span className="g-badge">ربطات مستعملة مُرجَعة <b className="da-num">{x.towels_returned}</b></span>}</div>;
+
+// شارتا «لم يُرسل» لرسالتي القروبين (بعد التوزيع فقط)
+const SentBadges = ({ x }) => x.status !== "distributed" ? null : <>{!x.shared_sweater_at && <span className="g-badge bad">لم يُرسل لسويتر</span>}{!x.shared_ops_at && <span className="g-badge bad">لم يُرسل للعمليات</span>}</>;
+// رسالتا القروبين لتسليم (للمالك والمشرف: نسخ فقط، لا يغيّر shared_*_at)
+const msgsFor = (x, d, c) => { const r = d.employees.find(e => e.id === x.received_by) || { id: x.received_by, full_name: c.empName(x.received_by) };
+  const input = { delivery: x, lines: x.daily_delivery_lines || [], items: d.items, courier: c.courier(x.courier_id), receiver: r, shares: d.shares.filter(s => s.delivery_id === x.id), team: d.employees };
+  return { sweater: waMessage(input, "sweater"), ops: waMessage(input, "ops") }; };
+function CopyMsgs({ x, d, c }) {
+  const [st, setSt] = useState("");
+  const cp = async k => { const ok = await copyText(msgsFor(x, d, c)[k]); setSt(ok ? (k === "sweater" ? "نُسخت رسالة سويتر" : "نُسخت رسالة العمليات") : "تعذّر النسخ"); setTimeout(() => setSt(""), 2500); };
+  return <div className="da-top" style={{ justifyContent: "flex-start" }}><button className="g-btn sm" onClick={() => cp("sweater")}>نسخ رسالة سويتر</button><button className="g-btn sm" onClick={() => cp("ops")}>نسخ رسالة العمليات</button>{st && <span className="da-mut" role="status">{st}</span>}</div>;
+}
 
 function DeliveryCard({ x, d, c, onZoom }) {
   const co = c.courier(x.courier_id), sh = d.shares.filter(s => s.delivery_id === x.id);
@@ -79,12 +91,13 @@ function DeliveryCard({ x, d, c, onZoom }) {
   return <div className="g-card da-card">
     <div className="da-top"><div><h3><span className="da-num">{fmt(x.received_at)}</span> {isLate(x.received_at) && <span className="g-badge warn"><i />متأخر</span>}</h3>
       <span className="da-mut">المستلم: <b>{c.empName(x.received_by)}</b> · المندوب: <b>{co ? co.name : "—"}</b> {co && <a className="da-num" href={"tel:" + co.phone}>{co.phone}</a>}</span></div>
-      {x.status === "distributed" ? <span className="g-badge ok"><i />وُزّع</span> : <span className="g-badge warn"><i />بانتظار التوزيع</span>}</div>
+      <div className="da-kv">{x.status === "distributed" ? <span className="g-badge ok"><i />وُزّع</span> : <span className="g-badge warn"><i />بانتظار التوزيع</span>}<SentBadges x={x} /></div></div>
     <Lines x={x} c={c} />
     {x.note && <div className="da-note">ملاحظة المستلم: {x.note}</div>}
     <div className="da-photos">{(x.photos || []).map(p => <Photo key={p} path={p} onOpen={onZoom} />)}</div>
     {x.status === "distributed" && (pend.length ? <div className="da-note warn">لم يؤكد بعد: {pend.map(c.empName).join("، ")}</div> : <div className="da-note ok">أكّد الجميع استلام أنصبتهم.</div>)}
     {short.length > 0 && <div className="da-note bad">أبلغ بنقص: {short.map(id => { const n = sh.filter(s => s.employee_id === id && s.status === "short"); return c.empName(id) + " (" + n.map(s => c.item(s.item_key).name_ar + " " + s.qty_actual + "/" + s.qty).join("، ") + (n[0] && n[0].note ? " — " + n[0].note : "") + ")"; }).join(" · ")}</div>}
+    {x.status === "distributed" && <CopyMsgs x={x} d={d} c={c} />}
   </div>;
 }
 
@@ -143,9 +156,9 @@ function Log({ d, c }) {
   const list = d.deliveries.filter(x => monthOf(x.received_at) === m), sum = monthSummary(list);
   const csv = () => {
     const items = d.items;
-    const head = ["التاريخ", "وقت التسليم", "متأخر", "المستلم", "المندوب", "جوال المندوب", ...items.map(i => i.name_ar), "مناشف متسخة مُرجَعة", "الحالة", "ملاحظة"];
+    const head = ["التاريخ", "وقت التسليم", "متأخر", "المستلم", "المندوب", "جوال المندوب", ...items.map(i => i.name_ar), "ربطات مستعملة مُرجَعة", "الحالة", "ملاحظة", "أُرسل لسويتر", "أُرسل للعمليات"];
     const rows = list.map(x => { const co = c.courier(x.courier_id), L = Object.fromEntries((x.daily_delivery_lines || []).map(l => [l.item_key, l.qty]));
-      return [riyadhDay(x.received_at), riyadhHM(x.received_at), isLate(x.received_at) ? "نعم" : "لا", c.empName(x.received_by), co ? co.name : "", co ? co.phone : "", ...items.map(i => L[i.key] || 0), x.towels_returned || 0, x.status === "distributed" ? "وُزّع" : "بانتظار التوزيع", x.note || ""]; });
+      return [riyadhDay(x.received_at), riyadhHM(x.received_at), isLate(x.received_at) ? "نعم" : "لا", c.empName(x.received_by), co ? co.name : "", co ? co.phone : "", ...items.map(i => L[i.key] || 0), x.towels_returned || 0, x.status === "distributed" ? "وُزّع" : "بانتظار التوزيع", x.note || "", x.shared_sweater_at ? riyadhDay(x.shared_sweater_at) + " " + riyadhHM(x.shared_sweater_at) : "لا", x.shared_ops_at ? riyadhDay(x.shared_ops_at) + " " + riyadhHM(x.shared_ops_at) : "لا"]; });
     const txt = "﻿" + [head, ...rows].map(r => r.map(csvCell).join(",")).join("\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type: "text/csv;charset=utf-8" })); a.download = `daily-deliveries-${m}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
@@ -160,7 +173,7 @@ function Log({ d, c }) {
         <td><span className="da-num">{riyadhHM(x.received_at)}</span> {isLate(x.received_at) && <span className="g-badge warn">متأخر</span>}</td>
         <td>{c.empName(x.received_by)}</td><td>{co ? <>{co.name} <a className="da-num" href={"tel:" + co.phone}>{co.phone}</a></> : "—"}</td>
         <td style={{ whiteSpace: "normal" }}><Lines x={x} c={c} /></td>
-        <td>{x.status === "distributed" ? <span className="g-badge ok">وُزّع</span> : <span className="g-badge warn">بانتظار التوزيع</span>}</td></tr>; })}</tbody></table></div></div>
+        <td><div className="da-kv">{x.status === "distributed" ? <span className="g-badge ok">وُزّع</span> : <span className="g-badge warn">بانتظار التوزيع</span>}<SentBadges x={x} /></div></td></tr>; })}</tbody></table></div></div>
       : <div className="g-card da-card"><div className="g-empty" style={{ padding: "26px 10px" }}><b>لا تسليمات في {mLabel(m)}</b></div></div>}
   </>;
 }
@@ -171,9 +184,9 @@ function Towels({ d }) {
   const rows = months.map(m => { const L = d.deliveries.filter(x => monthOf(x.received_at) === m);
     const clean = L.reduce((a, x) => a + (x.daily_delivery_lines || []).filter(l => towelKeys.includes(l.item_key)).reduce((s, l) => s + l.qty, 0), 0), dirty = L.reduce((a, x) => a + (x.towels_returned || 0), 0);
     return { m, clean, dirty, diff: clean - dirty, n: L.length }; });
-  return <div className="g-card da-card"><h3>المناشف: نظيف مستلم مقابل متسخ مُرجَع</h3>
-    <span className="da-mut">الفرق الموجب = مناشف نظيفة زائدة عند الفريق لم يُرجَع مقابلها متسخ بعد.</span>
-    <div className="da-twrap"><table className="g-tbl da-tbl"><thead><tr><th>الشهر</th><th>تسليمات</th><th>نظيف مستلم</th><th>متسخ مُرجَع</th><th>الفرق</th></tr></thead>
+  return <div className="g-card da-card"><h3>ربطات المناشف: نظيفة مستلمة مقابل مستعملة مُرجَعة</h3>
+    <span className="da-mut">الوحدة هي الربطة (ربطة لكل غسلة). الفرق الموجب = ربطات نظيفة عند الفريق لم يُرجَع مقابلها مستعملة بعد.</span>
+    <div className="da-twrap"><table className="g-tbl da-tbl"><thead><tr><th>الشهر</th><th>تسليمات</th><th>نظيفة مستلمة</th><th>مستعملة مُرجَعة</th><th>الفرق</th></tr></thead>
       <tbody>{rows.map(r => <tr key={r.m}><td>{mLabel(r.m)}</td><td className="num">{r.n}</td><td className="num">{r.clean}</td><td className="num">{r.dirty}</td><td className="num" style={{ color: r.diff ? "var(--warn-ink)" : undefined, fontWeight: 800 }}><span className="da-num">{r.diff > 0 ? "+" + r.diff : r.diff}</span></td></tr>)}</tbody></table></div></div>;
 }
 
@@ -208,17 +221,19 @@ function Settings({ d, owner, onSaved }) {
   const move = (i, dir) => { const a = items[i], b = items[i + dir]; if (!b) return; run(Promise.all([saveItem({ key: a.key, sort: b.sort }), saveItem({ key: b.key, sort: a.sort })]).then(rs => rs.find(r => r.error) || { ok: true })); };
   return <>
     {err && <div className="da-note bad" role="alert">{err}</div>}
-    <div className="g-card da-card"><div className="da-top"><h3>الأصناف</h3>{owner && !ni && <button className="g-btn" onClick={() => setNi({ key: "", name_ar: "", name_bn: "", kind: "addon" })}>+ صنف</button>}</div>
+    <div className="g-card da-card"><div className="da-top"><h3>الأصناف</h3>{owner && !ni && <button className="g-btn" onClick={() => setNi({ key: "", name_ar: "", name_bn: "", name_en: "", kind: "addon" })}>+ صنف</button>}</div>
       {!owner && <span className="da-mut">تعديل الأصناف للمالك فقط.</span>}
       {ni && <div className="da-row">
-        <label className="da-f">المفتاح (لاتيني)<input className="g-input da-num" value={ni.key} onChange={e => setNi({ ...ni, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })} /></label>
+        {!ni._edit && <label className="da-f">المفتاح (لاتيني)<input className="g-input da-num" value={ni.key} onChange={e => setNi({ ...ni, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })} /></label>}
         <label className="da-f">الاسم<input className="g-input" value={ni.name_ar} onChange={e => setNi({ ...ni, name_ar: e.target.value })} /></label>
-        <label className="da-f">বাংলা<input className="g-input" lang="bn" value={ni.name_bn} onChange={e => setNi({ ...ni, name_bn: e.target.value })} /></label>
+        <label className="da-f">বাংলা<input className="g-input" lang="bn" value={ni.name_bn || ""} onChange={e => setNi({ ...ni, name_bn: e.target.value })} /></label>
+        <label className="da-f">English (للرسائل)<input className="g-input" dir="ltr" value={ni.name_en || ""} placeholder="فارغ ⇒ الاسم العربي" onChange={e => setNi({ ...ni, name_en: e.target.value })} /></label>
         <label className="da-f">النوع<select className="g-select" value={ni.kind} onChange={e => setNi({ ...ni, kind: e.target.value })}><option value="addon">خدمة إضافية</option><option value="towel">مناشف</option><option value="consumable">مستهلك</option></select></label>
-        <div style={{ display: "flex", gap: 8, flex: "none" }}><button className="g-btn" onClick={() => setNi(null)}>إلغاء</button><button className="g-btn primary" disabled={!ni.key || !ni.name_ar.trim()} onClick={async () => { if (await run(saveItem({ ...ni, name_ar: ni.name_ar.trim(), name_bn: ni.name_bn.trim() || null, sort: (items[items.length - 1] || { sort: 0 }).sort + 1, active: true }, true))) setNi(null); }}>إضافة</button></div></div>}
+        <div style={{ display: "flex", gap: 8, flex: "none" }}><button className="g-btn" onClick={() => setNi(null)}>إلغاء</button><button className="g-btn primary" disabled={!ni.key || !ni.name_ar.trim()} onClick={async () => { const row = { key: ni.key, name_ar: ni.name_ar.trim(), name_bn: (ni.name_bn || "").trim() || null, name_en: (ni.name_en || "").trim() || null, kind: ni.kind };
+          if (await run(ni._edit ? saveItem(row) : saveItem({ ...row, sort: (items[items.length - 1] || { sort: 0 }).sort + 1, active: true }, true))) setNi(null); }}>{ni._edit ? "حفظ" : "إضافة"}</button></div></div>}
       <div className="da-twrap"><table className="g-tbl compact da-tbl"><thead><tr><th>الترتيب</th><th>الصنف</th><th>النوع</th><th>الحالة</th></tr></thead>
         <tbody>{items.map((i, k) => <tr key={i.key}><td>{owner ? <><button className="g-btn sm icon" aria-label="أعلى" disabled={!k} onClick={() => move(k, -1)}>↑</button> <button className="g-btn sm icon" aria-label="أسفل" disabled={k === items.length - 1} onClick={() => move(k, 1)}>↓</button></> : i.sort}</td>
-          <td>{i.name_ar} <span className="da-mut" lang="bn">{i.name_bn}</span></td><td>{{ addon: "خدمة إضافية", towel: "مناشف", consumable: "مستهلك" }[i.kind]}</td>
+          <td>{i.name_ar} <span className="da-mut" lang="bn">{i.name_bn}</span> <span className="da-mut" dir="ltr">{i.name_en}</span>{owner && !ni && <> <button className="g-btn sm" onClick={() => setNi({ ...i, _edit: true })}>تعديل</button></>}</td><td>{{ addon: "خدمة إضافية", towel: "مناشف", consumable: "مستهلك" }[i.kind]}</td>
           <td>{owner ? <button className={"g-btn sm " + (i.active ? "ok" : "")} onClick={() => run(saveItem({ key: i.key, active: !i.active }))}>{i.active ? "فعّال" : "معطّل"}</button> : i.active ? "فعّال" : "معطّل"}</td></tr>)}</tbody></table></div></div>
     <SplitMembers />
     <div className="g-card da-card"><h3>المندوبون</h3><span className="da-mut">يضيفهم البايكر عند الاستلام؛ هنا التعديل والتعطيل.</span>
