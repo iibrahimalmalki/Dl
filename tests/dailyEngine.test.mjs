@@ -17,6 +17,12 @@ ok('splitEven(2, 4) ⇒ المجموع 2 ولا قيم سالبة',sum(s2)===2&&
 const s3=E.splitEven(0,['a','b','r'],'r');
 ok('splitEven(0) ⇒ أصفار',Object.values(s3).every(v=>v===0)&&Object.keys(s3).length===3);
 ok('المستلم يُضاف إن لم يكن في القائمة',E.splitEven(5,['a','b'],'r').r===3&&sum(E.splitEven(5,['a','b'],'r'))===5);
+const team=[{id:'a'},{id:'b',in_daily_split:false},{id:'c',in_daily_split:true}];
+const L1=E.splitList(team,'a',true);
+ok('قائمة التوزيع تستبعد غير المشمولين',L1.ids.join()==='a,c'&&L1.receiver==='a');
+const L2=E.splitList([{id:'a'},{id:'c'}],'t',false), q2=E.splitEven(7,L2.ids,L2.receiver);
+ok('المستلم المتدرب المرافق خارج القسمة ونصيبه صفر والمجموع محفوظ',!L2.ids.includes('t')&&L2.receiver===null&&!('t' in q2)&&sum(q2)===7);
+ok('المستلم المشمول غير الموجود في القائمة يُضاف',E.splitList([{id:'c'}],'a',true).ids.join()==='a,c');
 ok('شرط الاعتماد: المجموع يساوي الكمية',E.splitErrors({mat:10},{mat:s1}).length===0&&E.splitErrors({mat:10},{mat:{...s1,a:2}}).join()==='mat'&&E.splitErrors({mat:3},{mat:{a:4,b:-1}}).join()==='mat');
 
 // ── normPhone ──

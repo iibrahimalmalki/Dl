@@ -21,8 +21,8 @@ const DEL_SEL = "id,operator_id,received_by,courier_id,received_at,towels_return
 const flatShare = s => ({ ...s, received_by: s.daily_deliveries && s.daily_deliveries.received_by, received_at: s.daily_deliveries && s.daily_deliveries.received_at });
 
 // بوابة البايكر: الأصناف، المندوبون، فريق المشغّل، آخر التسليمات، الأنصبة المرتبطة بي، تسوياتي
-export async function loadBiker(empId) {
-  const [it, co, tm, dl, sh, ad, op] = await Promise.all([
+export async function loadBiker(empId, uid) {
+  const [it, co, tm, dl, sh, ad, op, me] = await Promise.all([
     supabase.from("daily_items").select("*").order("sort"),
     supabase.from("sweater_couriers").select("id,operator_id,name,phone,active").eq("active", true).order("name"),
     supabase.rpc("daily_team"),
@@ -30,9 +30,11 @@ export async function loadBiker(empId) {
     supabase.from("daily_shares").select(SHARE_SEL).limit(2000),
     supabase.from("daily_adjustments").select("id,employee_id,item_key,delta,reason,created_at").eq("employee_id", empId).limit(1000),
     supabase.rpc("my_operator_id"),
+    uid ? supabase.from("app_users").select("in_daily_split").eq("id", uid).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const R = [it, co, tm, dl, sh, ad].map(res);
   return { items: R[0].data, couriers: R[1].data, team: R[2].data, deliveries: R[3].data, shares: R[4].data.map(flatShare), adjustments: R[5].data, operatorId: op.error ? null : op.data,
+    inSplit: !(me && !me.error && me.data && me.data.in_daily_split === false),
     ready: !R.some(r => r.missing), error: (R.find(r => r.error) || {}).error || null };
 }
 
@@ -139,4 +141,7 @@ export async function confirmShares(shares, actual, note) {
 /* ── إدارة (المالك/المشرف) ── */
 export async function addAdjustment(row) { const s = await session(); const r = await supabase.from("daily_adjustments").insert({ ...row, created_by: s.user.id }); return r.error ? { error: r.error } : { ok: true }; }
 export async function saveItem(row, isNew) { const r = isNew ? await supabase.from("daily_items").insert(row) : await supabase.from("daily_items").update(row).eq("key", row.key); return r.error ? { error: r.error } : { ok: true }; }
+// المشمولون بالتوزيع (للمالك والمشرف)
+export async function loadSplit() { const r = await supabase.rpc("daily_split_list"); return r.error ? { list: [], missing: MISSING(r.error), error: MISSING(r.error) ? null : r.error } : { list: r.data || [] }; }
+export async function setSplit(empId, on) { const r = await supabase.rpc("set_daily_split", { p_employee: empId, p_on: on }); return r.error ? { error: r.error } : { ok: true, n: r.data }; }
 export async function saveCourier(id, patch) { const r = await supabase.from("sweater_couriers").update(patch).eq("id", id); return r.error ? { error: r.error } : { ok: true }; }

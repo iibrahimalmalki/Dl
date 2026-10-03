@@ -1,7 +1,7 @@
 // الاستلام اليومي من مندوب سويتر — تبويب «الاستلام» في بوابة البايكر.
 // أي بايكر حاضر يسجّل الشحنة (وقت، مندوب، كميات، مناشف مُرجَعة، صور، ملاحظة) ثم يوزّعها، وكل بايكر يؤكد نصيبه.
 import { useEffect, useMemo, useState } from "react";
-import { splitAll, splitErrors, normPhone, validateReceive, balances, isLate, riyadhHM, riyadhDay, toLocalInput, MAX_BACK_H } from "./engine";
+import { splitAll, splitList, splitErrors, normPhone, validateReceive, balances, isLate, riyadhHM, riyadhDay, toLocalInput, MAX_BACK_H } from "./engine";
 import { loadBiker, createDelivery, saveDistribution, confirmShares, photoUrl } from "./store";
 
 export const DR_CSS = `
@@ -82,14 +82,14 @@ export default function DailyReceive({ me }) {
   const [msg, setMsg] = useState(null);
   const [reload, setReload] = useState(0);
   useEffect(() => { let on = true; import("../academy/images").then(m => { if (on) setTowelImg((m.default || {}).towelblue || null); }).catch(() => {}); return () => { on = false; }; }, []);
-  useEffect(() => { if (!empId) return; let on = true; loadBiker(empId).then(r => { if (on) setD(r); }).catch(e => { if (on) setD({ items: [], couriers: [], team: [], deliveries: [], shares: [], adjustments: [], ready: false, error: e }); }); return () => { on = false; }; }, [empId, reload]);
+  useEffect(() => { if (!empId) return; let on = true; loadBiker(empId, me && me.uid).then(r => { if (on) setD(r); }).catch(e => { if (on) setD({ items: [], couriers: [], team: [], deliveries: [], shares: [], adjustments: [], ready: false, error: e }); }); return () => { on = false; }; }, [empId, reload]);
 
   if (!empId) return <div className="dr"><style>{DR_CSS}</style><div className="dr-card g-card"><div className="dr-note bad">حسابك غير مرتبط بسجل موظف. راجع الإدارة. · <Bn>আপনার অ্যাকাউন্ট কর্মী রেকর্ডের সাথে যুক্ত নয়</Bn></div></div></div>;
   if (!d) return <div className="dr"><style>{DR_CSS}</style><div className="dr-card g-card"><div className="dr-row dr-mut"><div className="g-spin" />جارٍ التحميل… · <Bn>লোড হচ্ছে…</Bn></div></div></div>;
 
   const items = d.items.filter(i => i.active);
   const itemOf = k => d.items.find(i => i.key === k) || { key: k, name_ar: k, name_bn: "" };
-  const nameOf = id => id === empId ? "أنا" : ((d.team.find(t => t.id === id) || {}).full_name || "—");
+  const nameOf = id => id === empId ? "أنا" : ((d.team.find(t => t.id === id) || {}).full_name || "متدرب مرافق");
   const courierOf = id => d.couriers.find(c => c.id === id);
   const operatorId = d.operatorId ?? null;
   const done = (m, ok = true) => { setMsg({ ok, t: m }); setView(null); setReload(x => x + 1); try { window.scrollTo(0, 0); } catch { /* */ } };
@@ -110,17 +110,19 @@ function Home({ ctx }) {
   const mine = d.shares.filter(s => s.employee_id === empId && s.status === "pending");
   const groups = Object.values(mine.reduce((a, s) => { (a[s.delivery_id] = a[s.delivery_id] || { id: s.delivery_id, at: s.received_at, by: s.received_by, rows: [] }).rows.push(s); return a; }, {}));
   const undist = d.deliveries.filter(x => x.received_by === empId && x.status === "received");
+  const trainee = d.inSplit === false;
   const bal = balances(d.shares, d.adjustments, d.deliveries.filter(x => x.status === "received").map(x => ({ received_by: x.received_by, lines: x.daily_delivery_lines || [] })))[empId] || {};
   return <>
-    {groups.map(g => <Share key={g.id} g={g} ctx={ctx} />)}
+    {trainee && <div className="dr-note warn" role="status"><b>أنت متدرب مرافق — لا نصيب لك حالياً · <Bn>আপনি প্রশিক্ষণার্থী</Bn></b><div className="dr-mut">يمكنك تسجيل استلام من المندوب إن كنت الحاضر الوحيد، ويُوزَّع على زملائك. · <Bn>একা থাকলে ডেলিভারি গ্রহণ করতে পারো</Bn></div></div>}
+    {!trainee && groups.map(g => <Share key={g.id} g={g} ctx={ctx} />)}
     {undist.map(x => <section key={x.id} className="dr-card g-card dr-mine"><h2>وزّع شحنة {fmtWhen(x.received_at)} <Bn>বিতরণ বাকি</Bn></h2>
       <span className="dr-mut">سجّلت الاستلام ولم تعتمد التوزيع بعد.</span>
       <button className="g-btn primary block" onClick={() => setView({ k: "dist", delivery: x })}>أكمل التوزيع · <Bn>বিতরণ করো</Bn></button></section>)}
     <button className="g-btn primary block dr-big" disabled={!d.ready} onClick={() => { setMsg(null); setView({ k: "form" }); }}>
       <Icon n="inbox" s={22} /> استلام من مندوب سويتر <Bn>সুইটার ডেলিভারি গ্রহণ</Bn></button>
-    <section className="dr-card g-card"><h2>رصيدي · <Bn>আমার কাছে আছে</Bn></h2>
+    {!trainee && <section className="dr-card g-card"><h2>رصيدي · <Bn>আমার কাছে আছে</Bn></h2>
       {items.map(i => <div key={i.key} className="dr-it"><ItemIcon item={i} img={towelImg} /><div className="dr-l">{i.name_ar}<Bn>{i.name_bn}</Bn></div><b className="dr-num" style={{ fontSize: 20 }}>{bal[i.key] || 0}</b></div>)}
-      {!items.length && <span className="dr-mut">لا أصناف.</span>}</section>
+      {!items.length && <span className="dr-mut">لا أصناف.</span>}</section>}
     <section className="dr-card g-card"><h2>آخر الاستلامات · <Bn>সাম্প্রতিক ডেলিভারি</Bn></h2>
       {d.deliveries.length ? <div className="dr-hist">{d.deliveries.slice(0, 7).map(x => { const c = courierOf(x.courier_id); return <div key={x.id}>
         <div className="dr-row"><b className="dr-num">{fmtWhen(x.received_at)}</b>{isLate(x.received_at) && <span className="dr-pill warn">متأخر</span>}<span className="dr-grow" /><span className={"dr-pill " + (x.status === "distributed" ? "ok" : "warn")}>{x.status === "distributed" ? "وُزّع" : "بانتظار التوزيع"}</span></div>
@@ -233,8 +235,9 @@ function Form({ ctx }) {
 function Dist({ delivery, ctx }) {
   const { d, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
   const lines = Object.fromEntries((delivery.daily_delivery_lines || []).map(l => [l.item_key, l.qty]));
-  const ids = useMemo(() => { const t = d.team.map(x => x.id); return t.includes(empId) ? t : [empId, ...t]; }, []);
-  const [plan, setPlan] = useState(() => splitAll(lines, ids, empId));
+  // المشمولون فقط؛ المستلم المتدرب المرافق خارج القسمة ونصيبه صفر
+  const { ids, receiver } = useMemo(() => splitList(d.team, empId, d.inSplit !== false), []);
+  const [plan, setPlan] = useState(() => splitAll(lines, ids, receiver));
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const bad = splitErrors(lines, plan);
   const save = async () => { if (bad.length) return; setBusy(true); const r = await saveDistribution(delivery, plan, empId); setBusy(false);
@@ -242,14 +245,16 @@ function Dist({ delivery, ctx }) {
   return <>
     <div className="dr-row"><button className="g-btn sm" style={{ minHeight: 44 }} onClick={() => setView(null)}>→ رجوع</button></div>
     <section className="dr-card g-card"><h2>توزيع الشحنة · <Bn>ভাগ করো</Bn></h2>
-      <span className="dr-mut">قسمة متساوية والباقي لك. البايكر الغائب اجعل نصيبه 0. مجموع كل صنف يجب أن يساوي المستلم. · <Bn>অনুপস্থিত হলে ০ দাও</Bn></span></section>
+      {!ids.length && <div className="dr-note bad">لا يوجد بايكر مشمول بالتوزيع — راجع المشرف. · <Bn>বিতরণের জন্য কেউ নেই</Bn></div>}
+        {!receiver && <div className="dr-note warn">أنت متدرب مرافق: نصيبك صفر وتُقسم الشحنة على زملائك. · <Bn>তোমার ভাগ শূন্য</Bn></div>}
+        <span className="dr-mut">قسمة متساوية والباقي {receiver ? "لك" : "لأول بايكر في القائمة"}. البايكر الغائب اجعل نصيبه 0. مجموع كل صنف يجب أن يساوي المستلم. · <Bn>অনুপস্থিত হলে ০ দাও</Bn></span></section>
     {Object.entries(lines).filter(([, q]) => q > 0).map(([k, q]) => { const i = itemOf(k), p = plan[k] || {}, s = Object.values(p).reduce((a, v) => a + v, 0);
       return <section key={k} className="dr-card g-card"><div className="dr-row"><ItemIcon item={i} img={towelImg} /><div className="dr-l dr-grow">{i.name_ar}<Bn>{i.name_bn}</Bn></div>
         <span className={"dr-pill dr-num " + (s === q ? "ok" : "bad")}>{s}/{q}</span></div>
         {ids.map(id => <div key={id} className="dr-dist"><span>{nameOf(id)}</span><Stepper label={i.name_ar + " — " + nameOf(id)} value={p[id]} onChange={n => setPlan(x => ({ ...x, [k]: { ...x[k], [id]: n } }))} /></div>)}</section>; })}
     {bad.length > 0 && <div className="dr-note bad" role="alert">المجموع لا يساوي الكمية المستلمة في: {bad.map(k => itemOf(k).name_ar).join("، ")}</div>}
     {err && <div className="dr-note bad" role="alert">{err}</div>}
-    <button className="g-btn primary block dr-big" disabled={busy || bad.length > 0} onClick={save}>{busy ? "جارٍ الحفظ…" : "اعتماد التوزيع · বিতরণ নিশ্চিত"}</button>
+    <button className="g-btn primary block dr-big" disabled={busy || bad.length > 0 || !ids.length} onClick={save}>{busy ? "جارٍ الحفظ…" : "اعتماد التوزيع · বিতরণ নিশ্চিত"}</button>
   </>;
 }
 export { photoUrl };

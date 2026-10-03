@@ -3,7 +3,7 @@
 --
 -- البايكر = حساب app_users نشط مرتبط برقم سويتر (my_biker_id) ← employees عبر my_employee_uuid() (موجودة من academy.sql).
 -- البايكرز النشطون للتوزيع = موظفون برقم سويتر لهم حساب app_users نشط (position biker/team_leader أو فارغ)
---   ومن نفس مشغّل المستلم (employees.operator_id) — الدالة daily_team().
+--   ومشمولون بالتوزيع (app_users.in_daily_split) ومن نفس مشغّل المستلم (employees.operator_id) — الدالة daily_team().
 -- صلاحية المشرف: الجولات الميدانية (field_rounds) أو سلاسل الإمداد (supply) — قراءة للمتابعة، وتعديل (can_edit) للتسويات والمندوبين.
 --   has_perm تُرجع true للمالك تلقائياً.
 -- لا سياسات حذف على أي جدول؛ التحديث محصور بأعمدة محددة عبر صلاحيات الأعمدة.
@@ -87,22 +87,52 @@ returns uuid language sql stable security definer set search_path to 'public' as
   select e.operator_id from public.employees e where e.id = public.my_employee_uuid()
 $$;
 
--- البايكرز النشطون في مشغّل المستدعي (للتوزيع)؛ البايكر لا يقرأ employees لغيره فتُعرض الأسماء عبر هذه الدالة فقط
+-- المشمولون بالتوزيع: المتدرب المرافق يُستبعد من القسمة (false) ويبقى قادراً على تسجيل استلام
+alter table public.app_users add column in_daily_split boolean not null default true;
+update public.app_users set in_daily_split = false where btrim(biker_employee_id) = '2637651411';  -- Abed mia: متدرب مرافق
+
+-- البايكرز النشطون المشمولون بالتوزيع في مشغّل المستدعي؛ البايكر لا يقرأ employees لغيره فتُعرض الأسماء عبر هذه الدالة فقط
 create or replace function public.daily_team()
 returns table (id uuid, full_name text, employee_id text)
 language sql stable security definer set search_path to 'public' as $$
   select e.id, e.full_name, e.employee_id
   from public.employees e
   join public.app_users au on btrim(au.biker_employee_id) = e.employee_id
-  where au.active and coalesce(au.position, 'biker') in ('biker', 'team_leader')
+  where au.active and au.in_daily_split and coalesce(au.position, 'biker') in ('biker', 'team_leader')
     and coalesce(e.staff_role, '') <> 'manager'
     and e.operator_id is not distinct from public.my_operator_id()
     and public.my_employee_uuid() is not null
   order by e.full_name
 $$;
 
-revoke all on function public.daily_staff(boolean), public.my_operator_id(), public.daily_team() from public, anon;
-grant execute on function public.daily_staff(boolean), public.my_operator_id(), public.daily_team() to authenticated;
+-- قائمة البايكرز وحالة شمولهم (للمالك والمشرف فقط)
+create or replace function public.daily_split_list()
+returns table (id uuid, full_name text, employee_id text, operator_id uuid, in_daily_split boolean)
+language sql stable security definer set search_path to 'public' as $$
+  select e.id, e.full_name, e.employee_id, e.operator_id, au.in_daily_split
+  from public.employees e
+  join public.app_users au on btrim(au.biker_employee_id) = e.employee_id
+  where public.daily_staff() and au.active and coalesce(au.position, 'biker') in ('biker', 'team_leader')
+    and coalesce(e.staff_role, '') <> 'manager'
+  order by e.full_name
+$$;
+
+-- تشغيل/إيقاف الشمول: تتحقق من daily_staff(true) وتغيّر in_daily_split فقط
+create or replace function public.set_daily_split(p_employee uuid, p_on boolean)
+returns integer language plpgsql security definer set search_path to 'public' as $$
+declare n integer;
+begin
+  if not public.daily_staff(true) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if p_on is null then raise exception 'p_on is required'; end if;
+  update public.app_users au set in_daily_split = p_on
+  from public.employees e
+  where e.id = p_employee and btrim(au.biker_employee_id) = e.employee_id;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+revoke all on function public.daily_staff(boolean), public.my_operator_id(), public.daily_team(), public.daily_split_list(), public.set_daily_split(uuid, boolean) from public, anon;
+grant execute on function public.daily_staff(boolean), public.my_operator_id(), public.daily_team(), public.daily_split_list(), public.set_daily_split(uuid, boolean) to authenticated;
 
 -- قيد الخادم على وقت الاستلام: لا مستقبل (بسماحية دقيقتين لفرق ساعة الجهاز) ولا أقدم من 12 ساعة
 create or replace function public.daily_deliveries_check()

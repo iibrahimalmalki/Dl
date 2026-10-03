@@ -12,6 +12,14 @@ export function splitEven(qty, bikerIds, receiverId) {
   if (rest) { if (receiverId) out[receiverId] += rest; else out[ids[0]] += rest; }
   return out;
 }
+// قائمة التوزيع: المشمولون فقط (in_daily_split ≠ false). المستلم غير المشمول (متدرب مرافق) لا يدخل القسمة
+// ونصيبه صفر، فيذهب باقي القسمة لأول المشمولين. → {ids, receiver}
+export function splitList(bikers, receiverId, receiverIncluded = true) {
+  const ids = (bikers || []).filter(b => b && b.id && b.in_daily_split !== false).map(b => b.id);
+  const receiver = receiverIncluded && receiverId ? receiverId : null;
+  if (receiver && !ids.includes(receiver)) ids.unshift(receiver);
+  return { ids: [...new Set(receiverIncluded ? ids : ids.filter(id => id !== receiverId))], receiver };
+}
 // قسمة كل الأصناف: lines {[item]: qty} → {[item]: {[bikerId]: qty}}
 export const splitAll = (lines, bikerIds, receiverId) => Object.fromEntries(Object.entries(lines || {}).filter(([, q]) => q > 0).map(([k, q]) => [k, splitEven(q, bikerIds, receiverId)]));
 // شرط الاعتماد: مجموع الأنصبة لكل صنف = الكمية المستلمة، ولا قيم سالبة

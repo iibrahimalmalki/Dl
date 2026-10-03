@@ -1,7 +1,7 @@
 // الاستلام اليومي — صفحة المتابعة للمالك والمشرف: اليوم، الأرصدة، سجل التسليمات، المناشف، الإعدادات.
 import { useEffect, useMemo, useState } from "react";
 import { balances, isLate, monthSummary, riyadhDay, riyadhHM, normPhone, csvCell } from "./engine";
-import { loadAdmin, photoUrl, addAdjustment, saveItem, saveCourier } from "./store";
+import { loadAdmin, photoUrl, addAdjustment, saveItem, saveCourier, loadSplit, setSplit } from "./store";
 
 const CSS = `
 .da{display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -177,6 +177,30 @@ function Towels({ d }) {
       <tbody>{rows.map(r => <tr key={r.m}><td>{mLabel(r.m)}</td><td className="num">{r.n}</td><td className="num">{r.clean}</td><td className="num">{r.dirty}</td><td className="num" style={{ color: r.diff ? "var(--warn-ink)" : undefined, fontWeight: 800 }}><span className="da-num">{r.diff > 0 ? "+" + r.diff : r.diff}</span></td></tr>)}</tbody></table></div></div>;
 }
 
+// البايكرز المشمولون بالتوزيع — تشغيل/إيقاف عبر set_daily_split (تتحقق من daily_staff(true) على الخادم)
+function SplitMembers() {
+  const [s, setS] = useState(null), [busy, setBusy] = useState(null), [err, setErr] = useState("");
+  const load = () => loadSplit().then(setS).catch(() => setS({ list: [] }));
+  useEffect(() => { load(); }, []);
+  const toggle = async b => {
+    setErr(""); setBusy(b.id);
+    const r = await setSplit(b.id, !b.in_daily_split); setBusy(null);
+    if (r.error) return setErr(/not allowed|42501/.test(String(r.error.message || r.error.code)) ? "لا تملك صلاحية تعديل الشمول (تحتاج تعديل «الجولات الميدانية» أو «سلاسل الإمداد»)." : "تعذّر الحفظ: " + (r.error.message || r.error));
+    setS(x => ({ ...x, list: x.list.map(y => y.id === b.id ? { ...y, in_daily_split: !b.in_daily_split } : y) }));
+  };
+  return <div className="g-card da-card"><h3>البايكرز المشمولون بالتوزيع</h3>
+    <span className="da-mut">غير المشمول (متدرب مرافق) لا يدخل القسمة ولا يظهر في جدول التوزيع، ويبقى قادراً على تسجيل استلام من المندوب.</span>
+    {!s ? <div className="g-skel box" style={{ height: 80 }} /> : s.missing ? <span className="da-mut">يتاح بعد تطبيق daily_receive.sql.</span>
+      : !s.list.length ? <span className="da-mut">لا بايكرز (أو لا تملك صلاحية العرض).</span>
+      : <div className="da-twrap"><table className="g-tbl compact da-tbl"><thead><tr><th>البايكر</th><th>الحالة</th><th>في التوزيع</th></tr></thead>
+        <tbody>{s.list.map(b => <tr key={b.id}><td>{b.full_name} <span className="da-mut da-num">#{b.employee_id}</span></td>
+          <td>{b.in_daily_split ? <span className="g-badge ok">مشمول</span> : <span className="g-badge warn">متدرب مرافق</span>}</td>
+          <td><button type="button" role="switch" aria-checked={!!b.in_daily_split} aria-label={"شمول " + b.full_name + " بالتوزيع"} className={"g-btn sm " + (b.in_daily_split ? "ok" : "")} disabled={busy === b.id} onClick={() => toggle(b)}>{busy === b.id ? "…" : b.in_daily_split ? "تشغيل ✓" : "إيقاف"}</button></td></tr>)}</tbody></table></div>}
+    {(s && s.error) && <div className="da-note bad">{String(s.error.message || s.error)}</div>}
+    {err && <div className="da-note bad" role="alert">{err}</div>}
+  </div>;
+}
+
 function Settings({ d, owner, onSaved }) {
   const [err, setErr] = useState(""), [ni, setNi] = useState(null), [ec, setEc] = useState(null);
   const run = async p => { setErr(""); const r = await p; if (r.error) { setErr(/row-level|42501/.test(String(r.error.message || r.error.code)) ? "لا تملك صلاحية هذا التعديل." : "تعذّر الحفظ: " + (r.error.message || r.error)); return false; } onSaved(); return true; };
@@ -196,6 +220,7 @@ function Settings({ d, owner, onSaved }) {
         <tbody>{items.map((i, k) => <tr key={i.key}><td>{owner ? <><button className="g-btn sm icon" aria-label="أعلى" disabled={!k} onClick={() => move(k, -1)}>↑</button> <button className="g-btn sm icon" aria-label="أسفل" disabled={k === items.length - 1} onClick={() => move(k, 1)}>↓</button></> : i.sort}</td>
           <td>{i.name_ar} <span className="da-mut" lang="bn">{i.name_bn}</span></td><td>{{ addon: "خدمة إضافية", towel: "مناشف", consumable: "مستهلك" }[i.kind]}</td>
           <td>{owner ? <button className={"g-btn sm " + (i.active ? "ok" : "")} onClick={() => run(saveItem({ key: i.key, active: !i.active }))}>{i.active ? "فعّال" : "معطّل"}</button> : i.active ? "فعّال" : "معطّل"}</td></tr>)}</tbody></table></div></div>
+    <SplitMembers />
     <div className="g-card da-card"><h3>المندوبون</h3><span className="da-mut">يضيفهم البايكر عند الاستلام؛ هنا التعديل والتعطيل.</span>
       {d.couriers.length ? <div className="da-twrap"><table className="g-tbl compact da-tbl"><thead><tr><th>الاسم</th><th>الجوال</th><th>الحالة</th><th></th></tr></thead>
         <tbody>{d.couriers.map(co => ec && ec.id === co.id ? <tr key={co.id}><td><input className="g-input" value={ec.name} onChange={e => setEc({ ...ec, name: e.target.value })} /></td><td><input className="g-input da-num" inputMode="tel" value={ec.phone} onChange={e => setEc({ ...ec, phone: e.target.value })} /></td><td />
