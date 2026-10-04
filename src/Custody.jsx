@@ -48,7 +48,7 @@ export default function Custody({opId,owner}){
     setLoading(true);
     const[{data:e},ca]=await Promise.all([
       supabase.from("employees").select("id,full_name,employee_id").not("employee_id","is",null).order("employee_id"),
-      (()=>{let q=supabase.from("custody_assets").select("*").order("end_date",{ascending:true});if(opId&&opId!=="all")q=q.eq("operator_id",opId);return q;})(),
+      (()=>{let q=supabase.from("custody_assets").select("*").order("end_date",{ascending:true});if(opId&&opId!=="all")q=q.or("operator_id.eq."+opId+",operator_id.is.null");return q;})(),
     ]);
     setEmps(e||[]);setRows(ca.data||[]);setLoading(false);
   })();},[opId]);
@@ -95,7 +95,7 @@ export default function Custody({opId,owner}){
   const openExtract=async()=>{
     setShowExtract(true);setShowAdd(false);
     let q=supabase.from("field_rounds").select("id,biker_name,sweater_id,round_date").order("round_date",{ascending:false}).limit(40);
-    if(opId&&opId!=="all")q=q.eq("operator_id",opId);
+    if(opId&&opId!=="all")q=q.or("operator_id.eq."+opId+",operator_id.is.null");
     const{data}=await q;setRounds(data||[]);
   };
 
@@ -103,7 +103,7 @@ export default function Custody({opId,owner}){
     const p=n=>String(n).padStart(2,"0");const d=new Date();
     const ref=`DW-${r.sweater_id||"x"}-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-C${Math.floor(1000+Math.random()*9000)}`;
     const item={n:null,ar:r.name,en:r.name_en||"",type:r.item_type,category:r.category||"مستهلكات",category_en:"",status:"reorder",status_ar:"إعادة طلب (استهلاك دورة العُهدة)",status_en:"Reorder (consumable cycle)",note:`عُهدة بدأت ${r.start_date} — انتهت دورتها`,parts_ar:"",parts_en:""};
-    const{data:sr,error}=await supabase.from("supply_requests").insert({operator_id:r.operator_id,ref,round_id:r.round_id||null,biker_name:r.biker_name,sweater_id:r.sweater_id,requesting_dept:"التشغيل — دلو ورغوة",items:[item]}).select().single();
+    const{data:sr,error}=await supabase.from("supply_requests").insert({operator_id:r.operator_id||((opId&&opId!=="all")?opId:null),ref,round_id:r.round_id||null,biker_name:r.biker_name,sweater_id:r.sweater_id,requesting_dept:"التشغيل — دلو ورغوة",items:[item]}).select().single();
     if(error){setMsg({ok:false,t:"خطأ في إنشاء الطلب: "+error.message});return;}
     // إعادة ضبط دورة العُهدة المستهلكة
     const ns=today(),ne=addMonths(ns,r.life_months||1);
