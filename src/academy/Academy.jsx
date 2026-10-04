@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { $, TOWELS, TOWEL_WHY, TOWEL_NOTES, SPRAYS, SPRAY_WHY, TOOLS, DAY, DAY_GROUPS, QUALITY } from "./content";
 import { CFG, MODS, WASH, PATH, TF_T, allSteps, modName, curIdx, doneCount, stationState, idxOf, modsDone, certified, stage,
   shuffle, buildQuiz, pointsFor, quizResult, stateFrom, missFrom, topMiss, wrongsOf, dailyStreak, CLIPS, fmtTime } from "./engine";
+import { Skel } from "../uiKit";
 import { loadMine, saveAttempt, savePractical, listVideos, videoUrl } from "./store";
 
 export const ACADEMY_CSS = `
@@ -91,6 +92,7 @@ export const ACADEMY_CSS = `
 @media (prefers-reduced-motion:reduce){.ac-shake{animation:none}}
 .ac-score{display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px}
 .ac-score .big{font-size:48px;font-weight:900;line-height:1.1}
+.ac-fail{font-size:15px;line-height:1.6;text-align:start}.ac-fail .bn{display:block;font-weight:600}
 .ac-score.pass .big{color:var(--ok-ink)}.ac-score.fail .big{color:var(--bad-ink)}
 .ac-tbl{width:100%;border-collapse:collapse;font-size:14px}.ac-tbl td{padding:7px 4px;border-top:1px solid var(--line)}.ac-tbl td:last-child{text-align:end}
 .ac-hist>div{padding:9px 0;border-top:1px solid var(--line)}.ac-hist>div:first-child{border-top:none}
@@ -165,7 +167,7 @@ export default function Academy({ me }) {
   const daily = useMemo(() => dailyStreak(attempts.filter(a => a.module === "daily").map(a => localDay(a.created_at)), localDay(Date.now())), [attempts]);
 
   if (!empId) return <div className="ac"><div className="ac-card g-card"><div className="ac-note bad">حسابك غير مرتبط بسجل موظف، فلا يمكن حفظ تدريبك. راجع الإدارة. · <Bn>আপনার অ্যাকাউন্ট কর্মী রেকর্ডের সাথে যুক্ত নয়</Bn></div></div></div>;
-  if (!data) return <div className="ac"><div className="ac-card g-card"><div className="ac-row ac-mut"><div className="g-spin" />جارٍ التحميل… · <Bn>লোড হচ্ছে…</Bn></div></div></div>;
+  if (!data) return <div className="ac"><Skel rows={4} /></div>;
 
   const go = v => { setView(v); top(); };
   const close = () => { setView(null); setQ(null); top(); };
@@ -183,7 +185,7 @@ export default function Academy({ me }) {
   const finishQ = (q0, st1, good, pts) => {
     const q = q0.qs[q0.i];
     return { ...q0, pts: q0.pts + pts, st: { ...st1, fin: true, good },
-      log: good ? q0.log : [...q0.log, { topic: q.topic, why: q.why }],
+      log: good ? q0.log : [...q0.log, { topic: q.topic, why: q.why, q: q.type === "tf" ? q.s : q.title }],
       seq: [...q0.seq, good ? { right: true, k: q.why.ar } : { topic: q.topic, why: q.why }] };
   };
   const answer = v => setQ(q0 => { const q = q0.qs[q0.i]; if (q0.st.fin) return q0; const good = q.type === "tf" ? v === q.a : v === q.ans; return finishQ(q0, { ...q0.st, ans: v }, good, good ? 1 : 0); });
@@ -340,19 +342,22 @@ export default function Academy({ me }) {
 
   function Result({ r }) {
     const t = r.modId === "final" ? "final" : "mod", station = idxOf(t, r.modId) >= 0, nb = nextBtn(t, r.modId, r.pass), topics = Object.keys(r.by);
-    const retry = r.modId === "daily" ? <button className={"g-btn block" + (nb ? "" : " primary")} onClick={() => startQuiz("daily")}>العب مرة ثانية <Bn>আবার খেলো</Bn></button>
-      : r.modId === "final" ? <button className={"g-btn block" + (nb ? "" : " primary")} onClick={() => startQuiz("final")}>أعد الاختبار <Bn>আবার</Bn></button>
-      : <button className={"g-btn block" + (nb ? "" : " primary")} onClick={() => startQuiz(r.modId)}>{r.pass ? "العب مرة ثانية" : "أعد المحاولة"} <Bn>আবার</Bn></button>;
+    const fail = !r.pass && r.modId !== "daily", pm = CFG.passMark;
+    const retry = <button className={"g-btn block" + (nb ? "" : " primary")} onClick={() => startQuiz(r.modId)}>{r.modId === "final" ? "أعد الاختبار" : r.pass ? "العب مرة ثانية" : "أعد المحاولة"} <Bn>আবার চেষ্টা করো</Bn></button>;
+    const review = fail && t === "mod" && station && <button className="g-btn block" onClick={() => go({ k: "lesson", id: r.modId, p: 0 })}>راجع الدرس <Bn>পাঠ আবার দেখো</Bn></button>;
+    const unlock = r.modId === "final" ? $(`تحتاج ${pm}% لتنجح في الاختبار الشامل`, `পাস করতে ${pm}% লাগবে`) : $(`تحتاج ${pm}% لفتح الدرس التالي`, `পরের পাঠ খুলতে ${pm}% লাগবে`);
     return <>{station && t === "mod" && <Flow n={3} />}
       <section className="ac-card g-card"><div className={"ac-score " + (r.pass ? "pass" : "fail")}><span className="ac-eyebrow">{modName(r.modId).ar}</span><span className="big ac-num">{r.pct}%</span>
-        <b>{r.pass ? "ناجح" : "يحتاج إعادة"} <Bn>{r.pass ? "পাস" : "আবার চেষ্টা করো"}</Bn></b><span className="ac-mut">{!r.pass && <>النجاح من <span className="ac-num">{CFG.passMark}%</span> · </>}<span className="ac-num">{r.pts}/{r.max}</span></span></div>
-        {topics.length > 1 && <table className="ac-tbl"><tbody>{topics.map(k => <tr key={k}><td>{modName(k).ar}</td><td><span className={"g-badge ac-num " + (r.tp[k] >= CFG.passMark ? "ok" : "bad")}>{r.tp[k]}%</span></td></tr>)}</tbody></table>}</section>
-      {nb}
-      {r.log.length ? <section className="ac-card g-card"><h2><B t={$("ما يحتاج تصحيح", "যা ঠিক করতে হবে")} /></h2>{r.log.map((m, i) => <div key={i} className="ac-note bad"><B t={m.why} /></div>)}</section>
+        <b>{r.pass ? "ناجح" : "لم تنجح بعد"} <Bn>{r.pass ? "পাস" : "এখনও পাস হয়নি"}</Bn></b><span className="ac-mut ac-num">{r.pts}/{r.max}</span></div>
+        {fail && <div className="ac-note warn ac-fail" role="status"><b>نتيجتك <span className="ac-num">{r.pct}%</span> — {unlock.ar}</b><Bn>তোমার ফলাফল {r.pct}% — {unlock.bn}</Bn></div>}
+        {topics.length > 1 && <table className="ac-tbl"><tbody>{topics.map(k => <tr key={k}><td>{modName(k).ar}</td><td><span className={"g-badge ac-num " + (r.tp[k] >= pm ? "ok" : "bad")}>{r.tp[k]}%</span></td></tr>)}</tbody></table>}</section>
+      {fail ? <>{retry}{review}</> : nb}
+      {r.log.length ? <section className="ac-card g-card"><h2><B t={$("الأسئلة التي أخطأت فيها", "যে প্রশ্নগুলো ভুল হয়েছে")} /></h2>{r.log.map((m, i) => <div key={i} className="ac-note bad">
+          {m.q && <div style={{ fontWeight: 800, marginBottom: 4 }}><span className="ac-num">{i + 1}.</span> <B t={m.q} /></div>}
+          <div style={{ fontWeight: 500 }}><b>الصحيح · <Bn>সঠিক</Bn>:</b> <B t={m.why} /></div></div>)}</section>
         : <div className="ac-note ok" style={{ textAlign: "center" }}><b>بدون أخطاء!</b> <Bn>কোনো ভুল নেই!</Bn></div>}
-      {!nb && retry}
-      {!r.pass && t === "mod" && station && <button className="g-btn block" onClick={() => go({ k: "lesson", id: r.modId, p: 0 })}>راجع الدرس <Bn>পাঠ আবার দেখো</Bn></button>}
-      <div className="ac-btns">{nb && retry}<button className="g-btn ghost block" onClick={close}>طريقي <Bn>আমার পথ</Bn></button></div></>;
+      {!fail && !nb && retry}
+      <div className="ac-btns">{!fail && nb && retry}<button className="g-btn ghost block" onClick={close}>طريقي <Bn>আমার পথ</Bn></button></div></>;
   }
 
   function PracIntro({ kind }) {

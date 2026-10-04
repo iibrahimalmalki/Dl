@@ -144,3 +144,50 @@ export function handoverSweaterMessage(row, vehicle, { exclude = [] } = {}) {
   };
   return sec("ar") + "\n\n" + sec("en");
 }
+
+/* ── النموذج بالخطوات (بوابة البايكر) ── */
+// سبع خطوات بزر أساسي واحد لكل شاشة؛ «صور الصندوق» تُتخطّى إن لم يُستلَم الصندوق
+export const HANDOVER_STEPS = [
+  { k: "odo", ar: "العملية والعدّاد", bn: "ধরন ও ওডোমিটার" },
+  { k: "photos", ar: "صور الدراجة", bn: "বাইকের ছবি" },
+  { k: "check", ar: "قائمة التحقق", bn: "চেকলিস্ট" },
+  { k: "recv", ar: "المستلَمات", bn: "যা পেয়েছি" },
+  { k: "box", ar: "صور الصندوق", bn: "বক্সের ছবি" },
+  { k: "notes", ar: "الأضرار والملاحظات", bn: "ক্ষতি ও নোট" },
+  { k: "review", ar: "مراجعة وحفظ", bn: "দেখে সংরক্ষণ" },
+];
+export const boxNeeded = r => !!r && (r.box === true || r.box === "note");
+export const stepSkipped = (i, f) => HANDOVER_STEPS[i] && HANDOVER_STEPS[i].k === "box" && !boxNeeded(f.received);
+// الخطوة التالية/السابقة مع التخطّي
+export const stepMove = (i, d, f) => { let j = i + d; while (j > 0 && j < HANDOVER_STEPS.length - 1 && stepSkipped(j, f)) j += d; return Math.max(0, Math.min(HANDOVER_STEPS.length - 1, j)); };
+// العدّاد: أرقام عربية/بنغالية ← لاتينية
+export const odoNum = v => String(v ?? "").replace(/[٠-٩]/g, d => d.charCodeAt(0) - 0x0660).replace(/[০-৯]/g, d => d.charCodeAt(0) - 0x09E6).replace(/[^\d.]/g, "");
+
+// خطأ الخطوة i بجانب الحقل نفسه → {field, ar, bn} أو null
+// f: {odometer, photos, checks:{[id]: true|false|undefined}, received, pledge}
+export function stepError(i, f) {
+  const k = (HANDOVER_STEPS[i] || {}).k, p = f.photos || {}, r = f.received || {}, ck = f.checks || {};
+  const E = (field, ar, bn) => ({ field, ar, bn });
+  if (k === "odo") {
+    const o = odoNum(f.odometer);
+    if (!o || !(Number(o) >= 0)) return E("odometer", "أدخل قراءة العدّاد بالأرقام.", "ওডোমিটার সংখ্যায় লিখুন।");
+    if (!p.odometer) return E("ph_odometer", "التقط صورة العدّاد.", "ওডোমিটারের ছবি তুলুন।");
+  }
+  if (k === "photos") { const m = BIKE_PHOTOS.find(x => !p[x]); if (m) return E("ph_" + m, "التقط الصور الأربع للدراجة.", "বাইকের চারদিকের ছবি তুলুন।"); }
+  if (k === "check") { const c = CHECKLIST.find(x => ck[x.id] !== true && ck[x.id] !== false); if (c) return E("ck_" + c.id, `اختر «سليم» أو «غير سليم» لـ«${c.ar}».`, `«${c.bn}» — ঠিক বা সমস্যা বাছুন।`); }
+  if (k === "recv") for (const it of RECEIVED_ITEMS) {
+    const why = String((r.reasons || {})[it.id] || "").trim();
+    if (it.withNote && r[it.id] === "note") { if (!why) return E("rc_" + it.id, `اكتب الملاحظة على «${it.ar}».`, "সমস্যাটি লিখুন।"); continue; }
+    if (r[it.id] !== true && r[it.id] !== false) return E("rc_" + it.id, `أجب عن «${it.ar}».`, `«${it.bn}» — উত্তর দিন।`);
+    if (r[it.id] === false && !why) return E("rc_" + it.id, `اكتب سبب «لا» لـ«${it.ar}».`, "কারণ লিখুন।");
+    if (it.count && r[it.id] === true && !(Number.isInteger(r[it.count]) && r[it.count] >= 1 && r[it.count] <= 3)) return E("rc_" + it.id, `اختر عدد ${it.ar}.`, "চাবির সংখ্যা বাছুন।");
+  }
+  if (k === "box" && boxNeeded(r)) { const b = BOX_PHOTOS.find(x => !p[x.id]); if (b) return E("ph_" + b.id, "التقط صور الصندوق الخمس.", "বক্সের পাঁচটি ছবি তুলুন।"); }
+  if (k === "review" && !f.pledge) return E("pledge", "وافق على التعهّد قبل الحفظ.", "সংরক্ষণের আগে অঙ্গীকারে সম্মতি দিন।");
+  return null;
+}
+// أول خطوة فيها خطأ (للحفظ) → {i, err} أو null
+export function firstStepError(f) {
+  for (let i = 0; i < HANDOVER_STEPS.length; i++) { if (stepSkipped(i, f)) continue; const e = stepError(i, f); if (e) return { i, err: e }; }
+  return null;
+}

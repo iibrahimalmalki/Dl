@@ -45,9 +45,10 @@ function App(){
     if(sessionId){setPage("interview");return;}
     if(directApply){setPage("ad");return;}
     if(employeeEditId){setPage("employee");return;}
-    if(window.location.hash==="#admin")setPage("admin");
+    const adm=()=>/^#(admin|ui-kit)$/.test(window.location.hash);
+    if(adm())setPage("admin");
     if(window.location.hash==="#biker")setPage("biker");
-    const h=()=>{if(window.location.hash==="#admin")setPage("admin");else if(window.location.hash==="#biker")setPage("biker");else if(!window.location.hash)setPage("landing");};
+    const h=()=>{if(adm())setPage("admin");else if(window.location.hash==="#biker")setPage("biker");else if(!window.location.hash)setPage("landing");};
     window.addEventListener("hashchange",h);
     return()=>window.removeEventListener("hashchange",h);
   },[]);

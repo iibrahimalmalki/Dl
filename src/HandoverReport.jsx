@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./supabase";
+import { humanError } from "./errors";
 import { checklistOf, RECEIVED_ITEMS, BOX_PHOTOS, handoverIssues, handoverSweaterMessage, riyadhStamp } from "./handover";
 import { copyText } from "./daily/store";
 
@@ -104,7 +105,7 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
       const [{ renderHTML, canvasToPdfA4 }, { FONT_STACK }] = await Promise.all([import("./exportKit"), import("./fonts")]);
       const canvas = await renderHTML(reportHTML({ row, v, issues, bikerNote, items, rec, photos, ret, FONT_STACK }), { width: 794 });
       await canvasToPdfA4(canvas, `handover-${(row.plate || "").replace(/\s+/g, "")}-${riyadhStamp(row.created_at).date.replace(/\//g, "-")}.pdf`);
-    } catch (e) { setNote("تعذّر إنشاء PDF: " + (e.message || e)); }
+    } catch (e) { const h = humanError(e); setNote("تعذّر إنشاء PDF — " + h.ar + " (" + h.code + ")"); }
     setBusy("");
   };
 

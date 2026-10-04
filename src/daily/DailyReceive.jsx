@@ -1,6 +1,9 @@
 // الاستلام اليومي من مندوب سويتر — تبويب «الاستلام» في بوابة البايكر.
 // أي بايكر حاضر يسجّل الشحنة (وقت، مندوب، كميات، مناشف مُرجَعة، صور، ملاحظة) ثم يوزّعها، وكل بايكر يؤكد نصيبه.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useToast } from "../ui";
+import { humanError } from "../errors";
+import { Skel, ErrorNote, UploadBar, StickyBar, OfflineHint, useOnline, loadDraft, saveDraft } from "../uiKit";
 import { waMessage, waLink, splitAll, splitList, splitErrors, normPhone, validateReceive, balances, isLate, riyadhHM, riyadhDay, toLocalInput, MAX_BACK_H } from "./engine";
 import { loadBiker, createDelivery, saveDistribution, confirmShares, photoUrl, markShared, copyText } from "./store";
 
@@ -57,6 +60,7 @@ export const DR_CSS = `
 .dr-dtin{width:100%!important;min-width:0!important;max-width:100%;box-sizing:border-box;height:48px;min-height:48px;padding:0 10px!important;font-size:16px!important;-webkit-appearance:none;appearance:none;background-clip:padding-box;text-align:start}
 .dr-dtin::-webkit-date-and-time-value{text-align:start;margin:0}
 .dr input,.dr select,.dr textarea{max-width:100%;min-width:0;box-sizing:border-box}
+.dr-bspin{width:18px!important;height:18px!important;border-width:2px!important;margin:0!important;border-color:currentColor!important;border-inline-end-color:transparent!important}
 .dr-dist{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
 `;
 
@@ -91,28 +95,29 @@ export default function DailyReceive({ me, onDirty, onPending }) {
   const [d, setD] = useState(null);
   const [view, setView] = useState(null); // null | {k:"form"} | {k:"dist", delivery}
   const [towelImg, setTowelImg] = useState(null);
-  const [msg, setMsg] = useState(null);
   const [reload, setReload] = useState(0);
+  const toast = useToast();
+  // النجاح ⇒ Toast (عربي · বাংলা) ثلاث ثوانٍ؛ لا يُعرض داخل الصفحة
+  const setMsg = m => { if (m && m.t) { const t = String(m.t), i = t.lastIndexOf(" · "); toast.ok(i > 0 ? t.slice(0, i) : t, i > 0 ? t.slice(i + 3) : "", 3000); } };
   useEffect(() => { let on = true; import("../academy/images").then(m => { if (on) setTowelImg((m.default || {}).towelblue || null); }).catch(() => {}); return () => { on = false; }; }, []);
   useEffect(() => { if (!empId) return; let on = true; loadBiker(empId, me && me.uid).then(r => { if (on) setD(r); }).catch(e => { if (on) setD({ items: [], couriers: [], team: [], deliveries: [], shares: [], adjustments: [], ready: false, error: e }); }); return () => { on = false; }; }, [empId, reload]);
 
   useEffect(() => { if (d && onPending) onPending(d.inSplit === false ? 0 : d.shares.filter(x => x.employee_id === empId && x.status === "pending").length); }, [d]);
   useEffect(() => () => { onDirty && onDirty(false); }, []);
   if (!empId) return <div className="dr"><style>{DR_CSS}</style><div className="dr-card g-card"><div className="dr-note bad">حسابك غير مرتبط بسجل موظف. راجع الإدارة.<Bn>আপনার অ্যাকাউন্ট কর্মী রেকর্ডের সাথে যুক্ত নয়</Bn></div></div></div>;
-  if (!d) return <div className="dr"><style>{DR_CSS}</style><div className="dr-card g-card"><div className="dr-row dr-mut"><div className="g-spin" />جارٍ التحميل…<Bn>লোড হচ্ছে…</Bn></div></div></div>;
+  if (!d) return <div className="dr"><style>{DR_CSS}</style><Skel rows={4} /></div>;
 
   const items = d.items.filter(i => i.active);
   const itemOf = k => d.items.find(i => i.key === k) || { key: k, name_ar: k, name_bn: "" };
   const nameOf = id => id === empId ? "أنا" : ((d.team.find(t => t.id === id) || {}).full_name || "متدرب مرافق");
   const courierOf = id => d.couriers.find(c => c.id === id);
   const operatorId = d.operatorId ?? null;
-  const done = (m, ok = true) => { setMsg({ ok, t: m }); setView(null); setReload(x => x + 1); try { window.scrollTo(0, 0); } catch { /* */ } };
+  const done = m => { setMsg({ t: m }); setView(null); setReload(x => x + 1); try { window.scrollTo(0, 0); } catch { /* */ } };
 
   const ctx = { onDirty, d, me, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD };
   return <div className="dr"><style>{DR_CSS}</style>
-    {!d.ready && <div className="dr-note warn">الاستلام اليومي لم يُفعَّل بعد في القاعدة — لا يمكن الحفظ حتى يعتمده المالك.<Bn>এখনও চালু হয়নি — মালিকের অনুমোদনের অপেক্ষায়</Bn></div>}
-    {d.error && <div className="dr-note bad">تعذّر تحميل بعض البيانات: {String(d.error.message || d.error)}</div>}
-    {msg && <div className={"dr-note " + (msg.ok ? "ok" : "bad")} role="status"><BiText t={msg.t} /></div>}
+    {!d.ready && !d.error && <div className="dr-note warn">الاستلام اليومي لم يُفعَّل بعد في القاعدة — لا يمكن الحفظ حتى يعتمده المالك.<Bn>এখনও চালু হয়নি — মালিকের অনুমোদনের অপেক্ষায়</Bn></div>}
+    {d.error && <ErrorNote e={humanError(d.error)} who={me && me.biker_employee_id} onRetry={() => { setD(null); setReload(x => x + 1); }} />}
     {!view ? <Home ctx={ctx} /> : view.k === "form" ? <Form ctx={ctx} /> : view.k === "dist" ? <Dist delivery={view.delivery} ctx={ctx} /> : view.k === "wa" ? <WaShare v={view} ctx={ctx} /> : null}
   </div>;
 
@@ -149,12 +154,12 @@ function Home({ ctx }) {
 /* ── تأكيد النصيب ── */
 function Share({ g, ctx }) {
   const { d, me, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
-  const [short, setShort] = useState(false), [act, setAct] = useState(() => Object.fromEntries(g.rows.map(s => [s.id, s.qty]))), [note, setNote] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const [short, setShort] = useState(false), [act, setAct] = useState(() => Object.fromEntries(g.rows.map(s => [s.id, s.qty]))), [note, setNote] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState(""), [herr, setHerr] = useState(null);
   const submit = async isShort => {
-    setErr("");
+    setErr(""); setHerr(null);
     if (isShort && !g.rows.some(s => act[s.id] < s.qty)) return setErr("عدّل العدد الفعلي للصنف الناقص · কম পাওয়া জিনিসের সংখ্যা দিন");
-    setBusy(true); const r = await confirmShares(g.rows, isShort ? act : null, note.trim()); setBusy(false);
-    if (r.error) return setErr("تعذّر الحفظ: " + (r.error.message || r.error));
+    setBusy(true); let r; try { r = await confirmShares(g.rows, isShort ? act : null, note.trim()); } catch (e) { r = { error: e }; } setBusy(false);
+    if (r.error) return setHerr(humanError(r.error));
     done(isShort ? "سُجّل البلاغ وأُرسل للمالك · রিপোর্ট পাঠানো হয়েছে" : "تم تأكيد استلام نصيبك ✓ · নিশ্চিত হয়েছে");
   };
   return <section className="dr-card g-card dr-mine" aria-live="polite">
@@ -165,49 +170,64 @@ function Share({ g, ctx }) {
     {short && <><span className="dr-mut">أدخل العدد الذي وصلك فعلاً لكل صنف<Bn>আসলে কত পেয়েছ লিখো</Bn></span>
       <textarea className="g-textarea" rows={2} placeholder="ملاحظة · নোট" value={note} onChange={e => setNote(e.target.value)} /></>}
     {err && <div className="dr-note bad" role="alert"><BiText t={err} /></div>}
+    {herr && <ErrorNote e={herr} who={me && me.biker_employee_id} busy={busy} onRetry={() => submit(short)} />}
     {short ? <div className="dr-btns"><button className="g-btn block" disabled={busy} onClick={() => setShort(false)}>رجوع<Bn>ফিরে যাও</Bn></button><button className="g-btn primary block" disabled={busy} onClick={() => submit(true)}>أرسل البلاغ<Bn>পাঠাও</Bn></button></div>
       : <div className="dr-btns"><button className="g-btn primary block" disabled={busy} onClick={() => submit(false)}>✓ استلمت<Bn>পেয়েছি</Bn></button><button className="g-btn block" disabled={busy} onClick={() => setShort(true)}>ناقص<Bn>কম পেয়েছি</Bn></button></div>}
   </section>;
 }
 
 /* ── نموذج الاستلام: خطوة في كل شاشة ── */
+const D_DRAFT = id => "bp.daily." + id;
 function Form({ ctx }) {
   const { d, me, empId, items, itemOf, nameOf, courierOf, operatorId, towelImg, done, setView, setMsg, setD } = ctx;
-  const [st, setSt] = useState(0);
-  const [f, setF] = useState(() => ({ received_at: toLocalInput(Date.now()), courier_id: d.couriers.length ? "" : null, newCourier: d.couriers.length ? null : { name: "", phone: "" }, qty: {}, towels_returned: 0, photos: [], note: "" }));
-  const [prev, setPrev] = useState([]), [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const draft0 = useMemo(() => loadDraft(D_DRAFT(empId)), [empId]);
+  const [st, setSt] = useState(() => (draft0 && draft0.st) || 0);
+  const [f, setF] = useState(() => ({ received_at: toLocalInput(Date.now()), courier_id: d.couriers.length ? "" : null, newCourier: d.couriers.length ? null : { name: "", phone: "" }, qty: {}, towels_returned: 0, note: "", ...((draft0 && draft0.f) || {}), photos: [] }));
+  const [prev, setPrev] = useState([]), [busy, setBusy] = useState(false), [prog, setProg] = useState(null), [err, setErr] = useState(null), [herr, setHerr] = useState(null);
+  const cache = useRef({}); // نفس المعرّف والصور المرفوعة عند إعادة المحاولة
+  const online = useOnline();
   useEffect(() => { const u = f.photos.map(p => URL.createObjectURL(p)); setPrev(u); return () => u.forEach(x => URL.revokeObjectURL(x)); }, [f.photos]);
-  const set = p => setF(x => ({ ...x, ...p }));
-  // مدخلات غير محفوظة ⇒ البوابة تطلب تأكيداً قبل الانتقال لتبويب آخر
-  useEffect(() => { ctx.onDirty && ctx.onDirty(!!(Object.values(f.qty).some(q => q > 0) || f.photos.length || f.note.trim() || f.towels_returned || (f.newCourier && (f.newCourier.name || f.newCourier.phone)) || f.courier_id)); }, [f]);
+  const set = p => { setF(x => ({ ...x, ...p })); setErr(null); };
+  // المسودة: كل شيء عدا الصور، في sessionStorage
+  useEffect(() => { const { photos, ...rest } = f; saveDraft(D_DRAFT(empId), { st, f: rest }); }, [f, st]);
+  // صور غير محفوظة ⇒ البوابة تطلب تأكيداً قبل الانتقال لتبويب آخر (باقي المدخلات في المسودة)
+  useEffect(() => { ctx.onDirty && ctx.onDirty(f.photos.length > 0); }, [f.photos]);
   useEffect(() => () => { ctx.onDirty && ctx.onDirty(false); }, []);
   const N = 7, now = Date.now();
   const at = new Date(f.received_at).getTime();
-  const stepErr = () => {
-    if (st === 0) { if (Number.isNaN(at)) return "أدخل الوقت"; if (at > now + 60e3) return "لا يمكن وقت في المستقبل"; if (at < now - MAX_BACK_H * 3600e3) return `لا يمكن الرجوع أكثر من ${MAX_BACK_H} ساعة`; }
-    if (st === 1) { if (f.newCourier) { if (!f.newCourier.name.trim()) return "اكتب اسم المندوب"; if (!normPhone(f.newCourier.phone)) return "رقم الجوال غير صحيح (05XXXXXXXX)"; } else if (!f.courier_id) return "اختر المندوب"; }
-    if (st === 2 && !Object.values(f.qty).some(q => q > 0)) return "أدخل كمية صنف واحد على الأقل";
-    if (st === 4 && !f.photos.length) return "أضف صورة واحدة على الأقل";
-    return "";
+  const E = (ar, bn) => ({ ar, bn });
+  const stepErr = (i = st) => {
+    if (i === 0) { if (Number.isNaN(at)) return E("أدخل وقت الاستلام.", "গ্রহণের সময় দিন।"); if (at > now + 60e3) return E("لا يمكن تسجيل وقت في المستقبل.", "ভবিষ্যতের সময় দেওয়া যাবে না।"); if (at < now - MAX_BACK_H * 3600e3) return E(`لا يمكن الرجوع أكثر من ${MAX_BACK_H} ساعة.`, "১২ ঘণ্টার বেশি আগের সময় দেওয়া যাবে না।"); }
+    if (i === 1) { if (f.newCourier) { if (!f.newCourier.name.trim()) return E("اكتب اسم المندوب.", "ডেলিভারি ম্যানের নাম লিখুন।"); if (!normPhone(f.newCourier.phone)) return E("رقم الجوال غير صحيح (05XXXXXXXX).", "মোবাইল নম্বর ঠিক নয় (05XXXXXXXX)।"); } else if (!f.courier_id) return E("اختر المندوب.", "ডেলিভারি ম্যান বাছুন।"); }
+    if (i === 2 && !Object.values(f.qty).some(q => q > 0)) return E("أدخل كمية صنف واحد على الأقل.", "অন্তত একটি জিনিসের সংখ্যা দিন।");
+    if (i === 4 && !f.photos.length) return E("أضف صورة واحدة على الأقل للشحنة.", "অন্তত একটি ছবি দিন।");
+    return null;
   };
-  const next = () => { const e = stepErr(); setErr(e); if (!e) { setSt(s => s + 1); try { window.scrollTo(0, 0); } catch { /* */ } } };
+  const go = i => { setErr(null); setHerr(null); setSt(i); try { window.scrollTo(0, 0); } catch { /* */ } };
+  const next = () => { const e = stepErr(); setErr(e); if (!e) go(st + 1); };
+  const cancel = () => { saveDraft(D_DRAFT(empId), null); setView(null); };
   const phone = f.newCourier ? normPhone(f.newCourier.phone) : null, dup = phone && d.couriers.find(c => c.phone === phone);
   const save = async () => {
+    setHerr(null);
+    for (let i = 0; i < N - 1; i++) { const e = stepErr(i); if (e) { go(i); setErr(e); return; } }
     const form = { ...f, received_at: new Date(f.received_at).toISOString(), courier_id: f.newCourier ? (dup ? dup.id : null) : f.courier_id, newCourier: dup ? null : f.newCourier };
-    const errs = validateReceive(form); if (errs.length) return setErr(errs.join(" · "));
-    setErr(""); setBusy("…");
+    if (validateReceive(form).length) { go(0); setErr(stepErr(0) || E("راجع المدخلات.", "তথ্য আবার দেখুন।")); return; }
+    setBusy(true); setProg(null);
     try {
-      const r = await createDelivery({ empId, operatorId, couriers: d.couriers }, form, s => setBusy(s.startsWith("photo") ? `رفع الصورة ${s.slice(5)} من ${f.photos.length}` : s === "courier" ? "حفظ المندوب" : "حفظ الاستلام"));
-      if (r.missing) { setBusy(""); return setErr("لا يمكن الحفظ: جداول الاستلام اليومي لم تُنشأ بعد."); }
-      if (r.error && !r.delivery) { setBusy(""); return setErr("تعذّر الحفظ: " + (r.error.message || r.error)); }
-      if (r.error) { setBusy(""); return setErr("حُفظ الاستلام لكن تعذّر حفظ الكميات: " + (r.error.message || r.error)); }
-      setBusy(""); setMsg({ ok: true, t: "حُفظ الاستلام ✓ — وزّعه الآن على البايكرز · এখন ভাগ করো" }); setView({ k: "dist", delivery: r.delivery });
+      const r = await createDelivery({ empId, operatorId, couriers: d.couriers }, form, s => { if (s.startsWith("photo")) setProg({ done: Number(s.slice(5)) - 1, total: f.photos.length }); else if (s === "save") setProg({ done: f.photos.length, total: f.photos.length }); }, cache.current);
+      if (r.missing) { setBusy(false); return setErr(E("لا يمكن الحفظ: الاستلام اليومي لم يُفعَّل بعد في القاعدة.", "এখনও চালু হয়নি, সংরক্ষণ করা যাবে না।")); }
+      if (r.error && !r.delivery) { setBusy(false); return setHerr(humanError(r.error)); }
+      if (r.error) { setBusy(false); return setHerr(humanError(r.error)); }
+      setBusy(false); saveDraft(D_DRAFT(empId), null); cache.current = {};
+      setMsg({ t: "حُفظ الاستلام ✓ — وزّعه الآن على البايكرز · এখন ভাগ করো" }); setView({ k: "dist", delivery: r.delivery });
       setD(x => ({ ...x, deliveries: [r.delivery, ...x.deliveries] }));
-    } catch (e) { setBusy(""); setErr("تعذّر الحفظ: " + (e.message || e)); }
+    } catch (e) { setBusy(false); setHerr(humanError(e, e && e.photo ? { photo: e.photo } : {})); }
+    setProg(null);
   };
-  const addPhotos = fl => { const a = Array.from(fl || []).filter(x => /^image\//.test(x.type) || /\.(jpe?g|png|heic|webp)$/i.test(x.name)); if (!a.length) return; set({ photos: [...f.photos, ...a].slice(0, 4) }); setErr(""); };
+  const addPhotos = fl => { const a = Array.from(fl || []).filter(x => /^image\//.test(x.type) || /\.(jpe?g|png|heic|webp)$/i.test(x.name)); if (!a.length) return; set({ photos: [...f.photos, ...a].slice(0, 4) }); };
   const c = d.couriers.find(x => x.id === f.courier_id);
   const Q = ({ ar, bn }) => <div className="dr-q">{ar}<Bn>{bn}</Bn></div>;
+  const FE = err && <div className="dr-note bad" role="alert">{err.ar}<Bn>{err.bn}</Bn></div>; // خطأ التحقق تحت السؤال نفسه
   let body;
   if (st === 0) { const [dPart, tPart] = String(f.received_at || "").split("T"), today = toLocalInput(now).slice(0, 10), yday = toLocalInput(now - 864e5).slice(0, 10);
     body = <><Q ar="وقت الاستلام" bn="গ্রহণের সময়" />
@@ -217,41 +237,47 @@ function Form({ ctx }) {
     <div className="dr-dt">
       <label className="dr-l">التاريخ<Bn>তারিখ</Bn><input type="date" className="g-input dr-dtin" value={dPart || ""} min={yday} max={today} onChange={e => e.target.value && set({ received_at: e.target.value + "T" + (tPart || "00:00") })} /></label>
       <label className="dr-l">الوقت<Bn>সময়</Bn><input type="time" className="g-input dr-dtin" value={tPart || ""} onChange={e => e.target.value && set({ received_at: (dPart || today) + "T" + e.target.value })} /></label>
-    </div>
+    </div>{FE}
     <button type="button" className="g-btn block" onClick={() => set({ received_at: toLocalInput(Date.now()) })}>الآن<Bn>এখন</Bn></button></>; }
   else if (st === 1) body = <><Q ar="مندوب سويتر" bn="সুইটার ডেলিভারি ম্যান" />
-    {!f.newCourier ? <><select className="g-select dr-in" value={f.courier_id || ""} onChange={e => set({ courier_id: e.target.value })} aria-label="المندوب"><option value="">— اختر المندوب —</option>{d.couriers.map(x => <option key={x.id} value={x.id}>{x.name} · {x.phone}</option>)}</select>
+    {!f.newCourier ? <><select className="g-select dr-in" value={f.courier_id || ""} onChange={e => set({ courier_id: e.target.value })} aria-label="المندوب"><option value="">— اختر المندوب · বাছুন —</option>{d.couriers.map(x => <option key={x.id} value={x.id}>{x.name} · {x.phone}</option>)}</select>{FE}
       <button type="button" className="g-btn block" onClick={() => set({ newCourier: { name: "", phone: "" }, courier_id: null })}>+ مندوب جديد<Bn>নতুন</Bn></button></>
       : <><label className="dr-l">الاسم<Bn>নাম</Bn><input className="g-input dr-in" value={f.newCourier.name} onChange={e => set({ newCourier: { ...f.newCourier, name: e.target.value } })} autoComplete="off" /></label>
         <label className="dr-l">رقم الجوال<Bn>মোবাইল</Bn><input className="g-input dr-in dr-num" inputMode="tel" placeholder="05XXXXXXXX" value={f.newCourier.phone} onChange={e => set({ newCourier: { ...f.newCourier, phone: e.target.value.replace(/[^\d+٠-٩ ]/g, "") } })} /></label>
+        {FE}
         {phone && <span className="dr-mut">سيُحفظ: <b className="dr-num">{phone}</b></span>}
-        {dup && <div className="dr-note">هذا الرقم مسجّل باسم «{dup.name}» — سيُستخدم المندوب نفسه.</div>}
+        {dup && <div className="dr-note">هذا الرقم مسجّل باسم «{dup.name}» — سيُستخدم المندوب نفسه.<Bn>এই নম্বর আগেই আছে</Bn></div>}
         {d.couriers.length > 0 && <button type="button" className="g-btn block" onClick={() => set({ newCourier: null, courier_id: "" })}>اختيار من القائمة<Bn>তালিকা থেকে</Bn></button>}</>}</>;
   else if (st === 2) body = <><Q ar="الكميات المستلمة" bn="কত পেয়েছ" />
-    {items.map(i => <div key={i.key} className="dr-it"><ItemIcon item={i} img={towelImg} /><div className="dr-l">{i.name_ar}<Bn>{i.name_bn}</Bn></div><Stepper label={i.name_ar} value={f.qty[i.key]} onChange={n => set({ qty: { ...f.qty, [i.key]: n } })} /></div>)}</>;
+    {items.map(i => <div key={i.key} className="dr-it"><ItemIcon item={i} img={towelImg} /><div className="dr-l">{i.name_ar}<Bn>{i.name_bn}</Bn></div><Stepper label={i.name_ar} value={f.qty[i.key]} onChange={n => set({ qty: { ...f.qty, [i.key]: n } })} /></div>)}{FE}</>;
   else if (st === 3) body = <><Q ar="ربطات مناشف مستعملة مُرجَعة للمندوب" bn="ফেরত দেওয়া ব্যবহৃত বান্ডেল" />
     <div className="dr-it"><ItemIcon item={{ key: "towel", kind: "towel" }} img={towelImg} /><div className="dr-l">ربطات مستعملة<Bn>ব্যবহৃত বান্ডেল</Bn></div><Stepper label="ربطات المناشف المُرجَعة" value={f.towels_returned} onChange={n => set({ towels_returned: n })} /></div></>;
   else if (st === 4) body = <><Q ar="صور الشحنة (إلزامي)" bn="ছবি তোলো (বাধ্যতামূলক)" />
+    {draft0 && !f.photos.length && <span className="dr-mut">الصور لا تُحفظ في المسودة، التقطها الآن.<Bn>ছবি আবার তুলুন</Bn></span>}
     <div className="dr-photos">{prev.map((u, i) => <div key={u} className="dr-ph"><img src={u} alt={"صورة " + (i + 1)} /><button type="button" aria-label="حذف الصورة" onClick={() => set({ photos: f.photos.filter((_, j) => j !== i) })}>×</button></div>)}
       {f.photos.length < 4 && <label className="dr-cap"><input type="file" accept="image/*" capture="environment" onChange={e => { addPhotos(e.target.files); e.target.value = ""; }} /><Icon n="camera" s={28} />صوّر<Bn>ছবি তোলো</Bn></label>}</div>
+    {FE}
     <span className="dr-mut">من 1 إلى 4 صور. تُضغط قبل الرفع.<Bn>১–৪টি ছবি</Bn></span></>;
   else if (st === 5) body = <><Q ar="ملاحظة (اختياري)" bn="নোট (ঐচ্ছিক)" /><textarea className="g-textarea" rows={4} placeholder="نقص، تلف، تأخير… · কম, নষ্ট, দেরি…" value={f.note} onChange={e => set({ note: e.target.value })} /></>;
   else body = <><Q ar="مراجعة وتأكيد" bn="দেখে নিশ্চিত করো" />
-    <div><div className="dr-sum"><span>الوقت</span><b className="dr-num">{fmtWhen(at)}</b></div>
-      <div className="dr-sum"><span>المندوب</span><b>{f.newCourier ? (dup ? dup.name : f.newCourier.name + " (جديد)") : c ? c.name : "—"} <span className="dr-num">{f.newCourier ? phone : c ? c.phone : ""}</span></b></div>
+    <div><div className="dr-sum"><span>الوقت · <Bn>সময়</Bn></span><b className="dr-num">{fmtWhen(at)}</b></div>
+      <div className="dr-sum"><span>المندوب · <Bn>ডেলিভারি ম্যান</Bn></span><b>{f.newCourier ? (dup ? dup.name : f.newCourier.name + " (جديد)") : c ? c.name : "—"} <span className="dr-num">{f.newCourier ? phone : c ? c.phone : ""}</span></b></div>
       {items.filter(i => f.qty[i.key] > 0).map(i => <div key={i.key} className="dr-sum"><span>{i.name_ar}</span><b className="dr-num">{f.qty[i.key]}</b></div>)}
       <div className="dr-sum"><span>ربطات مستعملة مُرجَعة</span><b className="dr-num">{f.towels_returned}</b></div>
-      <div className="dr-sum"><span>الصور</span><b className="dr-num">{f.photos.length}</b></div>
-      {f.note.trim() && <div className="dr-sum"><span>ملاحظة</span><span>{f.note}</span></div>}</div></>;
+      <div className="dr-sum"><span>الصور · <Bn>ছবি</Bn></span><b className="dr-num">{f.photos.length}</b></div>
+      {f.note.trim() && <div className="dr-sum"><span>ملاحظة</span><span>{f.note}</span></div>}</div>{FE}</>;
   return <>
-    <div className="dr-row"><button className="g-btn sm" style={{ minHeight: 44 }} disabled={!!busy} onClick={() => setView(null)}>✕ إلغاء</button><span className="dr-grow" /><span className="dr-mut dr-num">{st + 1}/{N}</span></div>
+    <div className="dr-row">{st > 0 ? <button className="g-btn" style={{ minHeight: 44 }} disabled={busy} onClick={() => go(st - 1)}>→ السابق<Bn>আগের</Bn></button>
+      : <button className="g-btn" style={{ minHeight: 44 }} disabled={busy} onClick={cancel}>✕ إلغاء<Bn>বাতিল</Bn></button>}<span className="dr-grow" /><span className="dr-mut dr-num">{st + 1}/{N}</span></div>
     <div className="dr-dots" aria-hidden="true">{[...Array(N).keys()].map(i => <i key={i} className={i < st ? "done" : i === st ? "now" : ""} />)}</div>
     <section className="dr-card g-card">{body}</section>
-    {err && <div className="dr-note bad" role="alert"><BiText t={err} /></div>}
-    {busy && <div className="dr-note dr-row" role="status"><div className="g-spin" />{busy}</div>}
-    <div className="dr-btns">{st > 0 ? <button className="g-btn block" disabled={!!busy} onClick={() => { setErr(""); setSt(s => s - 1); }}>السابق<Bn>আগের</Bn></button> : <span />}
-      {st < N - 1 ? <button className="g-btn primary block" onClick={next}>التالي<Bn>পরের</Bn></button>
-        : <button className="g-btn primary block" disabled={!!busy} onClick={save}>✓ تأكيد الاستلام<Bn>নিশ্চিত</Bn></button>}</div>
+    {herr && <ErrorNote e={herr} who={me && me.biker_employee_id} busy={busy} onRetry={save} onNow={() => { set({ received_at: toLocalInput(Date.now()) }); go(0); }} />}
+    <StickyBar flat>
+      {busy && prog && prog.total > 0 && <UploadBar done={prog.done} total={prog.total} />}
+      {st < N - 1 ? <button className="g-btn primary block dr-big" onClick={next}>التالي<Bn>পরের</Bn></button>
+        : <button className="g-btn primary block dr-big" disabled={busy || !online} aria-busy={busy || undefined} onClick={save}>{busy && <span className="g-spin dr-bspin" aria-hidden="true" />}{busy ? "جارٍ الحفظ…" : "✓ تأكيد الاستلام"}<Bn>{busy ? "সংরক্ষণ হচ্ছে…" : "নিশ্চিত"}</Bn></button>}
+      {st === N - 1 && !online && <OfflineHint />}
+    </StickyBar>
   </>;
 }
 
@@ -262,17 +288,18 @@ function Dist({ delivery, ctx }) {
   // المشمولون فقط؛ المستلم المتدرب المرافق خارج القسمة ونصيبه صفر
   const { ids, receiver } = useMemo(() => splitList(d.team, empId, d.inSplit !== false), []);
   const [plan, setPlan] = useState(() => splitAll(lines, ids, receiver));
-  const [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(null);
+  const online = useOnline();
   const bad = splitErrors(lines, plan);
-  const save = async () => { if (bad.length) return; setBusy(true); const r = await saveDistribution(delivery, plan, empId); setBusy(false);
-    if (r.error) return setErr("تعذّر حفظ التوزيع: " + (r.error.message || r.error));
+  const save = async () => { if (bad.length) return; setErr(null); setBusy(true); let r; try { r = await saveDistribution(delivery, plan, empId); } catch (e) { r = { error: e }; } setBusy(false);
+    if (r.error) return setErr(humanError(r.error));
     // الأنصبة كما حُفظت (نصيب المستلم مؤكد تلقائياً) ← شاشة «أرسل للقروبات»
     const now = new Date().toISOString(), local = [];
     Object.entries(plan).forEach(([item_key, per]) => Object.entries(per).forEach(([employee_id, qty]) => { if (qty > 0) local.push({ id: "tmp-" + item_key + employee_id, delivery_id: delivery.id, employee_id, item_key, qty, status: employee_id === empId ? "confirmed" : "pending", received_by: empId, received_at: delivery.received_at, confirmed_at: employee_id === empId ? now : null }); }));
     setD(x => ({ ...x, shares: [...local, ...x.shares], deliveries: x.deliveries.map(y => y.id === delivery.id ? { ...y, status: "distributed" } : y) }));
     setMsg({ ok: true, t: "اعتُمد التوزيع ✓ — أرسل الرسالتين للقروبين · বিতরণ সম্পন্ন" }); setView({ k: "wa", deliveryId: delivery.id, shares: local }); try { window.scrollTo(0, 0); } catch { /* */ } };
   return <>
-    <div className="dr-row"><button className="g-btn sm" style={{ minHeight: 44 }} onClick={() => setView(null)}>→ رجوع</button></div>
+    <div className="dr-row"><button className="g-btn" style={{ minHeight: 44 }} onClick={() => setView(null)}>→ رجوع<Bn>ফিরে যাও</Bn></button></div>
     <section className="dr-card g-card"><h2>توزيع الشحنة<Bn>ভাগ করো</Bn></h2>
       {!ids.length && <div className="dr-note bad">لا يوجد بايكر مشمول بالتوزيع — راجع المشرف.<Bn>বিতরণের জন্য কেউ নেই</Bn></div>}
         {!receiver && <div className="dr-note warn">أنت متدرب مرافق: نصيبك صفر وتُقسم الشحنة على زملائك.<Bn>তোমার ভাগ শূন্য</Bn></div>}
@@ -281,9 +308,10 @@ function Dist({ delivery, ctx }) {
       return <section key={k} className="dr-card g-card"><div className="dr-row"><ItemIcon item={i} img={towelImg} /><div className="dr-l dr-grow">{i.name_ar}<Bn>{i.name_bn}</Bn></div>
         <span className={"dr-pill dr-num " + (s === q ? "ok" : "bad")}>{s}/{q}</span></div>
         {ids.map(id => <div key={id} className="dr-dist"><span>{nameOf(id)}</span><Stepper label={i.name_ar + " — " + nameOf(id)} value={p[id]} onChange={n => setPlan(x => ({ ...x, [k]: { ...x[k], [id]: n } }))} /></div>)}</section>; })}
-    {bad.length > 0 && <div className="dr-note bad" role="alert">المجموع لا يساوي الكمية المستلمة في: {bad.map(k => itemOf(k).name_ar).join("، ")}</div>}
-    {err && <div className="dr-note bad" role="alert"><BiText t={err} /></div>}
-    <button className="g-btn primary block dr-big" disabled={busy || bad.length > 0 || !ids.length} onClick={save}>{busy ? "جارٍ الحفظ…" : "اعتماد التوزيع · বিতরণ নিশ্চিত"}</button>
+    {bad.length > 0 && <div className="dr-note bad" role="alert">المجموع لا يساوي الكمية المستلمة في: {bad.map(k => itemOf(k).name_ar).join("، ")}<Bn>মোট সংখ্যা মিলছে না</Bn></div>}
+    {err && <ErrorNote e={err} who={me && me.biker_employee_id} busy={busy} onRetry={save} />}
+    <StickyBar flat><button className="g-btn primary block dr-big" disabled={busy || bad.length > 0 || !ids.length || !online} aria-busy={busy || undefined} onClick={save}>{busy && <span className="g-spin dr-bspin" aria-hidden="true" />}{busy ? "جارٍ الحفظ…" : "اعتماد التوزيع"}<Bn>{busy ? "সংরক্ষণ হচ্ছে…" : "বিতরণ নিশ্চিত"}</Bn></button>
+      {!online && <OfflineHint />}</StickyBar>
   </>;
 }
 
@@ -304,14 +332,14 @@ function WaShare({ v, ctx }) {
   };
   const copy = async kind => { const ok = await copyText(msgs[kind]); setCopied(ok ? kind : "fail:" + kind); mark(kind); setTimeout(() => setCopied(c => c === kind || c === "fail:" + kind ? null : c), 2500); };
   const open = kind => { mark(kind); window.open(waLink(msgs[kind]), "_blank", "noopener"); };
-  if (!x) return <div className="dr-note bad">لم يُعثر على التسليم.</div>;
+  if (!x) return <div className="dr-note bad">لم يُعثر على التسليم.<Bn>ডেলিভারি পাওয়া যায়নি</Bn></div>;
   const missing = [!sent.sweater && "سويتر", !sent.ops && "العمليات"].filter(Boolean);
   const finish = force => { if (missing.length && !force) return setWarn(true); done("حُفظ الاستلام والتوزيع ✓ · সম্পন্ন"); };
   const Card = ({ kind, ar, bn }) => <section className="dr-card g-card">
     <div className="dr-row"><h2 className="dr-grow">{ar}<Bn>{bn}</Bn></h2>{sent[kind] && <span className="dr-pill ok">✓ تم</span>}</div>
     <pre className="dr-msg" dir="auto">{msgs[kind]}</pre>
     {copied === kind && <div className="dr-note ok" role="status">تم النسخ · কপি হয়েছে</div>}
-    {copied === "fail:" + kind && <div className="dr-note bad" role="status">تعذّر النسخ — حدّد النص وانسخه يدوياً</div>}
+    {copied === "fail:" + kind && <div className="dr-note bad" role="status">تعذّر النسخ — حدّد النص وانسخه يدوياً<Bn>কপি হয়নি — নিজে কপি করুন</Bn></div>}
     <div className="dr-btns"><button className="g-btn block" onClick={() => copy(kind)}>نسخ<Bn>কপি</Bn></button>
       <button className="g-btn primary block dr-wa" onClick={() => open(kind)}>إرسال واتساب<Bn>পাঠান</Bn></button></div>
   </section>;

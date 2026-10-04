@@ -58,7 +58,7 @@ export async function loadAdmin() {
 async function uploadPhoto(path, blob) {
   const s = await session();
   const r = await fetch(`${SUPA_URL}/storage/v1/object/${BUCKET}/${path}`, { method: "POST", headers: { Authorization: `Bearer ${s.access_token}`, apikey: SUPA_ANON, "Content-Type": "image/jpeg", "x-upsert": "false" }, body: blob });
-  if (!r.ok) { let m = "HTTP " + r.status; try { const j = await r.json(); m = j.message || j.error || m; } catch { /* */ } throw new Error(m); }
+  if (!r.ok) { let m = "HTTP " + r.status; try { const j = await r.json(); m = j.message || j.error || m; } catch { /* */ } throw Object.assign(new Error(m), { status: r.status }); }
   return path;
 }
 
@@ -74,7 +74,8 @@ export async function photoUrl(path) {
 
 // حفظ الاستلام: المندوب (جديد أو موجود) ← رفع الصور ← التسليم ← الأسطر
 // f: {received_at, courier_id | newCourier{name,phone}, qty{[item]:n}, towels_returned, photos:[File], note}
-export async function createDelivery({ empId, operatorId, couriers }, f, onStep) {
+// cache {id, done: Map<File, path>}: إعادة المحاولة بعد فشل صورة تكمل من حيث توقفت (نفس المعرّف ونفس الصور المرفوعة)
+export async function createDelivery({ empId, operatorId, couriers }, f, onStep, cache) {
   const step = t => onStep && onStep(t);
   let courierId = f.courier_id;
   if (!courierId) {
@@ -91,11 +92,19 @@ export async function createDelivery({ empId, operatorId, couriers }, f, onStep)
       } else courierId = r.data.id;
     }
   }
-  const id = uuid(), paths = [];
+  const c = cache || {};
+  if (!c.id) c.id = uuid();
+  if (!c.done) c.done = new Map();
+  const id = c.id, paths = [];
   for (let i = 0; i < f.photos.length; i++) {
     step("photo" + (i + 1));
-    const blob = await compressImage(f.photos[i]);
-    paths.push(await uploadPhoto(`${id}/${i + 1}-${Date.now()}.jpg`, blob));
+    let p = c.done.get(f.photos[i]);
+    if (!p) {
+      try { const blob = await compressImage(f.photos[i]); p = await uploadPhoto(`${id}/${i + 1}-${Date.now()}.jpg`, blob); }
+      catch (e) { const er = e instanceof Error ? e : Object.assign(new Error(String((e && e.message) || e)), e || {}); er.photo = i + 1; throw er; }
+      c.done.set(f.photos[i], p);
+    }
+    paths.push(p);
   }
   step("save");
   const d = await supabase.from("daily_deliveries").insert({ id, operator_id: operatorId, received_by: empId, courier_id: courierId, received_at: new Date(f.received_at).toISOString(),

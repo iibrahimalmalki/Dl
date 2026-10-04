@@ -57,4 +57,17 @@ ok('«نعم مع ملاحظة» بلا الصور الخمس ⇒ مرفوض',/�
 ok('«نعم مع ملاحظة» مكتمل ⇒ مقبول و items_ok = false',V({...good,received:noteBox})===null&&H.itemsOk(allc,noteBox,ids)===false&&H.receivedRecord(noteBox).box===true&&H.receivedRecord(noteBox).box_note==='ليس أصلياً');
 ok('السجل القديم يُعرض كما حُفظ (بلا «اللوحة مركّبة» و«الاستمارة»)، والجديد بالبندين',!H.checklistOf(legacy.checklist).some(c=>c.id==='plate_on'||c.id==='papers')&&H.checklistOf({}).some(c=>c.id==='papers')&&!H.checklistOf({}).some(c=>c.id==='plate'));
 ok('تنبيه 3 بنود غير سليمة فأكثر',H.badChecksConfirm(2)===null&&/حدّدت 3 بنود/.test(H.badChecksConfirm(3)));
+// النموذج بالخطوات
+{const allOk=Object.fromEntries(H.CHECKLIST.map(c=>[c.id,true]));
+const F={odometer:'٢٤',photos:{...bike,...box},checks:allOk,received:yes,pledge:true};
+ok('سبع خطوات، وصور الصندوق تُتخطّى عند «لا»',H.HANDOVER_STEPS.length===7&&H.stepSkipped(4,{received:{...yes,box:false}})&&!H.stepSkipped(4,{received:yes})&&!H.stepSkipped(4,{received:{...yes,box:'note'}}));
+ok('التالي من المستلَمات يقفز إلى الملاحظات عند «لا» للصندوق',H.stepMove(3,1,{received:{...yes,box:false}})===5&&H.stepMove(5,-1,{received:{...yes,box:false}})===3&&H.stepMove(3,1,{received:yes})===4);
+ok('العدّاد بأرقام عربية مقبول',H.stepError(0,F)===null&&H.odoNum('٢٤ كم')==='24'&&H.odoNum('১৬২')==='162');
+ok('بند تحقق بلا إجابة ⇒ خطأ بجانب البند نفسه',(()=>{const e=H.stepError(2,{...F,checks:{...allOk,oil:undefined}});return e&&e.field==='ck_oil'&&e.ar&&e.bn;})());
+ok('لا اختيار مبدئي: قائمة فارغة ⇒ خطأ على أول بند',H.stepError(2,{...F,checks:{}}).field==='ck_engine');
+ok('صورة ناقصة ⇒ الحقل ph_left',H.stepError(1,{...F,photos:{...F.photos,left:null}}).field==='ph_left');
+ok('مفتاح بنعم بلا عدد ⇒ خطأ',H.stepError(3,{...F,received:{...yes,bike_keys:null}}).field==='rc_bike_key');
+ok('التعهّد في خطوة المراجعة',H.stepError(6,{...F,pledge:false}).field==='pledge');
+ok('firstStepError يعيد أول خطوة ناقصة ويتخطّى الصندوق عند «لا»',H.firstStepError(F)===null&&H.firstStepError({...F,photos:bike,received:{...yes,box:false,reasons:{box:'x'}}})===null&&H.firstStepError({...F,photos:{...bike,odometer:null}}).i===0);
+ok('رسائل الخطوات بلا نص تقني وبلغتين',[0,1,2,3,4,6].every(i=>{const e=H.stepError(i,{odometer:'',photos:{},checks:{},received:{box:true},pledge:false});return !e||(e.ar&&e.bn&&!/[A-Za-z]/.test(e.ar+e.bn));}));}
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

@@ -27,6 +27,7 @@ const Vendors=lazy(()=>import("./Vendors"));
 const Supply=lazy(()=>import("./Supply"));
 const SupplyRequests=lazy(()=>import("./SupplyRequests"));
 const Custody=lazy(()=>import("./Custody"));
+const UiKitPage=lazy(()=>import("./UiKitPage"));
 const Renewals=lazy(()=>import("./Renewals"));
 const Fleet=lazy(()=>import("./Fleet"));
 const SweaterPricing=lazy(()=>import("./SweaterPricing"));
@@ -91,7 +92,7 @@ const NAV=[
 const TITLES={daily:["الاستلام اليومي","شحنات مندوب سويتر · التوزيع على البايكرز · الأرصدة"],academy:["أكاديمية التدريب","تقدّم البايكرز في الأكاديمية · التقييم العملي · مكتبة الفيديو"],dashboard:["الرئيسية","نظرة عامة على الأداء"],job_ad:["إعلان التوظيف","تحرير الإعلان العام · فتح/إغلاق التوظيف · مشاركة الرابط"],recruitment:["المتقدّمون","إدارة الطلبات والقبول"],employees:["الموظفون","فريق العمل وملفاتهم"],reports:["مركز التقارير","المالية والتشغيل والامتثال والتوظيف — بفلاتر وتصدير"],interviews:["المقابلات","جلسات الأسئلة والتقييم"],sourcing:["معايير الاستقطاب","نموذج المناطق البنغلاديشي v2.0"],org:["الهيكل التنظيمي","القطاعات والإدارات والصلاحيات والتصعيد"],vendors:["الموردون","الصيانة والقطع والدراجات والسكن ومصروفاتها"],supply:["سلاسل الإمداد","المخزون والطلبات والاستلام والعُهد والجرد"],supply_requests:["طلبات الإمداد والتصعيد","نواقص الجولات — رقم مرجعي · عدّاد مهلة 24 ساعة · تصعيد واتساب/إيميل · اكتمال"],custody:["العُهد والإهلاك","عُهد البايكرز — تواريخ بداية/نهاية · احتساب الإهلاك · تخطيط شراء الدراجات وإعادة طلب المستهلكات"],fleet:["الأسطول والحوادث","سجل المركبات والتتبّع والكاميرات والمفاتيح وحوادث السرقة والأعطال"],offboarding:["إنهاء الخدمة","مخالصة المغادرة — عُهد ودراجة وسكن وتسوية ووثائق وحساب"],incidents:["الحوادث والجزاءات","عرض موحّد — مخالفات سويتر ومخالفات السكن وحوادث الأسطول"],audit:["سجل التدقيق","من غيّر ماذا ومتى — مقصور على المالك"],housing:["السكن والإقامة","الوحدات والساكنون وجدول الدفعات ومخالفات السكن"],renewals:["الوثائق والتجديدات","متابعة صلاحية التأمين والاستمارات والرخص والإقامات"],onboarding:["التعاقد والإعداد","تجهيز البايكر الجديد — 30 بنداً"],operations:["العمليات اليومية","تقارير سويتر والغسلات"],performance:["الأداء","بطاقات أداء الفريق الشهرية"],close:["الإقفال الشهري","استيراد ملفات سويتر · المطابقة · التسوية · الرواتب · الإقفال"],payroll:["الرواتب","كشوف ومكافآت الفريق"],pricing:["المقابل والتسعير","نموذج غسلات سويتر — الشرائح وحاسبة المقابل الشهري"],settlement:["تسوية سويتر","احتساب المستحق الشهري لكل بايكر ومطابقته بالفاتورة"],reconciliation:["مطابقة/مطالبة سويتر","مطابقة تقارير سويتر بالعقد ومتابعة المطالبة عن الطلبات غير المُحتسَبة"],damage_claims:["دعاوى ضرر العملاء","تسجيل حالات ضرر مركبات العملاء وتحميلها على البايكر بعد التحقيق — خصم ≤50% من الراتب"],complaints:["الشكاوى والمخالفات","كتالوج سويتر ونوافذ الاعتراض"],field_rounds:["الجولات الميدانية","لائحة الالتزام — 15 بنداً"],myteam:["فريقي","البايكرز تحت إشرافك"],users:["المستخدمون","الحسابات والصلاحيات"],tma:["المواهب TMA","نموذج المواهب — 22 محركاً · مقصور على المالك"],gosi:["تأمينات GOSI","الرصيد المستحق وخطة التقسيط والسجل الشهري وتنبيه الاستحقاق"]};
 
 export default function Shell({onLogout,me}){
-  const[view,setView]=useState("dashboard");
+  const[view,setView]=useState(()=>window.location.hash==="#ui-kit"?"ui_kit":"dashboard");
   const[open,setOpen]=useState(false);
   const[ops,setOps]=useState([]);const[op,setOp]=useState("all");
   const[menu,setMenu]=useState(false);
@@ -170,6 +171,7 @@ export default function Shell({onLogout,me}){
         {view==="field_rounds"&&<Suspense fallback={<Sk/>}><FieldRounds opId={op} onGo={go}/></Suspense>}
         {view==="supply_requests"&&<Suspense fallback={<Sk/>}><SupplyRequests owner={owner} opId={op}/></Suspense>}
         {view==="custody"&&<Suspense fallback={<Sk/>}><Custody owner={owner} opId={op}/></Suspense>}
+        {view==="ui_kit"&&owner&&<Suspense fallback={<Sk/>}><UiKitPage/></Suspense>}
         {view==="myteam"&&<Suspense fallback={<Sk/>}><MyTeam/></Suspense>}
         {view==="daily"&&<Suspense fallback={<Sk/>}><DailyAdmin me={me} owner={owner}/></Suspense>}
         {view==="academy"&&<Suspense fallback={<Sk/>}><AcademyAdmin me={me} owner={owner}/></Suspense>}

@@ -9,7 +9,9 @@ import ChartTip from "./ChartTip";
 import GlassSidebar from "./GlassSidebar";
 import BottomNav from "./BottomNav";
 import { useTheme } from "./theme";
-import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, validateHandover, receivedRecord, itemsOk, badChecksConfirm } from "./handover";
+import { humanError, normalizeId, adminWaLink, ADMIN_WA } from "./errors";
+import { KitStyle, Btn, ErrorNote, FieldErr, UploadBar, Skel, StickyBar, NetBar, OfflineHint, useOnline, useConfirm, useKeyboardOpen, loadDraft, saveDraft, Bn } from "./uiKit";
+import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, receivedRecord, itemsOk, HANDOVER_STEPS, stepError, firstStepError, stepMove, stepSkipped, boxNeeded, odoNum } from "./handover";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
 const DailyReceive = lazy(() => import("./daily/DailyReceive"));
@@ -159,6 +161,35 @@ const CSS = `
 .bp-rcv-n{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12.5px;font-weight:700;color:var(--ink-2)}.bp-rcv-n .bp-seg{flex:1}.bp-rcv-n .bp-seg button{min-height:44px}
 .bp-mks{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
 .bp-mk{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--soft);color:var(--mut)}.bp-mk.ok{background:var(--ok-bg);color:var(--ok-ink)}.bp-mk.bad{background:var(--bad-bg);color:var(--bad-ink)}
+.bp-pw{position:relative}.bp-pw input{padding-left:84px!important}
+.bp-eye{position:absolute;top:50%;transform:translateY(-50%);left:4px;min-width:72px;min-height:44px;border:none;background:transparent;color:var(--p-ink);font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;line-height:1.2;border-radius:10px}
+.bp-eye .bn{display:block;font-size:10.5px;font-weight:600}
+.bp-eye:focus-visible{outline:none;box-shadow:var(--glow)}
+.bp-stack{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.bp-start{border:2px solid rgba(var(--p-rgb),.45)}
+.bp-eyebrow{font-size:11.5px;font-weight:800;color:var(--p-ink);letter-spacing:.2px}
+.bp-start-t{display:flex;align-items:center;gap:10px;margin-top:6px}.bp-start-t>span{font-size:28px}.bp-start-t b{display:block;font-size:17px;font-weight:900;color:var(--ink)}.bp-start-t .bn{display:block;font-size:12.5px;color:var(--mut);font-weight:600}
+.bp-free{overflow:visible}
+.bp-wiz-top{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px}
+.bp-wiz-top .g-btn{min-height:44px;padding:6px 14px}
+.bp-wiz-n{font-size:13px;font-weight:900;color:var(--mut);direction:ltr;unicode-bidi:isolate}
+.bp-dots{display:flex;gap:5px;justify-content:center;margin:8px 0 4px}.bp-dots i{width:8px;height:8px;border-radius:50%;background:var(--line-2)}.bp-dots i.done{background:var(--ok)}.bp-dots i.now{background:var(--p);width:20px;border-radius:6px}
+.bp-wiz-h{font-size:19px;font-weight:900;margin:8px 0 10px;color:var(--ink);line-height:1.4}.bp-wiz-h .bn{display:block;font-size:13.5px;font-weight:600;color:var(--mut)}
+.bp-ck2{padding:10px 12px;border-bottom:1px solid var(--line);background:var(--glass-2)}.bp-ck2:last-child{border-bottom:none}
+.bp-ck2-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:48px}
+.bp-ck2-h .tx{flex:1;min-width:130px;font-size:14px;font-weight:800;color:var(--ink-2);line-height:1.4}.bp-ck2-h .tx .bn{display:block;font-size:11.5px;font-weight:600;color:var(--mut)}
+.bp-ok2{display:flex;gap:6px;flex:none}
+.bp-ok2 button{min-width:84px;min-height:48px;padding:6px 8px;border-radius:11px;border:1px solid var(--line-2);background:var(--glass-3);color:var(--ink-2);font:inherit;font-size:13px;font-weight:800;cursor:pointer;line-height:1.3}
+.bp-ok2 button .bn{display:block;font-size:10.5px;font-weight:600}
+.bp-ok2 button.on.yes{background:var(--ok);border-color:var(--ok);color:#fff}.bp-ok2 button.on.no{background:var(--bad);border-color:var(--bad);color:#fff}
+.bp-ok2 button:focus-visible{outline:none;box-shadow:var(--glow)}
+.bp-rev{border:1px solid var(--line-2);border-radius:12px;overflow:hidden}
+.bp-rev-r{display:grid;grid-template-columns:minmax(0,38%) minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);font-size:13px;min-height:48px}.bp-rev-r:last-child{border-bottom:none}
+.bp-rev-r .l{color:var(--mut);font-weight:700}.bp-rev-r b{color:var(--ink);overflow-wrap:anywhere}
+.bp-rev-r .g-btn{min-height:44px;padding:4px 10px;font-size:13px}
+.bp-chk.pledge{min-height:48px;cursor:pointer}.bp-chk.pledge input{width:26px;height:26px;margin-top:2px}
+.bp-thumb{position:relative;display:inline-block}.bp-thumb button{position:absolute;top:-6px;inset-inline-start:-6px;width:28px;height:28px;border-radius:50%;border:none;background:rgba(10,14,39,.78);color:#fff;font-size:16px;cursor:pointer;line-height:1}
+.bp-thumb button::after{content:"";position:absolute;inset:-8px}
 .bp-ntf.un{border-color:rgba(var(--p-rgb),.45);background:var(--p-50)}
 `;
 
@@ -223,7 +254,7 @@ const CONDITIONS = [
 ];
 
 function idToEmail(v) {
-  const t = (v || "").trim();
+  const t = normalizeId(v);
   if (/^\d+$/.test(t)) return `biker${t}@dalu.sa`;
   return `biker.${t.toLowerCase()}@dalu.sa`;
 }
@@ -232,36 +263,49 @@ function idToEmail(v) {
 function Login() {
   const [bid, setBid] = useState("");
   const [pw, setPw] = useState("");
+  const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const [fe, setFe] = useState(null);   // خطأ تحقق بجانب الحقل
+  const [err, setErr] = useState(null); // humanError
   async function go() {
-    setErr("");
-    if (!bid || !pw) { setErr("أدخل رقم البايكر والرقم السري · নম্বর ও পাসওয়ার্ড দিন"); return; }
-    setBusy(true);
+    setErr(null); setFe(null);
+    const id = normalizeId(bid), p = normalizeId(pw); // بلا مسافات، وبأرقام لاتينية
+    if (!id) { setFe({ f: "bid", ar: "اكتب رقم البايكر أو اسم المستخدم.", bn: "বাইকার নম্বর বা ইউজারনেম লিখুন।" }); return; }
+    if (!p) { setFe({ f: "pw", ar: "اكتب كلمة المرور.", bn: "পাসওয়ার্ড লিখুন।" }); return; }
+    setBid(id); setBusy(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email: idToEmail(bid), password: pw });
-      if (error) { setErr("رقم البايكر أو الرقم السري غير صحيح · নম্বর বা পাসওয়ার্ড ভুল"); setBusy(false); return; }
-    } catch (e) { setErr("تعذّر الدخول · লগইন ব্যর্থ: " + (e.message || e)); setBusy(false); }
+      const { error } = await supabase.auth.signInWithPassword({ email: idToEmail(id), password: p });
+      if (error) setErr(humanError(error));
+    } catch (e) { setErr(humanError(e)); }
+    setBusy(false);
   }
+  const online = useOnline();
   return (
-    <div className="bp-wrap"><style>{CSS}</style><Chrome />
+    <div className="bp-wrap"><style>{CSS}</style><KitStyle /><Chrome /><NetBar />
       <div className="bp-card g-card" style={{ maxWidth: 380, marginTop: "8vh" }}>
-        <div className="bp-sec" style={{ textAlign: "center", padding: "30px 24px" }}>
+        <form className="bp-sec" style={{ textAlign: "center", padding: "30px 24px" }} onSubmit={e => { e.preventDefault(); go(); }} noValidate>
           <div className="bp-logo">
             <img src="/brand-mark.png" alt="" onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.parentNode.append("🪣"); }} />
           </div>
-          <div style={{ fontSize: 20, fontWeight: 900, color: "var(--ink)" }}>بوابة البايكر</div>
+          <h1 style={{ fontSize: 20, fontWeight: 900, color: "var(--ink)", margin: 0 }}>بوابة البايكر</h1>
           <div className="bn" style={{ fontSize: 12.5, color: "var(--mut)", fontWeight: 700, marginTop: 2, marginBottom: 4 }}>বাইকার পোর্টাল — দলু ওয়ারঘওয়া</div>
-          <div style={{ fontSize: 12, color: "var(--mut)", marginBottom: 6 }}>سجّل الدخول برقمك · আপনার নম্বর দিয়ে লগইন করুন</div>
 
-          <label className="bp-lbl" style={{ textAlign: "right" }}>رقم البايكر <span className="bn">/ বাইকার নম্বর</span></label>
-          <input className="g-input bp-in" inputMode="text" value={bid} onChange={e => setBid(e.target.value)} placeholder="1624" />
-          <label className="bp-lbl" style={{ textAlign: "right" }}>الرقم السري <span className="bn">/ পাসওয়ার্ড</span></label>
-          <input className="g-input bp-in" type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••"
-            onKeyDown={e => { if (e.key === "Enter") go(); }} />
-          <button className="bp-btn" onClick={go} disabled={busy}>{busy ? "جارٍ الدخول… · লগইন হচ্ছে…" : "دخول · প্রবেশ"}</button>
-          {err && <div className="bp-msg bp-err">{err}</div>}
-        </div>
+          <label className="bp-lbl" style={{ textAlign: "right" }} htmlFor="lg_id">رقم البايكر أو اسم المستخدم <span className="bn" style={{ display: "block" }}>বাইকার নম্বর বা ইউজারনেম</span></label>
+          <input id="lg_id" className={"g-input bp-in" + (fe && fe.f === "bid" ? " k-inv" : "")} inputMode="text" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="username"
+            value={bid} onChange={e => setBid(e.target.value)} onBlur={() => setBid(v => normalizeId(v))} placeholder="1624 أو abed" aria-describedby="lg_id_e" dir="ltr" style={{ textAlign: "right" }} />
+          {fe && fe.f === "bid" && <FieldErr id="lg_id_e" t={fe} />}
+          <label className="bp-lbl" style={{ textAlign: "right" }} htmlFor="lg_pw">كلمة المرور <span className="bn" style={{ display: "block" }}>পাসওয়ার্ড</span></label>
+          <div className="bp-pw">
+            <input id="lg_pw" className={"g-input bp-in" + (fe && fe.f === "pw" ? " k-inv" : "")} type={show ? "text" : "password"} autoComplete="current-password" autoCapitalize="none" autoCorrect="off"
+              value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••" aria-describedby="lg_pw_e" dir="ltr" />
+            <button type="button" className="bp-eye" onClick={() => setShow(v => !v)} aria-pressed={show} aria-label={show ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}>{show ? "إخفاء" : "إظهار"}<span className="bn">{show ? "লুকান" : "দেখান"}</span></button>
+          </div>
+          {fe && fe.f === "pw" && <FieldErr id="lg_pw_e" t={fe} />}
+          <Btn type="submit" kind="primary" block big busy={busy} disabled={!online} style={{ marginTop: 18 }} bn={busy ? "লগইন হচ্ছে…" : "প্রবেশ"}>{busy ? "جارٍ الدخول…" : "دخول"}</Btn>
+          {!online && <OfflineHint />}
+          {err && <div style={{ marginTop: 12, textAlign: "right" }}><ErrorNote e={err} onRetry={go} /></div>}
+          {!err && <a className="g-btn k-btn ghost block" style={{ marginTop: 10 }} href={adminWaLink("LOGIN-HELP")} target="_blank" rel="noopener noreferrer">نسيت كلمة المرور؟ تواصل مع الإدارة<span className="k-bn">পাসওয়ার্ড ভুলে গেছেন? ম্যানেজমেন্টকে লিখুন</span></a>}
+        </form>
       </div>
     </div>
   );
@@ -274,7 +318,7 @@ export default function BikerPortal() {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => { try { sub.subscription.unsubscribe(); } catch (e) {} };
   }, []);
-  if (session === undefined) return <div className="bp-wrap"><style>{CSS}</style><Chrome /><div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div></div>;
+  if (session === undefined) return <div className="bp-wrap"><style>{CSS}</style><KitStyle /><Chrome /><Skel /></div>;
   if (!session) return <Login />;
   return <Portal />;
 }
@@ -293,15 +337,18 @@ function Portal() {
   useEffect(() => { if (!me || !me.emp_id) return;
     supabase.from("daily_shares").select("id", { count: "exact", head: true }).eq("employee_id", me.emp_id).eq("status", "pending")
       .then(({ count, error }) => { if (!error) setPending(count || 0); }, () => {}); }, [me, tab]);
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [dlg, ask] = useConfirm();
+  useKeyboardOpen();
 
   useEffect(() => { (async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setErr("الرجاء تسجيل الدخول · অনুগ্রহ করে লগইন করুন"); return; }
+      if (!user) { setErr(humanError({ status: 401, message: "session missing" })); return; }
       const { data: au } = await supabase.from("app_users")
         .select("biker_employee_id,display_name,operator_id,position").eq("id", user.id).single();
-      if (!au || !au.biker_employee_id) { setErr("هذا الحساب غير مرتبط ببايكر · এই অ্যাকাউন্ট বাইকারের সাথে যুক্ত নয়"); return; }
+      if (!au || !au.biker_employee_id) { setErr({ key: "nolink", code: "E-LINK", action: "whatsapp", ar: "هذا الحساب غير مرتبط برقم بايكر، فلا يمكن فتح البوابة. تواصل مع الإدارة لربطه.", bn: "এই অ্যাকাউন্ট কোনো বাইকার নম্বরের সাথে যুক্ত নয়। ম্যানেজমেন্টকে জানান।" }); return; }
       const m = { uid: user.id, biker_employee_id: au.biker_employee_id, name: au.display_name, operator_id: au.operator_id };
       // ربط رقم البايكر بمعرّف الموظف (uuid) المستخدم في الأسطول
       const { data: emp } = await supabase.from("employees").select("id,full_name").eq("employee_id", au.biker_employee_id).maybeSingle();
@@ -320,20 +367,26 @@ function Portal() {
         setMyBike(b);
         setTemp(!!(b && b.held_by === empId && b.biker_employee_id !== empId));
       }
-    } catch (e) { setErr("تعذّر تحميل البيانات · ডেটা লোড ব্যর্থ: " + (e.message || e)); }
-  })(); }, []);
+    } catch (e) { setErr(humanError(e)); }
+  })(); }, [reloadKey]);
 
-  if (err) return <div className="bp-wrap"><style>{CSS}</style><Chrome /><div className="bp-card g-card"><div className="bp-sec"><div className="bp-msg bp-err">{err}</div><button className="bp-btn" onClick={() => supabase.auth.signOut()}>خروج · লগআউট</button></div></div></div>;
-  if (!me) return <div className="bp-wrap"><style>{CSS}</style><Chrome /><div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div></div>;
+  if (err) return <div className="bp-wrap"><style>{CSS}</style><KitStyle /><Chrome /><NetBar /><div className="bp-card g-card"><div className="bp-sec">
+    <ErrorNote e={err} onRetry={() => { setErr(null); setReloadKey(x => x + 1); }} onLogin={() => supabase.auth.signOut()} />
+    <Btn kind="text" block style={{ marginTop: 10 }} onClick={() => supabase.auth.signOut()} bn="লগআউট">خروج</Btn></div></div></div>;
+  if (!me) return <div className="bp-wrap"><style>{CSS}</style><KitStyle /><Chrome /><NetBar /><Skel /></div>;
 
-  // التنقّل: نموذج فيه مدخلات يطلب تأكيداً قبل مغادرته
-  const go = k => {
+  // التنقّل: نموذج فيه صور غير محفوظة يطلب تأكيداً (باقي المدخلات محفوظة في المسودة)
+  const go = async k => {
     if (k === tab) { setOpen(false); return; }
-    if (dirty.current && !window.confirm("ستفقد ما أدخلته · যা লিখেছেন তা হারাবে")) return;
+    if (dirty.current) {
+      setOpen(false);
+      const ok = await ask({ title: "مغادرة النموذج؟", titleBn: "ফর্ম ছেড়ে যাবেন?", ar: "الصور التي التقطتها ستضيع، أما باقي مدخلاتك فمحفوظة وتعود حين ترجع.", bn: "তোলা ছবিগুলো হারাবে, বাকি তথ্য সংরক্ষিত থাকবে।", ok: "مغادرة", okBn: "চলে যান", cancel: "البقاء", cancelBn: "থাকুন" });
+      if (!ok) return;
+    }
     dirty.current = false; setTab(k); setOpen(false); try { window.scrollTo(0, 0); } catch (e) { /* */ }
   };
   const badges = { handover: myBike && myBike.needs_receipt_update ? 1 : 0, daily: pending };
-  const loading = <div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div>;
+  const loading = <Skel />;
   const setDirty = v => { dirty.current = !!v; };
   const tempCard = temp && myBike && (
     <div className="bp-card g-card" style={{ marginBottom: 14 }}>
@@ -347,7 +400,7 @@ function Portal() {
 
   return (
     <div className="bp-wrap bp-shell">
-      <style>{CSS}</style><Orbs />
+      <style>{CSS}</style><KitStyle /><Orbs /><NetBar />{dlg}
       <GlassSidebar items={BP_NAV} active={tab} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={theme} noSettings
         user={{ name: me.name, role: "بايكر · " + me.biker_employee_id }} onLogout={() => supabase.auth.signOut()}
         platform={{ name: opName, subtitle: "بوابة البايكر · বাইকার পোর্টাল" }} />
@@ -378,18 +431,7 @@ function Portal() {
               <div className="bp-pcell"><div className="k">رقم البايكر · নম্বর</div><div className="v">{me.biker_employee_id}</div></div>
               <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div></div>
             </div>
-            {myBike && myBike.needs_receipt_update && (
-              <div className="bp-card g-card" style={{ marginBottom: 14 }}>
-                <div className="bp-sec" style={{ padding: "12px 16px" }}>
-                  <div className="bp-msg bp-err" style={{ margin: 0 }}>
-                    <span className="g-badge warn" style={{ marginBottom: 6 }}><i />مطلوب · <span className="bn" style={{ display: "inline" }}>প্রয়োজন</span></span><br />
-                    ⚠️ مطلوب تحديث الاستلام: افتح «الدراجة» وسجّل استلامًا فعليًا بقراءة العدّاد والصور.
-                    <span className="bn" style={{ display: "block" }}>রিসিট আপডেট প্রয়োজন: «বাইক» খুলে প্রকৃত ওডোমিটার ও ছবিসহ গ্রহণ রেকর্ড করুন।</span>
-                  </div>
-                  <button className="bp-btn bp-call" onClick={() => go("handover")}>🏍️ افتح الدراجة · <span className="bn" style={{ display: "inline" }}>বাইক খুলুন</span></button>
-                </div>
-              </div>
-            )}
+            <StartHere me={me} myBike={myBike} pending={pending} onGo={go} />
             {tempCard}
             <Profile me={me} myBike={myBike} onGo={go} />
           </>}
@@ -429,7 +471,7 @@ function MyPerf({ me }) {
     if (denied.length) console.warn("BikerPortal/أدائي — رُفضت القراءة من:", denied.join(", "));
     setSt({ loading: false, scores, denied });
   })(); }, [me.biker_employee_id]);
-  if (st.loading) return <div className="bp-card g-card"><div className="bp-sec" style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div></div>;
+  if (st.loading) return <Skel rows={4} />;
   if (st.denied.includes("ops_biker_month")) return <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>سيُفعَّل قريباً · <span className="bn">শীঘ্রই চালু হবে</span></b><p>صفحة أدائك قيد التفعيل. · আপনার কাজের পাতা শীঘ্রই চালু হবে।</p></div></div></div>;
   if (!st.scores.length) return <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>لا بيانات أداء بعد · <span className="bn">এখনও কোনো তথ্য নেই</span></b><p>تظهر أرقامك بعد رفع تقرير سويتر الشهري. · মাসিক রিপোর্ট আপলোডের পর আপনার তথ্য দেখা যাবে।</p></div></div></div>;
   return (<>{st.scores.map((s, i) => { const L = pLabel(s.period); const hAr = nextHints(s, "ar"), hBn = nextHints(s, "bn"); return (
@@ -458,7 +500,6 @@ function MyPerf({ me }) {
 }
 
 /* ================= وثائقي ================= */
-const ADMIN_WA = "966566884419";
 function Docs({ me }) {
   const [docs, setDocs] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -513,7 +554,7 @@ function Docs({ me }) {
       </div></div>}
       <div className="bp-card g-card"><div className="bp-sec">
         <label className="bp-lbl" style={{ marginTop: 0 }}>وثائقي <span className="bn">/ আমার কাগজপত্র</span></label>
-        {docs === null ? <div style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--mut)" }}><div className="g-spin" />جارٍ التحميل… · <span className="bn">লোড হচ্ছে…</span></div>
+        {docs === null ? <Skel rows={2} card={false} />
         : docs.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا وثائق مسجّلة · <span className="bn">কোনো কাগজপত্র নেই</span></b></div>
         : docs.map(d => { const st = docStatus(d._d); return (
           <div className="bp-doc" key={d.id}>
@@ -539,6 +580,26 @@ function StatusBadge({ s }) {
     : <span className="g-badge info"><i />مُرسل · <span className="bn">জমা দেওয়া</span></span>;
 }
 
+/* ================= ابدأ من هنا: الخطوة التالية المطلوبة فقط ================= */
+// الترتيب: استلام الدراجة (إن كان مطلوباً) ← الأكاديمية (إن لم تكتمل) ← نصيب اليوم (إن وُجد)
+function StartHere({ me, myBike, pending, onGo }) {
+  const [acad, setAcad] = useState(undefined);
+  useEffect(() => { if (!me.emp_id) { setAcad(null); return; } let on = true;
+    import("./academy/status").then(m => m.academyStatus(me.emp_id)).then(a => { if (on) setAcad(a); }, () => { if (on) setAcad(null); });
+    return () => { on = false; }; }, [me.emp_id]);
+  let st = null;
+  if (myBike && myBike.needs_receipt_update) st = { k: "handover", ic: "🏍️", ar: "سجّل استلام دراجتك", bn: "আপনার বাইক গ্রহণ রেকর্ড করুন", sub: "قراءة العدّاد والصور في 7 خطوات قصيرة.", subBn: "ওডোমিটার ও ছবি — ৭টি ছোট ধাপে।", b: "افتح الدراجة", bBn: "বাইক খুলুন" };
+  else if (acad && acad.ready && !acad.certified) st = { k: "academy", ic: "🎓", ar: "أكمل الأكاديمية", bn: "একাডেমি শেষ করুন", sub: `أنجزت ${acad.done || 0} محطات. أكمل المحطة التالية.`, subBn: `${acad.done || 0}টি ধাপ শেষ। পরের ধাপ করুন।`, b: "افتح الأكاديمية", bBn: "একাডেমি খুলুন" };
+  else if (pending > 0) st = { k: "daily", ic: "📦", ar: "أكّد نصيبك اليوم", bn: "আজকের ভাগ নিশ্চিত করুন", sub: "زميلك سلّمك نصيباً من الشحنة، أكّد أنه وصلك.", subBn: "আপনার ভাগ এসেছে, নিশ্চিত করুন।", b: "افتح الاستلام", bBn: "ডেলিভারি খুলুন" };
+  if (!st) return null;
+  return <div className="bp-card g-card bp-start"><div className="bp-sec">
+    <span className="bp-eyebrow">ابدأ من هنا · <span className="bn" style={{ display: "inline" }}>এখান থেকে শুরু করুন</span></span>
+    <div className="bp-start-t"><span aria-hidden="true">{st.ic}</span><div><b>{st.ar}</b><span className="bn">{st.bn}</span></div></div>
+    <div className="bp-note" style={{ marginTop: 4 }}>{st.sub}<span className="bn" style={{ display: "block" }}>{st.subBn}</span></div>
+    <Btn kind="primary" block big style={{ marginTop: 12 }} onClick={() => onGo(st.k)} bn={st.bBn}>{st.b}</Btn>
+  </div></div>;
+}
+
 /* ================= ملفي ================= */
 function Profile({ me, myBike, onGo }) {
   const [ho, setHo] = useState(0);
@@ -561,8 +622,8 @@ function Profile({ me, myBike, onGo }) {
       </div>
 
       <label className="bp-lbl" style={{ marginTop: 14 }}>النماذج <span className="bn">/ ফর্মসমূহ</span></label>
-      <button className="bp-btn" style={{ marginTop: 6 }} onClick={() => onGo("handover")}>📋 تسليم / استلام الدراجة · বাইক হস্তান্তর / গ্রহণ</button>
-      <button className="bp-btn" onClick={() => onGo("fuel")}>⛽ تسجيل تعبئة وقود · জ্বালানি রেকর্ড</button>
+      <div className="bp-stack"><Btn kind="secondary" block onClick={() => onGo("handover")} bn="বাইক হস্তান্তর / গ্রহণ">📋 تسليم / استلام الدراجة</Btn>
+      <Btn kind="secondary" block onClick={() => onGo("fuel")} bn="জ্বালানি রেকর্ড">⛽ تسجيل تعبئة وقود</Btn></div>
       <div className="bp-note">التوثيق المنتظم يحمي حقّك ويوضّح التزامك. · নিয়মিত ডকুমেন্টেশন আপনার অধিকার রক্ষা করে।</div>
     </div></div>
   );
@@ -590,66 +651,84 @@ function PhotoBox({ id, cap, capBn, tag, file, onPick }) {
 
 /* رسالة عدم وجود دراجة مخصّصة */
 function NoBike() {
-  return (
-    <div className="bp-card g-card"><div className="bp-sec">
-      <div className="bp-msg bp-err">لا توجد دراجة مخصّصة لك حالياً — يرجى مراجعة الإدارة.<br />বর্তমানে কোনো বাইক নির্ধারিত নেই — অনুগ্রহ করে ম্যানেজমেন্টের সাথে যোগাযোগ করুন।</div>
-    </div></div>
-  );
+  return <div className="bp-card g-card"><div className="bp-sec"><ErrorNote e={humanError(null, { kind: "nobike" })} /></div></div>;
 }
 
-/* ================= تسليم/استلام ================= */
+/* ================= تسليم/استلام: سبع خطوات ================= */
+const H_DRAFT = bid => "bp.handover." + bid;
+const H_EMPTY = () => ({ step: 0, direction: "receive", odometer: "", checks: {}, ckNotes: {}, received: emptyReceived(), notes: "", pledge: false });
 function Handover({ me, myBike, onDirty }) {
-  const [direction, setDirection] = useState("receive");
-  const [odometer, setOdometer] = useState("");
-  const [checks, setChecks] = useState(() => Object.fromEntries(CHECKLIST.map(c => [c.id, true])));
-  const [ph, setPh] = useState({}); // front/back/right/left/odometer + صور الصندوق الخمس
-  const [received, setReceived] = useState(emptyReceived);
-  const [ckNotes, setCkNotes] = useState({}); // وصف قصير لكل بند غير سليم (اختياري)
-  const [report, setReport] = useState(null); // {row, saved}: تقرير مفتوح
+  const bid = me.biker_employee_id;
+  const draft0 = React.useMemo(() => loadDraft(H_DRAFT(bid)), [bid]);
+  const [f, setF] = useState(() => ({ ...H_EMPTY(), ...(draft0 || {}) }));     // كل المدخلات النصية (تُحفظ مسودةً)
+  const [ph, setPh] = useState({});          // الصور: front/back/right/left/odometer + الصندوق الخمس (لا تُحفظ في المسودة)
   const [damages, setDamages] = useState([]);
-  const [notes, setNotes] = useState("");
-  const [pledge, setPledge] = useState(false);
+  const [restored, setRestored] = useState(!!(draft0 && (draft0.odometer || Object.keys(draft0.checks || {}).length || draft0.step)));
+  const [fe, setFe] = useState(null);        // خطأ تحقق بجانب الحقل {field, ar, bn}
+  const [err, setErr] = useState(null);      // humanError عند الحفظ
   const [busy, setBusy] = useState(false);
-  const [prog, setProg] = useState(null); // {done,total}
-  const uploaded = React.useRef(new Map()); // File → رابط: عند فشل صورة لا يُعاد رفع ما نجح ولا تُفقد المدخلات
+  const [prog, setProg] = useState(null);    // {done,total}
+  const [report, setReport] = useState(null); // {row, saved}: تقرير مفتوح
+  const [recent, setRecent] = useState(null);
+  const uploaded = React.useRef(new Map());  // File → رابط: إعادة المحاولة تكمل من حيث توقفت
   const toast = useToast();
-  const [msg, setMsgRaw] = useState(null);
-  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
-  const setMsg = m => { if (m && m.t === "ok") { toast.ok(m.m); setMsgRaw(null); } else setMsgRaw(m); };
-  const [recent, setRecent] = useState([]);
-  const setP = k => f => setPh(s => ({ ...s, [k]: f }));
-  const setR = patch => setReceived(r => ({ ...r, ...patch }));
-  const recv = direction === "receive";
+  const [dlg, ask] = useConfirm();
+  const online = useOnline();
+  const set = p => setF(x => ({ ...x, ...p }));
+  const setP = k => file => { setPh(s => ({ ...s, [k]: file })); if (fe && fe.field === "ph_" + k) setFe(null); };
+  const setR = patch => { set({ received: { ...f.received, ...patch } }); if (fe && fe.field.startsWith("rc_")) setFe(null); };
+  const recv = f.direction === "receive", step = f.step, form = { ...f, photos: ph };
+  const S = HANDOVER_STEPS.length;
 
   async function loadRecent() {
-    const { data } = await supabase.from("bike_handovers")
-      .select("*").order("created_at", { ascending: false }).limit(8);
+    const { data } = await supabase.from("bike_handovers").select("*").order("created_at", { ascending: false }).limit(8);
     setRecent(data || []);
   }
   useEffect(() => { loadRecent(); }, []);
-  // مدخلات غير محفوظة ⇒ تأكيد قبل الانتقال لتبويب آخر
-  useEffect(() => { onDirty && onDirty(!!(odometer || notes || damages.length || Object.values(ph).some(Boolean) || RECEIVED_ITEMS.some(it => received[it.id] != null))); }, [odometer, notes, damages, ph, received]);
+  // المسودة: كل شيء عدا الصور، في sessionStorage
+  useEffect(() => { const empty = !f.step && !f.odometer && !Object.keys(f.checks).length && !f.notes && !f.pledge && RECEIVED_ITEMS.every(it => f.received[it.id] == null);
+    saveDraft(H_DRAFT(bid), empty ? null : f); }, [f]);
+  // الصور غير محفوظة ⇒ تأكيد قبل الانتقال لتبويب آخر
+  useEffect(() => { onDirty && onDirty(Object.values(ph).some(Boolean) || damages.length > 0); }, [ph, damages]);
   useEffect(() => () => { onDirty && onDirty(false); }, []);
 
   if (!myBike) return <NoBike />;
 
+  const focusField = id => setTimeout(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); try { el.focus({ preventScroll: true }); } catch (e) { /* */ } } }, 30);
+  const goStep = i => { setFe(null); set({ step: i }); try { window.scrollTo(0, 0); } catch (e) { /* */ } };
+  async function next() {
+    const e = stepError(step, form);
+    if (e) { setFe(e); focusField(e.field); return; }
+    if (HANDOVER_STEPS[step].k === "check") {
+      const n = CHECKLIST.filter(c => f.checks[c.id] === false).length;
+      if (n >= 3 && !(await ask({ title: "تأكيد البنود", titleBn: "নিশ্চিত করুন", ar: `حدّدت ${n} بنود غير سليمة — هل هذا صحيح؟`, bn: `আপনি ${n} টি সমস্যা চিহ্নিত করেছেন — ঠিক আছে?`, ok: "نعم، صحيح", okBn: "হ্যাঁ, ঠিক", cancel: "راجع البنود", cancelBn: "আবার দেখুন" }))) return;
+    }
+    goStep(stepMove(step, 1, form));
+  }
+  const prev = () => goStep(stepMove(step, -1, form));
+  async function cancel() {
+    if (!(await ask({ title: "مسح النموذج؟", titleBn: "ফর্ম মুছবেন?", ar: "ستُمسح كل المدخلات والصور وتبدأ من جديد.", bn: "সব তথ্য ও ছবি মুছে নতুন করে শুরু হবে।", ok: "مسح", okBn: "মুছুন", cancel: "رجوع", cancelBn: "ফিরে যান" }))) return;
+    reset();
+  }
+  function reset() { saveDraft(H_DRAFT(bid), null); setF(H_EMPTY()); setPh({}); setDamages([]); setFe(null); setErr(null); setRestored(false); uploaded.current = new Map(); }
+
   async function submit() {
-    setMsg(null);
-    const err = validateHandover({ odometer, photos: ph, received, pledge });
-    if (err) { setMsg({ t: "err", m: err }); return; }
-    const warnBad = badChecksConfirm(CHECKLIST.filter(c => !checks[c.id]).length);
-    if (warnBad && !window.confirm(warnBad)) return;
+    setErr(null);
+    const bad = firstStepError(form);
+    if (bad) { goStep(bad.i); setFe(bad.err); focusField(bad.err.field); return; }
     setBusy(true);
+    let photoNo = null;
     try {
-      const bid = me.biker_employee_id;
       const { compressImage } = await import("./daily/compress");
+      const box = boxNeeded(f.received);
       const jobs = [["front", "handover-front"], ["back", "handover-back"], ["right", "handover-right"], ["left", "handover-left"], ["odometer", "handover-odometer"],
-        ...(received.box === true || received.box === "note" ? BOX_PHOTOS.map(b => [b.id, b.folder]) : [])].map(([k, folder]) => ({ k, folder, file: ph[k] }))
-        .concat(damages.map((f, i) => ({ k: "dmg" + i, folder: "handover-damage", file: f })));
+        ...(box ? BOX_PHOTOS.map(b => [b.id, b.folder]) : [])].map(([k, folder]) => ({ k, folder, file: ph[k] }))
+        .concat(damages.map((file, i) => ({ k: "dmg" + i, folder: "handover-damage", file })));
       const urls = {}; let done = 0; setProg({ done: 0, total: jobs.length });
       for (const j of jobs) {
         let url = uploaded.current.get(j.file);
         if (!url) {
+          photoNo = done + 1;
           let up = j.file;
           try { const b = await compressImage(j.file); up = new File([b], "photo.jpg", { type: "image/jpeg" }); } catch (e) { /* يُرفع الأصل إن تعذّر الضغط */ }
           url = await uploadPhoto(up, j.folder, bid);
@@ -657,20 +736,22 @@ function Handover({ me, myBike, onDirty }) {
         }
         urls[j.k] = url; setProg({ done: ++done, total: jobs.length });
       }
+      photoNo = null;
       const dmg = damages.map((_, i) => urls["dmg" + i]);
-      const boxPhotos = received.box === true || received.box === "note" ? Object.fromEntries(BOX_PHOTOS.map(b => [b.id, urls[b.id]])) : {};
-      const rec = receivedRecord(received);
-      const ckN = Object.fromEntries(CHECKLIST.filter(c => !checks[c.id] && String(ckNotes[c.id] || "").trim()).map(c => [c.id, ckNotes[c.id].trim()]));
+      const boxPhotos = box ? Object.fromEntries(BOX_PHOTOS.map(b => [b.id, urls[b.id]])) : {};
+      const rec = receivedRecord(f.received);
+      const checks = Object.fromEntries(CHECKLIST.map(c => [c.id, f.checks[c.id] === true]));
+      const ckN = Object.fromEntries(CHECKLIST.filter(c => !checks[c.id] && String(f.ckNotes[c.id] || "").trim()).map(c => [c.id, f.ckNotes[c.id].trim()]));
       const { data: saved, error } = await supabase.from("bike_handovers").insert({
         operator_id: me.operator_id, vehicle_id: myBike.id, plate: myBike.plate,
-        biker_employee_id: bid, biker_name: me.name, direction,
-        odometer: Number(odometer),
-        engine_sound_ok: !!checks.engine, items_ok: itemsOk(checks, received, CHECKLIST.map(c => c.id)),
+        biker_employee_id: bid, biker_name: me.name, direction: f.direction,
+        odometer: Number(odoNum(f.odometer)),
+        engine_sound_ok: checks.engine, items_ok: itemsOk(checks, f.received, CHECKLIST.map(c => c.id)),
         checklist: { ...checks, received: rec, ...(Object.keys(ckN).length ? { notes: ckN } : {}) },
         photo_front: urls.front, photo_back: urls.back, photo_right: urls.right, photo_left: urls.left, photo_odometer: urls.odometer,
         damage_photos: dmg,
         photos: { front: urls.front, back: urls.back, right: urls.right, left: urls.left, odometer: urls.odometer, damages: dmg, ...boxPhotos },
-        condition_notes: notes || null, pledge_accepted: true, created_by: me.uid,
+        condition_notes: f.notes || null, pledge_accepted: true, created_by: me.uid,
       }).select("*").single();
       if (error) throw error;
       if (recv) {
@@ -679,19 +760,17 @@ function Handover({ me, myBike, onDirty }) {
         if (rec.bike_key) { patch.key_status = `متوفر (${rec.bike_keys})`; patch.key_holder = `${me.name || ""} (${bid})`.trim(); }
         try { await supabase.from("fleet_vehicles").update(patch).eq("id", myBike.id); } catch (e) { /* لا يمنع الحفظ */ }
       }
-      setMsg({ t: "ok", m: "تم تسجيل حالة الدراجة بنجاح ✅ · সফলভাবে সংরক্ষিত" });
+      toast.ok(recv ? "تم حفظ الاستلام ✓" : "تم حفظ التسليم ✓", "সংরক্ষিত", 3000);
       if (saved) setReport({ row: saved, saved: true }); // التقرير يُفتح مباشرة بعد الحفظ
-      setCkNotes({}); setOdometer(""); setNotes(""); setPh({}); setDamages([]); setPledge(false); setReceived(emptyReceived()); uploaded.current = new Map();
-      setChecks(Object.fromEntries(CHECKLIST.map(c => [c.id, true])));
-      loadRecent();
-    } catch (e) { setMsg({ t: "err", m: "تعذّر الحفظ — مدخلاتك محفوظة، أعد المحاولة · আবার চেষ্টা করুন: " + (e.message || e) }); }
+      reset(); loadRecent();
+    } catch (e) { setErr(humanError(e, photoNo != null ? { photo: photoNo } : {})); }
     setBusy(false); setProg(null);
   }
 
-  // تُستدعى كدالة (لا كمكوّن) حتى لا يُعاد تركيب حقل السبب مع كل حرف فيفقد التركيز
+  // سطر بنعم/لا (تُستدعى كدالة لا كمكوّن حتى لا يفقد حقل السبب التركيز)
   const YesNo = ({ it }) => {
-    const v = received[it.id];
-    return <div className="bp-rcv" key={it.id}>
+    const v = f.received[it.id], r = f.received, mine = fe && fe.field === "rc_" + it.id;
+    return <div className={"bp-rcv" + (mine ? " k-inv" : "")} key={it.id} id={"rc_" + it.id} tabIndex={-1}>
       <div className="bp-rcv-h"><span className="tx">{it.ar} <span className="bn">/ {it.bn}</span></span>
         <div className="bp-seg bp-yn" role="radiogroup" aria-label={it.ar}>
           <button type="button" role="radio" aria-checked={v === true} className={v === true ? "on yes" : ""} onClick={() => setR({ [it.id]: true })}>نعم<span className="bn">হ্যাঁ</span></button>
@@ -699,113 +778,147 @@ function Handover({ me, myBike, onDirty }) {
           <button type="button" role="radio" aria-checked={v === false} className={v === false ? "on no" : ""} onClick={() => setR({ [it.id]: false })}>لا<span className="bn">না</span></button>
         </div></div>
       {v === true && it.count && <div className="bp-rcv-n"><span>كم مفتاح؟ · <span className="bn">কয়টি চাবি?</span></span>
-        <div className="bp-seg">{[1, 2, 3].map(n => <button type="button" key={n} aria-pressed={received[it.count] === n} className={received[it.count] === n ? "on" : ""} onClick={() => setR({ [it.count]: n })}>{n}</button>)}</div></div>}
-      {v === "note" && <input className="g-input bp-in" style={{ marginTop: 8 }} aria-label={"ملاحظة " + it.ar} value={received.reasons[it.id] || ""} placeholder="الملاحظة: ليس أصلياً، مكسور… · সমস্যা লিখুন" onChange={e => setR({ reasons: { ...received.reasons, [it.id]: e.target.value } })} />}
-      {v === false && <input className="g-input bp-in" style={{ marginTop: 8 }} aria-label={"سبب " + it.ar} value={received.reasons[it.id] || ""} placeholder="السبب: لم يُسلَّم لي، مفقود… · কারণ" onChange={e => setR({ reasons: { ...received.reasons, [it.id]: e.target.value } })} />}
+        <div className="bp-seg">{[1, 2, 3].map(n => <button type="button" key={n} aria-pressed={r[it.count] === n} className={r[it.count] === n ? "on" : ""} onClick={() => setR({ [it.count]: n })}>{n}</button>)}</div></div>}
+      {v === "note" && <input className="g-input bp-in" style={{ marginTop: 8 }} aria-label={"ملاحظة " + it.ar} value={r.reasons[it.id] || ""} placeholder="الملاحظة: ليس أصلياً، مكسور… · সমস্যা লিখুন" onChange={e => setR({ reasons: { ...r.reasons, [it.id]: e.target.value } })} />}
+      {v === false && <input className="g-input bp-in" style={{ marginTop: 8 }} aria-label={"سبب " + it.ar} value={r.reasons[it.id] || ""} placeholder="السبب: لم يُسلَّم لي، مفقود… · কারণ" onChange={e => setR({ reasons: { ...r.reasons, [it.id]: e.target.value } })} />}
+      {mine && <FieldErr t={fe} />}
+      {it.id === "box" && v === false && <div className="bp-note">إن كان الصندوق موجوداً لكن فيه مشكلة (مثل «ليس أصلياً») فاختر «نعم مع ملاحظة» لتوثيقه بالصور. · <span className="bn">বক্স থাকলে কিন্তু সমস্যা থাকলে «হ্যাঁ, তবে সমস্যা» বাছুন।</span></div>}
     </div>;
   };
   const Mark = ({ v, t }) => <span className={"bp-mk " + (v == null ? "na" : v ? "ok" : "bad")} title={t}>{t} {v == null ? "—" : v ? "✓" : "✗"}</span>;
+  const errAt = id => fe && fe.field === id ? <FieldErr t={fe} /> : null;
+  const inv = id => fe && fe.field === id ? " k-inv" : "";
+  const Box = (id, k, cap, capBn, tag) => <div className={inv("ph_" + k)}><PhotoBox id={"ph_" + k} cap={cap} capBn={capBn} tag={tag} file={ph[k]} onPick={setP(k)} /></div>;
+  const badList = CHECKLIST.filter(c => f.checks[c.id] === false);
+  const rcText = it => { const v = f.received[it.id]; return v === true ? "نعم" + (it.count ? ` (${f.received[it.count]})` : "") : v === "note" ? "نعم مع ملاحظة" : v === false ? "لا" : "—"; };
 
-  return (
-    <div className="bp-card g-card"><div className="bp-sec">
-      <label className="bp-lbl">الدراجة المخصّصة <span className="bn">/ নির্ধারিত বাইক</span></label>
-      <div className="bp-bike"><span className="ic">🏍️</span><div><div className="p">{myBike.plate}</div>{myBike.make && <div className="m">{myBike.make}</div>}</div></div>
+  let body;
+  const k = HANDOVER_STEPS[step].k;
+  if (k === "odo") body = <>
+    <div className="bp-bike"><span className="ic">🏍️</span><div><div className="p">{myBike.plate}</div>{myBike.make && <div className="m">{myBike.make}</div>}</div></div>
+    <label className="bp-lbl">نوع العملية <span className="bn">/ অপারেশন ধরন</span></label>
+    <div className="bp-seg" role="radiogroup" aria-label="نوع العملية">
+      <button type="button" role="radio" aria-checked={recv} className={recv ? "on" : ""} onClick={() => set({ direction: "receive" })}>استلام<span className="bn">গ্রহণ</span></button>
+      <button type="button" role="radio" aria-checked={!recv} className={!recv ? "on" : ""} onClick={() => set({ direction: "return" })}>تسليم<span className="bn">হস্তান্তর</span></button>
+    </div>
+    <label className="bp-lbl" htmlFor="odometer">قراءة العدّاد (كم) <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার (কিমি)</span></label>
+    <input id="odometer" className={"g-input bp-in" + inv("odometer")} inputMode="numeric" value={f.odometer} onChange={e => { set({ odometer: odoNum(e.target.value) }); if (fe && fe.field === "odometer") setFe(null); }} placeholder="14230" dir="ltr" style={{ textAlign: "right" }} />
+    {errAt("odometer")}
+    <label className="bp-lbl">صورة العدّاد <span className="bp-req">*</span> <span className="bn">/ ওডোমিটারের ছবি</span></label>
+    <div className="bp-pgrid" style={{ gridTemplateColumns: "1fr" }}>{Box("o", "odometer", "صورة العدّاد", "ওডোমিটার", "العداد")}</div>
+    {errAt("ph_odometer")}</>;
+  else if (k === "photos") body = <>
+    <div className="bp-note" style={{ marginTop: 0 }}>صوّر الدراجة كاملة من كل جهة. · <span className="bn">চারদিক থেকে পুরো বাইকের ছবি তুলুন।</span></div>
+    <div className="bp-pgrid">{Box("f", "front", "أمامي", "সামনে", "أمام")}{Box("b", "back", "خلفي", "পিছনে", "خلف")}{Box("r", "right", "يمين", "ডান", "يمين")}{Box("l", "left", "يسار", "বাম", "يسار")}</div>
+    {["front", "back", "right", "left"].map(x => <React.Fragment key={x}>{errAt("ph_" + x)}</React.Fragment>)}</>;
+  else if (k === "check") body = <>
+    <div className="bp-note" style={{ marginTop: 0 }}>افحص كل بند واختر «سليم» أو «غير سليم». · <span className="bn">প্রতিটি দেখে «ঠিক» বা «সমস্যা» বাছুন।</span></div>
+    <div className="bp-chklist">
+      {CHECKLIST.map(c => { const v = f.checks[c.id]; return <div className={"bp-ck2" + inv("ck_" + c.id)} key={c.id} id={"ck_" + c.id} tabIndex={-1}>
+        <div className="bp-ck2-h"><span className="tx">{c.ar}<span className="bn">{c.bn}</span></span>
+          <div className="bp-ok2" role="radiogroup" aria-label={c.ar}>
+            <button type="button" role="radio" aria-checked={v === true} className={v === true ? "on yes" : ""} onClick={() => { set({ checks: { ...f.checks, [c.id]: true } }); if (fe && fe.field === "ck_" + c.id) setFe(null); }}>✓ سليم<span className="bn">ঠিক</span></button>
+            <button type="button" role="radio" aria-checked={v === false} className={v === false ? "on no" : ""} onClick={() => { set({ checks: { ...f.checks, [c.id]: false } }); if (fe && fe.field === "ck_" + c.id) setFe(null); }}>✗ غير سليم<span className="bn">সমস্যা</span></button>
+          </div></div>
+        {v === false && <input className="g-input bp-cknote" aria-label={"وصف " + c.ar} value={f.ckNotes[c.id] || ""} placeholder="وصف قصير (اختياري) · সংক্ষেপে লিখুন" onChange={e => set({ ckNotes: { ...f.ckNotes, [c.id]: e.target.value } })} />}
+        {errAt("ck_" + c.id)}
+      </div>; })}
+    </div></>;
+  else if (k === "recv") body = <>
+    <label className="bp-lbl" style={{ marginTop: 0 }}>{recv ? "ما استلمته" : "ما سلّمته"} <span className="bp-req">*</span> <span className="bn">/ {recv ? "যা পেয়েছি" : "যা দিয়েছি"}</span></label>
+    <div className="bp-chklist">{RECEIVED_ITEMS.map(it => YesNo({ it }))}</div></>;
+  else if (k === "box") body = <>
+    <div className="bp-note" style={{ marginTop: 0 }}>{f.received.box === "note" ? "صوّر الصندوق ليظهر ما في الملاحظة." : "صوّر الصندوق من كل جهة ومن الداخل مفتوحاً."} · <span className="bn">বক্সের পাঁচটি ছবি তুলুন।</span></div>
+    <div className="bp-pgrid">
+      {BOX_PHOTOS.map((b, i) => <div key={b.id} style={i === 4 ? { gridColumn: "1 / -1" } : undefined}>{Box(b.id, b.id, b.ar, b.bn, b.tag)}</div>)}
+    </div>
+    {BOX_PHOTOS.map(b => <React.Fragment key={b.id}>{errAt("ph_" + b.id)}</React.Fragment>)}</>;
+  else if (k === "notes") body = <>
+    <label className="bp-lbl" style={{ marginTop: 0 }}>صور الأضرار (اختياري) <span className="bn">/ ক্ষতির ছবি (ঐচ্ছিক)</span></label>
+    <div className="bp-photo">
+      <label htmlFor="dmg">📷 إضافة صور أضرار · <span className="bn" style={{ display: "inline" }}>ক্ষতির ছবি</span></label>
+      <input id="dmg" type="file" accept="image/*" capture="environment" multiple onChange={e => setDamages(d => [...d, ...Array.from(e.target.files || [])].slice(0, 8))} />
+    </div>
+    {damages.length > 0 && <div className="bp-thumbs">{damages.map((x, i) => <span key={i} className="bp-thumb"><img src={URL.createObjectURL(x)} alt={"ضرر " + (i + 1)} /><button type="button" aria-label="حذف الصورة" onClick={() => setDamages(d => d.filter((_, j) => j !== i))}>×</button></span>)}</div>}
+    <label className="bp-lbl" htmlFor="h_notes">ملاحظات الحالة (اختياري) <span className="bn">/ অবস্থার নোট</span></label>
+    <textarea id="h_notes" className="g-textarea bp-ta" value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="أي عطل أو خدش… · কোনো ত্রুটি বা দাগ…" /></>;
+  else body = <>
+    <div className="bp-rev">
+      {[[0, "نوع العملية", recv ? "استلام · গ্রহণ" : "تسليم · হস্তান্তর"], [0, "العدّاد", (f.odometer || "—") + " كم"],
+        [1, "صور الدراجة", [ph.front, ph.back, ph.right, ph.left, ph.odometer].filter(Boolean).length + " / 5"],
+        [2, "قائمة التحقق", badList.length ? badList.length + " غير سليم: " + badList.map(c => c.short).join("، ") : "كلها سليمة ✓"],
+        ...RECEIVED_ITEMS.map(it => [3, it.ar, rcText(it)]),
+        ...(boxNeeded(f.received) ? [[4, "صور الصندوق", BOX_PHOTOS.filter(b => ph[b.id]).length + " / 5"]] : []),
+        [5, "الأضرار والملاحظات", (damages.length ? damages.length + " صورة" : "لا صور") + (f.notes.trim() ? " · " + f.notes.trim().slice(0, 40) : "")],
+      ].map(([i, l, v], n) => <div className="bp-rev-r" key={n}><span className="l">{l}</span><b>{v}</b><Btn kind="text" onClick={() => goStep(i)} aria-label={"تعديل " + l}>تعديل</Btn></div>)}
+    </div>
+    <label className={"bp-chk pledge" + inv("pledge")} htmlFor="pledge">
+      <input id="pledge" type="checkbox" checked={f.pledge} onChange={e => { set({ pledge: e.target.checked }); if (fe && fe.field === "pledge") setFe(null); }} />
+      <span className="tx" style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.7 }}>
+        أتعهّد بالمحافظة على الدراجة والالتزام بتعليمات المرور، وأتحمّل مسؤولية أي أضرار تنتج عن سوء الاستخدام.
+        <span className="bn" style={{ display: "block", marginTop: 3 }}>আমি বাইকের যত্ন নেওয়া ও ট্রাফিক নিয়ম মেনে চলার অঙ্গীকার করছি এবং অপব্যবহারজনিত যেকোনো ক্ষতির দায় নিচ্ছি।</span>
+      </span>
+    </label>
+    {errAt("pledge")}</>;
 
-      <label className="bp-lbl">نوع العملية <span className="bn">/ অপারেশন ধরন</span></label>
-      <div className="bp-seg">
-        <button className={direction === "receive" ? "on" : ""} onClick={() => setDirection("receive")}>استلام<span className="bn">গ্রহণ</span></button>
-        <button className={direction === "return" ? "on" : ""} onClick={() => setDirection("return")}>تسليم<span className="bn">হস্তান্তর</span></button>
+  const last = step === S - 1;
+  const shown = HANDOVER_STEPS.map((x, i) => ({ ...x, i })).filter(x => !stepSkipped(x.i, form));
+  const pos = shown.findIndex(x => x.i === step) + 1;
+  return (<>
+    <div className="bp-card g-card bp-free"><div className="bp-sec">
+      <div className="bp-wiz-top">
+        {step > 0 ? <Btn kind="secondary" onClick={prev} disabled={busy} bn="আগের">→ السابق</Btn>
+          : (f.odometer || Object.keys(f.checks).length || Object.values(ph).some(Boolean)) ? <Btn kind="secondary" onClick={cancel} disabled={busy} bn="বাতিল">✕ إلغاء</Btn> : <span />}
+        <span className="bp-wiz-n" aria-label={`الخطوة ${pos} من ${shown.length}`}>{pos} / {shown.length}</span>
       </div>
-
-      <label className="bp-lbl">قراءة العدّاد (كم) <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার (কিমি)</span></label>
-      <input className="g-input bp-in" type="number" inputMode="numeric" value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="14230" />
-
-      <label className="bp-lbl">قائمة التحقق <span className="bn">/ চেকলিস্ট</span></label>
-      <div className="bp-chklist">
-        {CHECKLIST.map(c => (
-          <label className="bp-chk" key={c.id} htmlFor={"ck_" + c.id}>
-            <input id={"ck_" + c.id} type="checkbox" checked={!!checks[c.id]} onChange={e => setChecks(s => ({ ...s, [c.id]: e.target.checked }))} />
-            <span className="tx">{c.ar} <span className="bn">/ {c.bn}</span>
-              {!checks[c.id] && <input className="g-input bp-cknote" aria-label={"وصف " + c.ar} value={ckNotes[c.id] || ""} placeholder="وصف قصير (اختياري) · সংক্ষেপে লিখুন" onClick={e => e.preventDefault()} onChange={e => setCkNotes(s => ({ ...s, [c.id]: e.target.value }))} />}</span>
-          </label>
-        ))}
-      </div>
-
-      <label className="bp-lbl">تصوير الدراجة من ٤ اتجاهات <span className="bp-req">*</span> <span className="bn">/ চারদিক থেকে ছবি</span></label>
-      <div className="bp-pgrid">
-        <PhotoBox id="ph_f" cap="أمامي" capBn="সামনে" tag="أمام" file={ph.front} onPick={setP("front")} />
-        <PhotoBox id="ph_b" cap="خلفي" capBn="পিছনে" tag="خلف" file={ph.back} onPick={setP("back")} />
-        <PhotoBox id="ph_r" cap="يمين" capBn="ডান" tag="يمين" file={ph.right} onPick={setP("right")} />
-        <PhotoBox id="ph_l" cap="يسار" capBn="বাম" tag="يسار" file={ph.left} onPick={setP("left")} />
-      </div>
-
-      <label className="bp-lbl">صورة العدّاد <span className="bp-req">*</span> <span className="bn">/ ওডোমিটারের ছবি</span></label>
-      <div className="bp-pgrid" style={{ gridTemplateColumns: "1fr" }}>
-        <PhotoBox id="ph_o" cap="صورة العدّاد" capBn="ওডোমিটার" tag="العداد" file={ph.odometer} onPick={setP("odometer")} />
-      </div>
-
-      <label className="bp-lbl">{recv ? "ما استلمته" : "ما سلّمته"} <span className="bp-req">*</span> <span className="bn">/ {recv ? "যা পেয়েছি" : "যা দিয়েছি"}</span></label>
-      <div className="bp-chklist">{RECEIVED_ITEMS.map(it => YesNo({ it }))}</div>
-
-      {(received.box === true || received.box === "note") && <>
-        <label className="bp-lbl">صور الصندوق <span className="bp-req">*</span> <span className="bn">/ বক্সের ছবি</span></label>
-        <div className="bp-pgrid">
-          {BOX_PHOTOS.map((b, i) => <div key={b.id} style={i === 4 ? { gridColumn: "1 / -1" } : undefined}><PhotoBox id={"ph_" + b.id} cap={b.ar} capBn={b.bn} tag={b.tag} file={ph[b.id]} onPick={setP(b.id)} /></div>)}
-        </div>
-      </>}
-
-      <label className="bp-lbl">صور إضافية للأضرار (اختياري) <span className="bn">/ ক্ষতির অতিরিক্ত ছবি</span></label>
-      <div className="bp-photo">
-        <label htmlFor="dmg">📷 إضافة صور أضرار · ক্ষতির ছবি</label>
-        <input id="dmg" type="file" accept="image/*" capture="environment" multiple onChange={e => setDamages(Array.from(e.target.files || []))} />
-      </div>
-      <div className="bp-thumbs">{damages.map((f, i) => <img key={i} src={URL.createObjectURL(f)} alt="" />)}</div>
-
-      <label className="bp-lbl">ملاحظات الحالة <span className="bn">/ অবস্থার নোট</span></label>
-      <textarea className="g-textarea bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي عطل أو خدش… · কোনো ত্রুটি বা দাগ…" />
-      <div className="bp-note">التوثيق الكامل يحمي حقّك عند التسليم والاستلام. · সম্পূর্ণ ডকুমেন্টেশন আপনার অধিকার রক্ষা করে।</div>
-
-      <label className="bp-chk pledge">
-        <input type="checkbox" checked={pledge} onChange={e => setPledge(e.target.checked)} style={{ marginTop: 2 }} />
-        <span className="tx" style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.7 }}>
-          أتعهّد بالمحافظة على الدراجة والالتزام بتعليمات المرور، وأتحمّل مسؤولية أي أضرار تنتج عن سوء الاستخدام.
-          <span className="bn" style={{ display: "block", margintop: 3 }}>আমি বাইকের যত্ন নেওয়া ও ট্রাফিক নিয়ম মেনে চলার অঙ্গীকার করছি এবং অপব্যবহারজনিত যেকোনো ক্ষতির দায় নিচ্ছি।</span>
-        </span>
-      </label>
-
-      <button className="bp-btn" onClick={submit} disabled={busy}>{busy ? (prog ? `رفع الصور ${prog.done} / ${prog.total} · ছবি আপলোড` : "جارٍ الحفظ… · সংরক্ষণ হচ্ছে…") : "حفظ التقرير · রিপোর্ট সংরক্ষণ"}</button>
-      {busy && prog && <div className="g-track" style={{ marginTop: 8 }} role="progressbar" aria-valuenow={prog.done} aria-valuemax={prog.total}><i style={{ width: Math.round(prog.done / prog.total * 100) + "%" }} /></div>}
-      {msg && <div className={"bp-msg " + (msg.t === "ok" ? "bp-ok" : "bp-err")}>{msg.m}</div>}
-
-      <label className="bp-lbl" style={{ marginTop: 18 }}>آخر سجلاتك <span className="bn">/ সর্বশেষ রেকর্ড</span></label>
+      <div className="dr-dots bp-dots" aria-hidden="true">{shown.map(x => <i key={x.i} className={x.i < step ? "done" : x.i === step ? "now" : ""} />)}</div>
+      <h2 className="bp-wiz-h">{HANDOVER_STEPS[step].ar}<span className="bn">{HANDOVER_STEPS[step].bn}</span></h2>
+      {restored && step === 0 && <div className="bp-msg bp-ok" role="status">استعدنا مدخلاتك السابقة. الصور لا تُحفظ، فالتقطها مرة أخرى. · <span className="bn">আগের তথ্য ফিরে এসেছে। ছবি আবার তুলুন।</span></div>}
+      {body}
+      {err && <div style={{ marginTop: 12 }}><ErrorNote e={err} who={bid} busy={busy} onRetry={submit} onLogin={() => supabase.auth.signOut()} onView={() => goStep(0)} /></div>}
+      <StickyBar>
+        {busy && prog && <UploadBar done={prog.done} total={prog.total} />}
+        {last ? <Btn kind="primary" block big busy={busy} disabled={!online} onClick={submit} bn={busy ? "সংরক্ষণ হচ্ছে…" : "রিপোর্ট সংরক্ষণ"}>{busy ? "جارٍ الحفظ…" : "حفظ التقرير"}</Btn>
+          : <Btn kind="primary" block big onClick={next} bn="পরের ধাপ">التالي</Btn>}
+        {last && !online && <OfflineHint />}
+      </StickyBar>
+    </div></div>
+    {step === 0 && <div className="bp-card g-card"><div className="bp-sec">
+      <label className="bp-lbl" style={{ marginTop: 0 }}>آخر سجلاتك <span className="bn">/ সর্বশেষ রেকর্ড</span></label>
       <div className="bp-list">
-        {recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
+        {recent === null ? <Skel rows={2} card={false} /> : recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
           recent.map(r => { const rc = (r.checklist || {}).received || {}; return <div className="bp-item bp-item-open" key={r.id} role="button" tabIndex={0} onClick={() => setReport({ row: r })} onKeyDown={e => { if (e.key === "Enter") setReport({ row: r }); }}>
             <div className="t">{r.plate || "—"} · {r.direction === "receive" ? "استلام · গ্রহণ" : "تسليم · হস্তান্তর"} · العدّاد {r.odometer}<span className="g-badge info"><i />مُرسل · <span className="bn">জমা দেওয়া</span></span></div>
             <div className="m">{new Date(r.created_at).toLocaleString("ar")}</div>
             <div className="bp-mks"><Mark v={rc.box} t="📦 صندوق" /><Mark v={rc.bike_key} t="🔑 مفتاح الدراجة" /><Mark v={rc.box_key} t="🗝️ مفتاح الصندوق" /><span className="bp-open">عرض التقرير ‹ <span className="bn">রিপোর্ট দেখুন</span></span></div>
           </div>; })}
       </div>
-      {report && <Suspense fallback={null}><HandoverReport row={report.row} mode="biker" saved={report.saved} onClose={() => setReport(null)} /></Suspense>}
-    </div></div>
-  );
+    </div></div>}
+    {dlg}
+    {report && <Suspense fallback={null}><HandoverReport row={report.row} mode="biker" saved={report.saved} onClose={() => setReport(null)} /></Suspense>}
+  </>);
 }
 
 /* ================= سجل الوقود ================= */
+const F_DRAFT = bid => "bp.fuel." + bid;
 function Fuel({ me, myBike }) {
-  const [fuelType, setFuelType] = useState("petrol");
-  const [odometer, setOdometer] = useState("");
-  const [amount, setAmount] = useState("");
-  const [liters, setLiters] = useState("");
+  const bid = me.biker_employee_id;
+  const d0 = React.useMemo(() => loadDraft(F_DRAFT(bid)) || {}, [bid]);
+  const [fuelType, setFuelType] = useState(d0.fuelType || "petrol");
+  const [odometer, setOdometer] = useState(d0.odometer || "");
+  const [amount, setAmount] = useState(d0.amount || "");
+  const [liters, setLiters] = useState(d0.liters || "");
   const [odoFile, setOdoFile] = useState(null);
   const [recFile, setRecFile] = useState(null);
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(d0.notes || "");
   const [busy, setBusy] = useState(false);
+  const [prog, setProg] = useState(null);
+  const [fe, setFe] = useState(null), [err, setErr] = useState(null);
+  const uploaded = React.useRef(new Map()); // File → رابط: إعادة المحاولة تكمل من حيث توقفت
   const toast = useToast();
-  const [msg, setMsgRaw] = useState(null);
-  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
-  const setMsg = m => { if (m && m.t === "ok") { toast.ok(m.m); setMsgRaw(null); } else setMsgRaw(m); };
-  const [recent, setRecent] = useState([]);
+  const online = useOnline();
+  const [recent, setRecent] = useState(null);
+  const dec = v => odoNum(v);
 
   async function loadRecent() {
     const { data } = await supabase.from("fuel_logs")
@@ -813,75 +926,95 @@ function Fuel({ me, myBike }) {
     setRecent(data || []);
   }
   useEffect(() => { loadRecent(); }, []);
+  useEffect(() => { saveDraft(F_DRAFT(bid), { fuelType, odometer, amount, liters, notes }); }, [fuelType, odometer, amount, liters, notes]);
 
   if (!myBike) return <NoBike />;
+  const focusField = id => setTimeout(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); try { el.focus({ preventScroll: true }); } catch (e) { /* */ } } }, 30);
+  const need = (field, ar, bn) => { setFe({ field, ar, bn }); focusField(field); };
 
   async function submit() {
-    setMsg(null);
-    if (!odometer) { setMsg({ t: "err", m: "أدخل قراءة العدّاد · ওডোমিটার লিখুন" }); return; }
-    if (!amount) { setMsg({ t: "err", m: "أدخل المبلغ · পরিমাণ লিখুন" }); return; }
-    if (!odoFile) { setMsg({ t: "err", m: "أرفق صورة العدّاد · ওডোমিটারের ছবি দিন" }); return; }
-    if (!recFile) { setMsg({ t: "err", m: "إرفاق الفاتورة إلزامي · রসিদ সংযুক্ত করা আবশ্যক" }); return; }
+    setErr(null); setFe(null);
+    if (!odometer) return need("f_odometer", "أدخل قراءة العدّاد.", "ওডোমিটার লিখুন।");
+    if (!amount) return need("f_amount", "أدخل المبلغ.", "পরিমাণ লিখুন।");
+    if (!odoFile) return need("f_odo", "التقط صورة العدّاد.", "ওডোমিটারের ছবি তুলুন।");
+    if (!recFile) return need("f_rec", "التقط صورة الفاتورة — إرفاقها إلزامي.", "রসিদের ছবি দিন — বাধ্যতামূলক।");
     setBusy(true);
+    let photoNo = null;
     try {
-      const odoUrl = await uploadPhoto(odoFile, "fuel-odometer", me.biker_employee_id);
-      const recUrl = await uploadPhoto(recFile, "fuel-receipt", me.biker_employee_id);
+      const jobs = [[odoFile, "fuel-odometer"], [recFile, "fuel-receipt"]], urls = [];
+      setProg({ done: 0, total: jobs.length });
+      for (let i = 0; i < jobs.length; i++) {
+        const [file, folder] = jobs[i];
+        let url = uploaded.current.get(file);
+        if (!url) { photoNo = i + 1; url = await uploadPhoto(file, folder, bid); uploaded.current.set(file, url); }
+        urls.push(url); setProg({ done: i + 1, total: jobs.length });
+      }
+      photoNo = null;
       const { error } = await supabase.from("fuel_logs").insert({
         operator_id: me.operator_id, vehicle_id: myBike.id, plate: myBike.plate,
-        biker_employee_id: me.biker_employee_id, biker_name: me.name, fuel_type: fuelType,
+        biker_employee_id: bid, biker_name: me.name, fuel_type: fuelType,
         odometer: Number(odometer), amount: Number(amount), liters: liters ? Number(liters) : null,
-        odometer_photo_url: odoUrl, receipt_photo_url: recUrl, notes: notes || null, created_by: me.uid,
+        odometer_photo_url: urls[0], receipt_photo_url: urls[1], notes: notes || null, created_by: me.uid,
       });
       if (error) throw error;
-      setMsg({ t: "ok", m: "تم تسجيل التعبئة بنجاح ✅ · সফলভাবে সংরক্ষিত" });
+      toast.ok("تم تسجيل التعبئة ✓", "সংরক্ষিত", 3000);
+      saveDraft(F_DRAFT(bid), null); uploaded.current = new Map();
       setOdometer(""); setAmount(""); setLiters(""); setOdoFile(null); setRecFile(null); setNotes(""); loadRecent();
-    } catch (e) { setMsg({ t: "err", m: "خطأ · ত্রুটি: " + (e.message || e) }); }
-    setBusy(false);
+    } catch (e) { setErr(humanError(e, photoNo != null ? { photo: photoNo } : {})); }
+    setBusy(false); setProg(null);
   }
+  const errAt = id => fe && fe.field === id ? <FieldErr t={fe} /> : null;
+  const inv = id => fe && fe.field === id ? " k-inv" : "";
 
-  return (
-    <div className="bp-card g-card"><div className="bp-sec">
-      <label className="bp-lbl">الدراجة المخصّصة <span className="bn">/ নির্ধারিত বাইক</span></label>
+  return (<>
+    <div className="bp-card g-card bp-free"><div className="bp-sec">
+      <h2 className="bp-wiz-h" style={{ marginTop: 0 }}>تسجيل تعبئة وقود<span className="bn">জ্বালানি রেকর্ড</span></h2>
       <div className="bp-bike"><span className="ic">🏍️</span><div><div className="p">{myBike.plate}</div>{myBike.make && <div className="m">{myBike.make}</div>}</div></div>
 
       <label className="bp-lbl">النوع <span className="bn">/ ধরন</span></label>
-      <div className="bp-seg">
-        <button className={fuelType === "petrol" ? "on" : ""} onClick={() => setFuelType("petrol")}>بنزين<span className="bn">পেট্রল</span></button>
-        <button className={fuelType === "oil" ? "on" : ""} onClick={() => setFuelType("oil")}>زيت<span className="bn">অয়েল</span></button>
+      <div className="bp-seg" role="radiogroup" aria-label="النوع">
+        <button type="button" role="radio" aria-checked={fuelType === "petrol"} className={fuelType === "petrol" ? "on" : ""} onClick={() => setFuelType("petrol")}>بنزين<span className="bn">পেট্রল</span></button>
+        <button type="button" role="radio" aria-checked={fuelType === "oil"} className={fuelType === "oil" ? "on" : ""} onClick={() => setFuelType("oil")}>زيت<span className="bn">অয়েল</span></button>
       </div>
 
       <div className="bp-row">
-        <div><label className="bp-lbl">العدّاد (كم) <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার</span></label>
-          <input className="g-input bp-in" type="number" inputMode="numeric" value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="14230" /></div>
-        <div><label className="bp-lbl">المبلغ (ريال) <span className="bp-req">*</span> <span className="bn">/ পরিমাণ</span></label>
-          <input className="g-input bp-in" type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="50" /></div>
+        <div><label className="bp-lbl" htmlFor="f_odometer">العدّاد (كم) <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার</span></label>
+          <input id="f_odometer" className={"g-input bp-in" + inv("f_odometer")} inputMode="numeric" value={odometer} onChange={e => { setOdometer(dec(e.target.value)); setFe(null); }} placeholder="14230" dir="ltr" style={{ textAlign: "right" }} />{errAt("f_odometer")}</div>
+        <div><label className="bp-lbl" htmlFor="f_amount">المبلغ (ريال) <span className="bp-req">*</span> <span className="bn">/ পরিমাণ</span></label>
+          <input id="f_amount" className={"g-input bp-in" + inv("f_amount")} inputMode="decimal" value={amount} onChange={e => { setAmount(dec(e.target.value)); setFe(null); }} placeholder="50" dir="ltr" style={{ textAlign: "right" }} />{errAt("f_amount")}</div>
       </div>
-      <label className="bp-lbl">اللترات (اختياري) <span className="bn">/ লিটার (ঐচ্ছিক)</span></label>
-      <input className="g-input bp-in" type="number" inputMode="decimal" value={liters} onChange={e => setLiters(e.target.value)} placeholder="8.2" />
+      <label className="bp-lbl" htmlFor="f_liters">اللترات (اختياري) <span className="bn">/ লিটার (ঐচ্ছিক)</span></label>
+      <input id="f_liters" className="g-input bp-in" inputMode="decimal" value={liters} onChange={e => setLiters(dec(e.target.value))} placeholder="8.2" dir="ltr" style={{ textAlign: "right" }} />
 
-      <label className="bp-lbl">صورة العدّاد بعد التعبئة <span className="bp-req">*</span> <span className="bn">/ ওডোমিটারের ছবি</span></label>
+      <label className="bp-lbl">صورة العدّاد والفاتورة <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার ও রসিদের ছবি</span></label>
       <div className="bp-pgrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <PhotoBox id="f_odo" cap="صورة العدّاد" capBn="ওডোমিটার" tag="العداد" file={odoFile} onPick={setOdoFile} />
-        <PhotoBox id="f_rec" cap="صورة الفاتورة" capBn="রসিদ" tag="الفاتورة *" file={recFile} onPick={setRecFile} />
+        <div className={inv("f_odo")}><PhotoBox id="f_odo" cap="صورة العدّاد" capBn="ওডোমিটার" tag="العداد" file={odoFile} onPick={x => { setOdoFile(x); setFe(null); }} /></div>
+        <div className={inv("f_rec")}><PhotoBox id="f_rec" cap="صورة الفاتورة" capBn="রসিদ" tag="الفاتورة *" file={recFile} onPick={x => { setRecFile(x); setFe(null); }} /></div>
       </div>
-      <div className="bp-note">إرفاق الفاتورة إلزامي لاعتماد التعبئة. · রসিদ সংযুক্ত করা আবশ্যক।</div>
+      {errAt("f_odo")}{errAt("f_rec")}
+      <div className="bp-note">إرفاق الفاتورة إلزامي لاعتماد التعبئة. · <span className="bn">রসিদ সংযুক্ত করা আবশ্যক।</span></div>
 
-      <label className="bp-lbl">ملاحظات (اختياري) <span className="bn">/ নোট</span></label>
-      <textarea className="g-textarea bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="…" />
+      <label className="bp-lbl" htmlFor="f_notes">ملاحظات (اختياري) <span className="bn">/ নোট</span></label>
+      <textarea id="f_notes" className="g-textarea bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="…" />
 
-      <button className="bp-btn" onClick={submit} disabled={busy}>{busy ? "جارٍ الحفظ… · সংরক্ষণ হচ্ছে…" : "حفظ التعبئة · রিফুয়েল সংরক্ষণ"}</button>
-      {msg && <div className={"bp-msg " + (msg.t === "ok" ? "bp-ok" : "bp-err")}>{msg.m}</div>}
-
-      <label className="bp-lbl" style={{ marginTop: 18 }}>سجل تعبئاتك <span className="bn">/ আপনার রিফুয়েল রেকর্ড</span></label>
+      {err && <div style={{ marginTop: 12 }}><ErrorNote e={err} who={bid} busy={busy} onRetry={submit} onLogin={() => supabase.auth.signOut()} /></div>}
+      <StickyBar>
+        {busy && prog && <UploadBar done={prog.done} total={prog.total} />}
+        <Btn kind="primary" block big busy={busy} disabled={!online} onClick={submit} bn={busy ? "সংরক্ষণ হচ্ছে…" : "রিফুয়েল সংরক্ষণ"}>{busy ? "جارٍ الحفظ…" : "حفظ التعبئة"}</Btn>
+        {!online && <OfflineHint />}
+      </StickyBar>
+    </div></div>
+    <div className="bp-card g-card"><div className="bp-sec">
+      <label className="bp-lbl" style={{ marginTop: 0 }}>سجل تعبئاتك <span className="bn">/ আপনার রিফুয়েল রেকর্ড</span></label>
       <div className="bp-list">
-        {recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
+        {recent === null ? <Skel rows={2} card={false} /> : recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
           recent.map(r => <div className="bp-item" key={r.id}>
             <div className="t">{r.plate || "—"} · {r.fuel_type === "oil" ? "زيت · অয়েল" : "بنزين · পেট্রল"} · {r.amount ? r.amount + "﷼" : "—"} · العدّاد {r.odometer}<span className="g-badge info"><i />مُرسل · <span className="bn">জমা দেওয়া</span></span></div>
             <div className="m">{new Date(r.fill_at).toLocaleString("ar")}</div>
           </div>)}
       </div>
     </div></div>
-  );
+  </>);
 }
 
 /* ================= العهدة (الأدوات والمواد) ================= */
@@ -894,10 +1027,9 @@ function Assets({ me }) {
   const [pledge, setPledge] = useState(false);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
-  const [msg, setMsgRaw] = useState(null);
-  // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
-  const setMsg = m => { if (m && m.t === "ok") { toast.ok(m.m); setMsgRaw(null); } else setMsgRaw(m); };
-  const [recent, setRecent] = useState([]);
+  const online = useOnline();
+  const [fe, setFe] = useState(null), [err, setErr] = useState(null);
+  const [recent, setRecent] = useState(null);
 
   async function loadRecent() {
     const { data } = await supabase.from("biker_assets")
@@ -909,11 +1041,12 @@ function Assets({ me }) {
   function setItem(key, patch) { setRows(s => ({ ...s, [key]: { ...s[key], ...patch } })); }
   const reset = () => setRows(Object.fromEntries(ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null }])));
 
+  const focusField = id => setTimeout(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); try { el.focus({ preventScroll: true }); } catch (e) { /* */ } } }, 30);
   async function submit() {
-    setMsg(null);
+    setErr(null); setFe(null);
     const chosen = ASSET_ITEMS.filter(it => rows[it.key].present);
-    if (chosen.length === 0) { setMsg({ t: "err", m: "حدّد العناصر المستلمة أولاً · অন্তত একটি সরঞ্জাম নির্বাচন করুন" }); return; }
-    if (!pledge) { setMsg({ t: "err", m: "يجب الموافقة على التعهّد قبل الحفظ · সংরক্ষণের আগে অঙ্গীকারে সম্মতি দিন" }); return; }
+    if (chosen.length === 0) { setFe({ field: "as_list", ar: "حدّد العناصر التي استلمتها أولاً.", bn: "অন্তত একটি সরঞ্জাম নির্বাচন করুন।" }); focusField("as_list"); return; }
+    if (!pledge) { setFe({ field: "as_pledge", ar: "وافق على التعهّد قبل الحفظ.", bn: "সংরক্ষণের আগে অঙ্গীকারে সম্মতি দিন।" }); focusField("as_pledge"); return; }
     setBusy(true);
     try {
       const bid = me.biker_employee_id;
@@ -929,18 +1062,18 @@ function Assets({ me }) {
         items, pledge_accepted: true, notes: notes || null, status: "declared", created_by: me.uid,
       });
       if (error) throw error;
-      setMsg({ t: "ok", m: "تم تسجيل العهدة بنجاح ✅ · সফলভাবে সংরক্ষিত" });
+      toast.ok("تم تسجيل العهدة ✓", "সংরক্ষিত", 3000);
       reset(); setNotes(""); setPledge(false); loadRecent();
-    } catch (e) { setMsg({ t: "err", m: "خطأ · ত্রুটি: " + (e.message || e) }); }
+    } catch (e) { setErr(humanError(e)); }
     setBusy(false);
   }
 
   return (
-    <div className="bp-card g-card"><div className="bp-sec">
-      <label className="bp-lbl">إقرار العهدة — الأدوات والمواد <span className="bn">/ সরঞ্জাম ও উপকরণের ঘোষণা</span></label>
+    <><div className="bp-card g-card bp-free"><div className="bp-sec">
+      <h2 className="bp-wiz-h" style={{ marginTop: 0 }}>إقرار العهدة — الأدوات والمواد<span className="bn">সরঞ্জাম ও উপকরণের ঘোষণা</span></h2>
       <div className="bp-note" style={{ marginBottom: 4 }}>حدّد ما استلمته، والكمية، وحالته، وصوّر الصنف. · আপনি যা পেয়েছেন তা নির্বাচন করুন, পরিমাণ ও অবস্থা দিন এবং ছবি তুলুন।</div>
 
-      <div className="bp-chklist">
+      <div className={"bp-chklist" + (fe && fe.field === "as_list" ? " k-inv" : "")} id="as_list" tabIndex={-1}>
         {ASSET_ITEMS.map(it => {
           const r = rows[it.key];
           const ref = it.img ? TOOLREFS[it.img] : null;
@@ -948,7 +1081,7 @@ function Assets({ me }) {
             <div className={"bp-aitem" + (r.present ? " on" : "")} key={it.key}>
               <label className="bp-arow" htmlFor={"as_" + it.key}>
                 {ref ? <img className="bp-aref" src={ref} alt="" /> : <div className="bp-aref ph">🧰</div>}
-                <input id={"as_" + it.key} type="checkbox" checked={r.present} onChange={e => setItem(it.key, { present: e.target.checked })} />
+                <input id={"as_" + it.key} type="checkbox" checked={r.present} onChange={e => { setItem(it.key, { present: e.target.checked }); setFe(null); }} />
                 <span className="tx">{it.ar} <span className="bn">/ {it.bn}</span></span>
               </label>
               {r.present && (
@@ -983,20 +1116,26 @@ function Assets({ me }) {
       <label className="bp-lbl">ملاحظات (اختياري) <span className="bn">/ নোট (ঐচ্ছিক)</span></label>
       <textarea className="g-textarea bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي تفاصيل عن العهدة… · সরঞ্জাম সম্পর্কে বিস্তারিত…" />
 
-      <label className="bp-chk pledge">
-        <input type="checkbox" checked={pledge} onChange={e => setPledge(e.target.checked)} style={{ marginTop: 2 }} />
+      {fe && fe.field === "as_list" && <FieldErr t={fe} />}
+      <label className={"bp-chk pledge" + (fe && fe.field === "as_pledge" ? " k-inv" : "")} htmlFor="as_pledge">
+        <input id="as_pledge" type="checkbox" checked={pledge} onChange={e => { setPledge(e.target.checked); setFe(null); }} />
         <span className="tx" style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.7 }}>
           أُقرّ وأتعهّد بأن ما ذكرته أعلاه صحيح، وأنني استلمت هذه العهدة وأتحمّل مسؤوليتها والمحافظة عليها.
           <span className="bn" style={{ display: "block", marginTop: 3 }}>আমি ঘোষণা করছি যে উপরের তথ্য সঠিক, আমি এই সরঞ্জাম বুঝে নিয়েছি এবং এর যত্ন ও দায়িত্ব নিচ্ছি।</span>
         </span>
       </label>
 
-      <button className="bp-btn" onClick={submit} disabled={busy}>{busy ? "جارٍ الحفظ… · সংরক্ষণ হচ্ছে…" : "حفظ إقرار العهدة · ঘোষণা সংরক্ষণ"}</button>
-      {msg && <div className={"bp-msg " + (msg.t === "ok" ? "bp-ok" : "bp-err")}>{msg.m}</div>}
-
-      <label className="bp-lbl" style={{ marginTop: 18 }}>آخر إقراراتك <span className="bn">/ সর্বশেষ ঘোষণা</span></label>
+      {fe && fe.field === "as_pledge" && <FieldErr t={fe} />}
+      {err && <div style={{ marginTop: 12 }}><ErrorNote e={err} who={me.biker_employee_id} busy={busy} onRetry={submit} onLogin={() => supabase.auth.signOut()} /></div>}
+      <StickyBar>
+        <Btn kind="primary" block big busy={busy} disabled={!online} onClick={submit} bn={busy ? "সংরক্ষণ হচ্ছে…" : "ঘোষণা সংরক্ষণ"}>{busy ? "جارٍ الحفظ…" : "حفظ إقرار العهدة"}</Btn>
+        {!online && <OfflineHint />}
+      </StickyBar>
+    </div></div>
+    <div className="bp-card g-card"><div className="bp-sec">
+      <label className="bp-lbl" style={{ marginTop: 0 }}>آخر إقراراتك <span className="bn">/ সর্বশেষ ঘোষণা</span></label>
       <div className="bp-list">
-        {recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
+        {recent === null ? <Skel rows={2} card={false} /> : recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
           recent.map(r => {
             const its = Array.isArray(r.items) ? r.items : [];
             return (
@@ -1008,6 +1147,6 @@ function Assets({ me }) {
             );
           })}
       </div>
-    </div></div>
+    </div></div></>
   );
 }
