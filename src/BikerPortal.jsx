@@ -9,10 +9,11 @@ import ChartTip from "./ChartTip";
 import GlassSidebar from "./GlassSidebar";
 import BottomNav from "./BottomNav";
 import { useTheme } from "./theme";
-import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, validateHandover, receivedRecord, itemsOk } from "./handover";
+import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, validateHandover, receivedRecord, itemsOk, badChecksConfirm } from "./handover";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
 const DailyReceive = lazy(() => import("./daily/DailyReceive"));
+const HandoverReport = lazy(() => import("./HandoverReport"));
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
     هوية دلو ورغوة (برتقالي) · ثنائية اللغة (عربي + বাংলা)
@@ -150,6 +151,10 @@ const CSS = `
 .bp-rcv{padding:11px 13px;border-bottom:1px solid var(--line);background:var(--glass-2)}.bp-rcv:last-child{border-bottom:none}
 .bp-rcv-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.bp-rcv-h .tx{flex:1;min-width:120px;font-size:13.5px;font-weight:700;color:var(--ink-2)}.bp-rcv-h .bn{font-weight:600;color:var(--mut);font-size:11px}
 .bp-yn{flex:none;width:150px}.bp-yn button{min-height:46px}
+.bp-yn:has(button:nth-child(3)){width:100%}.bp-yn button.on.note{background:var(--warn);border-color:var(--warn);color:#fff}
+.bp-cknote{display:block;width:100%;margin-top:6px;min-height:40px;padding:8px 10px;font-size:14px}
+.bp-item-open{cursor:pointer}.bp-item-open:hover{border-color:rgba(var(--p-rgb),.4)}
+.bp-open{margin-inline-start:auto;font-size:11.5px;font-weight:800;color:var(--p-ink)}.bp-open .bn{display:inline;font-size:10.5px}
 .bp-yn button.on.yes{background:var(--ok);border-color:var(--ok);color:#fff}.bp-yn button.on.no{background:var(--bad);border-color:var(--bad);color:#fff}
 .bp-rcv-n{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12.5px;font-weight:700;color:var(--ink-2)}.bp-rcv-n .bp-seg{flex:1}.bp-rcv-n .bp-seg button{min-height:44px}
 .bp-mks{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
@@ -599,6 +604,8 @@ function Handover({ me, myBike, onDirty }) {
   const [checks, setChecks] = useState(() => Object.fromEntries(CHECKLIST.map(c => [c.id, true])));
   const [ph, setPh] = useState({}); // front/back/right/left/odometer + صور الصندوق الخمس
   const [received, setReceived] = useState(emptyReceived);
+  const [ckNotes, setCkNotes] = useState({}); // وصف قصير لكل بند غير سليم (اختياري)
+  const [report, setReport] = useState(null); // {row, saved}: تقرير مفتوح
   const [damages, setDamages] = useState([]);
   const [notes, setNotes] = useState("");
   const [pledge, setPledge] = useState(false);
@@ -616,7 +623,7 @@ function Handover({ me, myBike, onDirty }) {
 
   async function loadRecent() {
     const { data } = await supabase.from("bike_handovers")
-      .select("id,plate,direction,odometer,created_at,checklist").order("created_at", { ascending: false }).limit(8);
+      .select("*").order("created_at", { ascending: false }).limit(8);
     setRecent(data || []);
   }
   useEffect(() => { loadRecent(); }, []);
@@ -630,12 +637,14 @@ function Handover({ me, myBike, onDirty }) {
     setMsg(null);
     const err = validateHandover({ odometer, photos: ph, received, pledge });
     if (err) { setMsg({ t: "err", m: err }); return; }
+    const warnBad = badChecksConfirm(CHECKLIST.filter(c => !checks[c.id]).length);
+    if (warnBad && !window.confirm(warnBad)) return;
     setBusy(true);
     try {
       const bid = me.biker_employee_id;
       const { compressImage } = await import("./daily/compress");
       const jobs = [["front", "handover-front"], ["back", "handover-back"], ["right", "handover-right"], ["left", "handover-left"], ["odometer", "handover-odometer"],
-        ...(received.box === true ? BOX_PHOTOS.map(b => [b.id, b.folder]) : [])].map(([k, folder]) => ({ k, folder, file: ph[k] }))
+        ...(received.box === true || received.box === "note" ? BOX_PHOTOS.map(b => [b.id, b.folder]) : [])].map(([k, folder]) => ({ k, folder, file: ph[k] }))
         .concat(damages.map((f, i) => ({ k: "dmg" + i, folder: "handover-damage", file: f })));
       const urls = {}; let done = 0; setProg({ done: 0, total: jobs.length });
       for (const j of jobs) {
@@ -649,19 +658,20 @@ function Handover({ me, myBike, onDirty }) {
         urls[j.k] = url; setProg({ done: ++done, total: jobs.length });
       }
       const dmg = damages.map((_, i) => urls["dmg" + i]);
-      const boxPhotos = received.box === true ? Object.fromEntries(BOX_PHOTOS.map(b => [b.id, urls[b.id]])) : {};
+      const boxPhotos = received.box === true || received.box === "note" ? Object.fromEntries(BOX_PHOTOS.map(b => [b.id, urls[b.id]])) : {};
       const rec = receivedRecord(received);
-      const { error } = await supabase.from("bike_handovers").insert({
+      const ckN = Object.fromEntries(CHECKLIST.filter(c => !checks[c.id] && String(ckNotes[c.id] || "").trim()).map(c => [c.id, ckNotes[c.id].trim()]));
+      const { data: saved, error } = await supabase.from("bike_handovers").insert({
         operator_id: me.operator_id, vehicle_id: myBike.id, plate: myBike.plate,
         biker_employee_id: bid, biker_name: me.name, direction,
         odometer: Number(odometer),
         engine_sound_ok: !!checks.engine, items_ok: itemsOk(checks, received, CHECKLIST.map(c => c.id)),
-        checklist: { ...checks, received: rec },
+        checklist: { ...checks, received: rec, ...(Object.keys(ckN).length ? { notes: ckN } : {}) },
         photo_front: urls.front, photo_back: urls.back, photo_right: urls.right, photo_left: urls.left, photo_odometer: urls.odometer,
         damage_photos: dmg,
         photos: { front: urls.front, back: urls.back, right: urls.right, left: urls.left, odometer: urls.odometer, damages: dmg, ...boxPhotos },
         condition_notes: notes || null, pledge_accepted: true, created_by: me.uid,
-      });
+      }).select("*").single();
       if (error) throw error;
       if (recv) {
         // صلاحية البايكر الحالية (fleet_biker_self_upd) تسمح بتحديث بطاقة دراجته: الاستلام + حالة المفتاح إن استُلم
@@ -670,7 +680,8 @@ function Handover({ me, myBike, onDirty }) {
         try { await supabase.from("fleet_vehicles").update(patch).eq("id", myBike.id); } catch (e) { /* لا يمنع الحفظ */ }
       }
       setMsg({ t: "ok", m: "تم تسجيل حالة الدراجة بنجاح ✅ · সফলভাবে সংরক্ষিত" });
-      setOdometer(""); setNotes(""); setPh({}); setDamages([]); setPledge(false); setReceived(emptyReceived()); uploaded.current = new Map();
+      if (saved) setReport({ row: saved, saved: true }); // التقرير يُفتح مباشرة بعد الحفظ
+      setCkNotes({}); setOdometer(""); setNotes(""); setPh({}); setDamages([]); setPledge(false); setReceived(emptyReceived()); uploaded.current = new Map();
       setChecks(Object.fromEntries(CHECKLIST.map(c => [c.id, true])));
       loadRecent();
     } catch (e) { setMsg({ t: "err", m: "تعذّر الحفظ — مدخلاتك محفوظة، أعد المحاولة · আবার চেষ্টা করুন: " + (e.message || e) }); }
@@ -684,10 +695,12 @@ function Handover({ me, myBike, onDirty }) {
       <div className="bp-rcv-h"><span className="tx">{it.ar} <span className="bn">/ {it.bn}</span></span>
         <div className="bp-seg bp-yn" role="radiogroup" aria-label={it.ar}>
           <button type="button" role="radio" aria-checked={v === true} className={v === true ? "on yes" : ""} onClick={() => setR({ [it.id]: true })}>نعم<span className="bn">হ্যাঁ</span></button>
+          {it.withNote && <button type="button" role="radio" aria-checked={v === "note"} className={v === "note" ? "on note" : ""} onClick={() => setR({ [it.id]: "note" })}>نعم مع ملاحظة<span className="bn">হ্যাঁ, তবে সমস্যা</span></button>}
           <button type="button" role="radio" aria-checked={v === false} className={v === false ? "on no" : ""} onClick={() => setR({ [it.id]: false })}>لا<span className="bn">না</span></button>
         </div></div>
       {v === true && it.count && <div className="bp-rcv-n"><span>كم مفتاح؟ · <span className="bn">কয়টি চাবি?</span></span>
         <div className="bp-seg">{[1, 2, 3].map(n => <button type="button" key={n} aria-pressed={received[it.count] === n} className={received[it.count] === n ? "on" : ""} onClick={() => setR({ [it.count]: n })}>{n}</button>)}</div></div>}
+      {v === "note" && <input className="g-input bp-in" style={{ marginTop: 8 }} aria-label={"ملاحظة " + it.ar} value={received.reasons[it.id] || ""} placeholder="الملاحظة: ليس أصلياً، مكسور… · সমস্যা লিখুন" onChange={e => setR({ reasons: { ...received.reasons, [it.id]: e.target.value } })} />}
       {v === false && <input className="g-input bp-in" style={{ marginTop: 8 }} aria-label={"سبب " + it.ar} value={received.reasons[it.id] || ""} placeholder="السبب: لم يُسلَّم لي، مفقود… · কারণ" onChange={e => setR({ reasons: { ...received.reasons, [it.id]: e.target.value } })} />}
     </div>;
   };
@@ -712,7 +725,8 @@ function Handover({ me, myBike, onDirty }) {
         {CHECKLIST.map(c => (
           <label className="bp-chk" key={c.id} htmlFor={"ck_" + c.id}>
             <input id={"ck_" + c.id} type="checkbox" checked={!!checks[c.id]} onChange={e => setChecks(s => ({ ...s, [c.id]: e.target.checked }))} />
-            <span className="tx">{c.ar} <span className="bn">/ {c.bn}</span></span>
+            <span className="tx">{c.ar} <span className="bn">/ {c.bn}</span>
+              {!checks[c.id] && <input className="g-input bp-cknote" aria-label={"وصف " + c.ar} value={ckNotes[c.id] || ""} placeholder="وصف قصير (اختياري) · সংক্ষেপে লিখুন" onClick={e => e.preventDefault()} onChange={e => setCkNotes(s => ({ ...s, [c.id]: e.target.value }))} />}</span>
           </label>
         ))}
       </div>
@@ -733,7 +747,7 @@ function Handover({ me, myBike, onDirty }) {
       <label className="bp-lbl">{recv ? "ما استلمته" : "ما سلّمته"} <span className="bp-req">*</span> <span className="bn">/ {recv ? "যা পেয়েছি" : "যা দিয়েছি"}</span></label>
       <div className="bp-chklist">{RECEIVED_ITEMS.map(it => YesNo({ it }))}</div>
 
-      {received.box === true && <>
+      {(received.box === true || received.box === "note") && <>
         <label className="bp-lbl">صور الصندوق <span className="bp-req">*</span> <span className="bn">/ বক্সের ছবি</span></label>
         <div className="bp-pgrid">
           {BOX_PHOTOS.map((b, i) => <div key={b.id} style={i === 4 ? { gridColumn: "1 / -1" } : undefined}><PhotoBox id={"ph_" + b.id} cap={b.ar} capBn={b.bn} tag={b.tag} file={ph[b.id]} onPick={setP(b.id)} /></div>)}
@@ -766,12 +780,13 @@ function Handover({ me, myBike, onDirty }) {
       <label className="bp-lbl" style={{ marginTop: 18 }}>آخر سجلاتك <span className="bn">/ সর্বশেষ রেকর্ড</span></label>
       <div className="bp-list">
         {recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
-          recent.map(r => { const rc = (r.checklist || {}).received || {}; return <div className="bp-item" key={r.id}>
+          recent.map(r => { const rc = (r.checklist || {}).received || {}; return <div className="bp-item bp-item-open" key={r.id} role="button" tabIndex={0} onClick={() => setReport({ row: r })} onKeyDown={e => { if (e.key === "Enter") setReport({ row: r }); }}>
             <div className="t">{r.plate || "—"} · {r.direction === "receive" ? "استلام · গ্রহণ" : "تسليم · হস্তান্তর"} · العدّاد {r.odometer}<span className="g-badge info"><i />مُرسل · <span className="bn">জমা দেওয়া</span></span></div>
             <div className="m">{new Date(r.created_at).toLocaleString("ar")}</div>
-            <div className="bp-mks"><Mark v={rc.box} t="📦 صندوق" /><Mark v={rc.bike_key} t="🔑 مفتاح الدراجة" /><Mark v={rc.box_key} t="🗝️ مفتاح الصندوق" /></div>
+            <div className="bp-mks"><Mark v={rc.box} t="📦 صندوق" /><Mark v={rc.bike_key} t="🔑 مفتاح الدراجة" /><Mark v={rc.box_key} t="🗝️ مفتاح الصندوق" /><span className="bp-open">عرض التقرير ‹ <span className="bn">রিপোর্ট দেখুন</span></span></div>
           </div>; })}
       </div>
+      {report && <Suspense fallback={null}><HandoverReport row={report.row} mode="biker" saved={report.saved} onClose={() => setReport(null)} /></Suspense>}
     </div></div>
   );
 }

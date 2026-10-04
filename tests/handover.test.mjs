@@ -32,4 +32,29 @@ ok('السجل المحفوظ: العدد للمستلَم فقط والسبب �
 const old=H.handoverSummary({checklist:{engine:true,box:true}},ids), nw=H.handoverSummary({checklist:{engine:true,received:rec}},ids);
 ok('سجل قديم بلا received ⇒ بلا تحذير ولا أخطاء',old.rec===null&&!old.warn);
 ok('سجل فيه بند غير مستلَم ⇒ تحذير',nw.warn&&nw.missing.join()==='box_key');
+
+// ── رسالة سويتر والتقرير ──
+const REAL={created_at:'2026-10-04T03:09:09Z',direction:'receive',plate:'ح ب 8539',biker_name:'Abed mia',biker_employee_id:'2637651411',odometer:'24',
+  checklist:{box:false,oil:false,horn:true,chain:true,plate:false,tires:true,brakes:true,engine:false,lights:true,mirrors:false,received:{box:false,box_key:false,reasons:{box:'ليست أصلية.',box_key:'لا يوجد مفتاح أو قفل'},bike_key:true,bike_keys:2}},condition_notes:'لا يمكن فتح خزان الزيت بالمفتاح.'};
+const VEH={plate_en:'B J 8539',make:'بجاج (Bajaj)',model_year:2024,vin:'MD2A21BXXRWD46160'};
+const msg=H.handoverSweaterMessage(REAL,VEH),[mAr,mEn]=msg.split('\n\n🏍️');
+ok('رسالة سويتر بملاحظات: القسمان العربي والإنجليزي',msg.startsWith('🏍️ تقرير استلام دراجة')&&/Motorcycle handover report/.test(msg)&&/رقم الهيكل: MD2A21BXXRWD46160/.test(msg)&&/VIN: MD2A21BXXRWD46160/.test(msg));
+ok('كل ملاحظة مرقّمة مع سببها في اللغتين + طلب المعالجة',/^7\. مفتاح الصندوق: لم يُستلم — لا يوجد مفتاح أو قفل$/m.test(mAr)&&/^7\. Box key: not received — لا يوجد مفتاح أو قفل$/m.test(mEn)&&/نرجو معالجة الملاحظات/.test(mAr)&&/Please resolve the above/.test(mEn));
+ok('الوقت بتوقيت الرياض (03:09Z ⇒ 06:09 ص / AM)',/التاريخ: 04\/10\/2026 — الوقت: 06:09 ص/.test(msg)&&/Date: 04\/10\/2026 — Time: 06:09 AM/.test(msg));
+const ex=H.handoverSweaterMessage(REAL,VEH,{exclude:['ck:plate']});
+ok('الاستبعاد يحذف البند من اللغتين ويعيد الترقيم',!/اللوحة والاستمارة/.test(ex)&&!/Plate & registration/.test(ex)&&/^6\. مفتاح الصندوق/m.test(ex));
+const clean={created_at:'2026-10-04T10:00:00Z',direction:'receive',plate:'ح ب 1',biker_name:'X',biker_employee_id:'1',odometer:5,checklist:{...Object.fromEntries(H.CHECKLIST.map(c=>[c.id,true])),received:{box:true,bike_key:true,bike_keys:1,box_key:true,box_keys:1,reasons:{}}}};
+const cm=H.handoverSweaterMessage(clean,{});
+ok('بلا ملاحظات ⇒ «بلا ملاحظات» وبلا طلب معالجة',/تم الاستلام بلا ملاحظات ✓/.test(cm)&&/Received with no issues ✓/.test(cm)&&!/نرجو|Please resolve/.test(cm));
+ok('ملخص الملاحظات: بنود التحقق + المستلَمات «لا» (سجل عابد = 7)',H.handoverIssues(REAL).length===7);
+const noteRow={...clean,checklist:{...clean.checklist,received:{box:true,box_note:'ليس أصلياً',bike_key:true,bike_keys:1,box_key:true,box_keys:1,reasons:{}}}};
+ok('«نعم مع ملاحظة» تُعدّ ملاحظة وتظهر في الرسالة',H.handoverIssues(noteRow).length===1&&/صندوق الغسيل: مستلَم مع ملاحظة — ليس أصلياً/.test(H.handoverSweaterMessage(noteRow,{}))&&/Wash box ✓ ⚠/.test(H.handoverSweaterMessage(noteRow,{})));
+const legacy={created_at:'2026-09-26T20:30:00Z',direction:'receive',plate:'ح ب 8539',odometer:1200,checklist:{engine:true,box:true,plate:true}};
+ok('سجل قديم (بلا received وبمفتاح plate) ⇒ تقرير ورسالة بلا أخطاء',H.handoverIssues(legacy).length===0&&/تم الاستلام بلا ملاحظات/.test(H.handoverSweaterMessage(legacy,null))&&H.checklistOf(legacy.checklist).some(c=>c.id==='plate'));
+const noteBox={...yes,box:'note',reasons:{box:'ليس أصلياً'}};
+ok('«نعم مع ملاحظة» بلا سبب ⇒ مرفوض',/الملاحظة/.test(V({...good,received:{...yes,box:'note',reasons:{}}})||''));
+ok('«نعم مع ملاحظة» بلا الصور الخمس ⇒ مرفوض',/صور الصندوق الخمس/.test(V({...good,photos:bike,received:noteBox})||''));
+ok('«نعم مع ملاحظة» مكتمل ⇒ مقبول و items_ok = false',V({...good,received:noteBox})===null&&H.itemsOk(allc,noteBox,ids)===false&&H.receivedRecord(noteBox).box===true&&H.receivedRecord(noteBox).box_note==='ليس أصلياً');
+ok('السجل القديم يُعرض كما حُفظ (بلا «اللوحة مركّبة» و«الاستمارة»)، والجديد بالبندين',!H.checklistOf(legacy.checklist).some(c=>c.id==='plate_on'||c.id==='papers')&&H.checklistOf({}).some(c=>c.id==='papers')&&!H.checklistOf({}).some(c=>c.id==='plate'));
+ok('تنبيه 3 بنود غير سليمة فأكثر',H.badChecksConfirm(2)===null&&/حدّدت 3 بنود/.test(H.badChecksConfirm(3)));
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
