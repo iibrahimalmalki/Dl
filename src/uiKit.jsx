@@ -80,6 +80,33 @@ export function useConfirm() {
   return [node, ask];
 }
 
+// حوار إدخال نص بدل window.prompt (يتسع لشرح ولرابط طويل على الجوال):
+// const [dlg, ask] = usePrompt(); const v = await ask({ title, hint, label, value, placeholder, check: v => ({error, warn}) });
+// يُرجع النص المُدخل أو null عند الإلغاء. check يُقيَّم أثناء الكتابة: error يعطّل الزر، warn تنبيه فقط.
+export function usePrompt() {
+  const [st, setSt] = useState(null);
+  const [val, setVal] = useState("");
+  const res = useRef(null);
+  const ask = useCallback(o => new Promise(r => { res.current = r; setVal((o && o.value) || ""); setSt(o || {}); }), []);
+  const close = v => { const r = res.current; res.current = null; setSt(null); r && r(v); };
+  const chk = st && st.check && val.trim() ? (st.check(val.trim()) || {}) : {};
+  const node = st && createPortal(<Modal open onClose={() => close(null)} title={st.title || "إدخال"}
+    foot={<div style={{ display: "flex", gap: 8, width: "100%", flexDirection: "row-reverse" }}>
+      <Btn kind="primary" block disabled={!val.trim() || !!chk.error} onClick={() => close(val.trim())}>{st.ok || "متابعة"}</Btn>
+      <Btn kind="secondary" block onClick={() => close(null)}>{st.cancel || "إلغاء"}</Btn></div>}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {st.hint && <div style={{ fontSize: 13, lineHeight: 1.7, color: "var(--ink-2)" }}>{st.hint}</div>}
+      <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 800, color: "var(--ink-2)" }}>{st.label || ""}
+        <textarea className="g-textarea" rows={3} dir="ltr" value={val} placeholder={st.placeholder || ""} autoFocus
+          onChange={e => setVal(e.target.value)} style={{ fontSize: 14, wordBreak: "break-all", textAlign: "left", minHeight: 76 }}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (val.trim() && !chk.error) close(val.trim()); } }} /></label>
+      {chk.error && <div className="k-ferr" role="alert">{chk.error}</div>}
+      {!chk.error && chk.warn && <div role="status" style={{ padding: "9px 11px", borderRadius: 10, background: "var(--warn-bg)", color: "var(--warn-ink)", fontSize: 12.5, fontWeight: 800, lineHeight: 1.6 }}>⚠ {chk.warn}</div>}
+    </div>
+  </Modal>, document.body);
+  return [node, ask];
+}
+
 // رسالة خطأ بشرية: e = humanError(...) → ماذا حصل + ماذا تفعل + زر الإجراء + رمز صغير
 export function ErrorNote({ e, who, onRetry, onLogin, onNow, onView, onCamera, busy }) {
   const ref = useRef(null);
