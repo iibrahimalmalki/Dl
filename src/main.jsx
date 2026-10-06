@@ -5,8 +5,17 @@ import{supabase}from"./supabase";
 import{ThemeProvider}from"./theme";
 import{ToastProvider,ThemeToggle}from"./ui";
 import LandingPage from"./LandingPage";
-import EmployeePage from"./EmployeePage";
 import RecruitmentAd from"./RecruitmentAd";
+// رابط قديم «/?employee=…»: الصفحة العامة لبيانات الموظف أُلغيت — لا تقرأ شيئاً من القاعدة
+function OldEmployeeLink(){
+  return <div dir="rtl" style={{minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"var(--bg)",fontFamily:"var(--font)"}}>
+    <div className="g-card" style={{maxWidth:380,width:"100%",padding:"28px 22px",textAlign:"center",display:"flex",flexDirection:"column",gap:12}}>
+      <b style={{fontSize:17,color:"var(--ink)",lineHeight:1.6}}>حدّث بياناتك من بوابة البايكر بعد تسجيل الدخول</b>
+      <span lang="bn" style={{fontSize:14,color:"var(--mut)",lineHeight:1.7}}>লগইন করে বাইকার পোর্টাল থেকে আপনার তথ্য আপডেট করুন</span>
+      <a className="g-btn primary block" style={{minHeight:50,fontSize:15}} href="/#biker">بوابة البايكر · বাইকার পোর্টাল</a>
+    </div></div>;
+}
+
 const ApplicantForm=lazy(()=>import("./ApplicantForm"));
 const InterviewPage=lazy(()=>import("./InterviewPage"));
 const TMAQuestionnaire=lazy(()=>import("./TMAQuestionnaire"));
@@ -80,7 +89,7 @@ function App(){
     {page==="biker"&&<BikerPortal/>}
     {page==="ad"&&<RecruitmentAd onApply={()=>setPage("recruit")} onBack={()=>setPage("landing")}/>}
     {page==="recruit"&&<ApplicantForm onBack={()=>setPage("ad")}/>}
-    {page==="employee"&&<EmployeePage onBack={()=>setPage("landing")} employeeId={employeeEditId}/>}
+    {page==="employee"&&<OldEmployeeLink/>}
     {page==="interview"&&sessionId&&<InterviewPage sessionId={sessionId}/>}
     {page==="tma"&&tmaToken&&<TMAQuestionnaire token={tmaToken}/>}
     {page==="admin"&&adminView()}
