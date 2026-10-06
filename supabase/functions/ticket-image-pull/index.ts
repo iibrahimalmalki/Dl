@@ -1,7 +1,8 @@
 // ticket-image-pull — يسحب صورة شكوى من رابط سويتر ويخزّنها في حاوية sweater-tickets.
 // المصدر: نُقل من النسخة المنشورة (الإصدار 1، verify_jwt=false) وعُدِّل هنا. لا يُنشر إلا بموافقة المالك:
 //   supabase functions deploy ticket-image-pull --no-verify-jwt --project-ref cnmggdrlkgsyrjxmvydv
-// التعديل (06/10/2026): يُرفض أي رد ليس نوعه image/* أو لا تبدأ بياناته بتوقيع صورة
+// التعديل (06/10/2026): allowedSource صار قائمة نطاقات محددة (حُذف includes("sweat")).
+// يُرفض أي رد ليس نوعه image/* أو لا تبدأ بياناته بتوقيع صورة
 // (JPEG / PNG / WebP / HEIC / GIF) — لا يُحفظ شيء ولا يُعدَّل الصف، ويُعاد الرمز NOT_IMAGE.
 // سببه: لصق رابط «صفحة» التذكرة (ssp-portal.sweater.sa/tickets/<n>) كان يحفظ صفحة HTML باسم .jpg ويُعلَّم has_image=true.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -26,11 +27,15 @@ function safePath(p: string): string | null {
   if (p.length > 300) return null;
   return p;
 }
-// نسمح فقط بمصادر سويتر المعروفة
+// نسمح فقط بمصادر سويتر المعروفة: النطاق نفسه أو نطاق فرعي منه (مطابقة لاحقة بنقطة، لا includes)
+// الفعلي في sweater_pic_url حتى 06/10/2026: dqcwsz51buluj.cloudfront.net (94) و ssp-portal.sweater.sa (2، روابط صفحات)
+const ALLOWED_HOSTS = ["cloudfront.net", "sweatp.com", "sweatp.co", "sweater.sa"];
 function allowedSource(u: string): boolean {
   try {
-    const h = new URL(u).hostname.toLowerCase();
-    return h.endsWith(".cloudfront.net") || h.endsWith("sweatp.com") || h.endsWith("sweatp.co") || h.includes("sweat");
+    const x = new URL(u);
+    if (x.protocol !== "https:" && x.protocol !== "http:") return false;
+    const h = x.hostname.toLowerCase().replace(/\.$/, "");
+    return ALLOWED_HOSTS.some(d => h === d || h.endsWith("." + d));
   } catch { return false; }
 }
 // رابط صفحة تذكرة في بوابة سويتر — ليس صورة
@@ -79,7 +84,18 @@ Deno.serve(async (req) => {
     if (isTicketPage(body.url)) return json(NOT_IMAGE, 422);
     if (!allowedSource(body.url)) return json({ error: "BAD_SOURCE", message: "مصدر الصورة غير مسموح" }, 400);
 
-    const r = await fetch(body.url, { headers: { "User-Agent": "Mozilla/5.0 DaluWarghwah", "Accept": "image/*" } });
+    // التحويلات تُتبع يدوياً (3 كحد أقصى) وكل وجهة تُفحص بنفس القائمة — لا جلب من نطاق غير مسموح
+    let target = body.url, r: Response | null = null;
+    for (let hop = 0; hop < 4; hop++) {
+      r = await fetch(target, { redirect: "manual", headers: { "User-Agent": "Mozilla/5.0 DaluWarghwah", "Accept": "image/*" } });
+      const loc = r.status >= 300 && r.status < 400 ? r.headers.get("location") : null;
+      if (!loc) break;
+      target = new URL(loc, target).toString();
+      if (isTicketPage(target)) return json(NOT_IMAGE, 422);
+      if (!allowedSource(target)) return json({ error: "BAD_SOURCE", message: "مصدر الصورة غير مسموح (تحويل إلى نطاق آخر)" }, 400);
+      if (hop === 3) return json({ error: "FETCH_FAILED", message: "تحويلات كثيرة" }, 502);
+    }
+    r = r!;
     if (!r.ok) return json({ error: "FETCH_FAILED", message: "تعذّر جلب الصورة (" + r.status + ")" }, 502);
     const contentType = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
     const bytes = new Uint8Array(await r.arrayBuffer());
