@@ -28,8 +28,9 @@ export const CATALOG=[
   {key:"glass",name:"منظّف الزجاج",en:"Glass Cleaner",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
   {key:"soap",name:"صابون/شامبو",en:"Soap/Shampoo",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
   {key:"sponge",name:"إسفنجات (بودي/إطارات)",en:"Sponges",type:"sponge",category:"مستهلكات",life:2,lead:7,mode:"reorder"},
-  {key:"towels",name:"مناشف ميكروفايبر (4 ألوان)",en:"Microfiber towels",type:"towel",category:"مستهلكات",life:2,lead:7,mode:"reorder"},
 ];
+// المناشف ليست عهدة (تُصرف يومياً في «الاستلام اليومي») — لا تُضاف ولا تُعرض هنا
+const isTowel=r=>r&&(r.item_type==="towel"||/منشف|towel/i.test(String(r.name||"")));
 const MODE_OF=t=>t==="motorcycle"?"buy":["cleaning","sponge","towel","consumable"].includes(t)?"reorder":"replace";
 const addMonths=(iso,m)=>{const d=new Date(iso);d.setMonth(d.getMonth()+Math.round(m));return d.toISOString().slice(0,10);};
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
@@ -50,7 +51,7 @@ export default function Custody({opId,owner}){
       supabase.from("employees").select("id,full_name,employee_id").not("employee_id","is",null).order("employee_id"),
       (()=>{let q=supabase.from("custody_assets").select("*").order("end_date",{ascending:true});if(opId&&opId!=="all")q=q.or("operator_id.eq."+opId+",operator_id.is.null");return q;})(),
     ]);
-    setEmps(e||[]);setRows(ca.data||[]);setLoading(false);
+    setEmps(e||[]);setRows((ca.data||[]).filter(r=>!isTowel(r)));setLoading(false);
   })();},[opId]);
 
   const empBySid=useMemo(()=>{const m={};emps.forEach(x=>{if(x.employee_id)m[String(x.employee_id).trim()]=x;});return m;},[emps]);
