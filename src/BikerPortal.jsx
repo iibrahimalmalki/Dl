@@ -232,11 +232,6 @@ const ASSET_ITEMS = [
   { key: "sponge_tyre", ar: "إسفنجة الإطارات", bn: "টায়ার স্পঞ্জ", img: "sponge_tyre" },
   // المكنسة
   { key: "vacuum", ar: "المكنسة الكهربائية", bn: "ভ্যাকুয়াম ক্লিনার", img: "vacuum" },
-  // المناشف
-  { key: "towel_body", ar: "منشفة البودي (زرقاء)", bn: "বডি তোয়ালে (নীল)", img: "towel_body" },
-  { key: "towel_dashboard", ar: "منشفة التابلوه (خضراء)", bn: "ড্যাশবোর্ড তোয়ালে (সবুজ)", img: "towel_dashboard" },
-  { key: "towel_glass", ar: "منشفة الزجاج (صفراء)", bn: "গ্লাস তোয়ালে (হলুদ)", img: "towel_glass" },
-  { key: "towel_tyre", ar: "منشفة الإطارات", bn: "টায়ার তোয়ালে", img: "towel_tyre" },
   // مواد التنظيف والتلميع
   { key: "dashboard_polish", ar: "ملمّع التابلوه", bn: "ড্যাশবোর্ড পলিশ", img: "dashboard_polish" },
   { key: "tyre_polish", ar: "ملمّع الإطارات", bn: "টায়ার পলিশ", img: "tyre_polish" },
