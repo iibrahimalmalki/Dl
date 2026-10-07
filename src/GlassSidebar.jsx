@@ -85,7 +85,9 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
   },[items,query]);
 
   const Item=({n,bottom})=>{
-    const Ic=ICON_BY_KEY[n.k]||Circle;const isActive=n.k===active;const badge=badges[n.k];const tipId=`${uid}-${n.k}`;const locked=!!(n.lock||n.soon);
+    const Ic=ICON_BY_KEY[n.k]||Circle;const isActive=n.k===active;const badge=badges[n.k];const tipId=`${uid}-${n.k}`;
+    // soon = معطّل (قريباً). lock = «مقصور على المالك» علامةٌ فقط والزر يعمل — الإخفاء عن غيره في فلترة Shell
+    const locked=!!n.soon,ownerOnly=!!n.lock;
     return(<div className="gs-wrap">
       <motion.button type="button" data-nav aria-current={isActive?"page":undefined} aria-disabled={locked||undefined} disabled={locked}
         aria-label={!showLabels?n.ar:undefined} aria-describedby={!showLabels?tipId:undefined}
@@ -95,10 +97,10 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
         {isActive&&<span aria-hidden className="gs-ind"/>}
         <span className="gs-ic"><Ic size={20} strokeWidth={1.9}/>{badge?<span className="gs-dot">{badge>99?"99+":badge}</span>:null}</span>
         <AnimatePresence initial={false}>{showLabels&&<motion.span key="l" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:8}} transition={{duration:reduce?0:0.18}} className="gs-lbl">{narrow&&n.sh?n.sh:n.ar}{n.bn?<small className="gs-bn" lang="bn">{n.bn}</small>:null}</motion.span>}</AnimatePresence>
-        {showLabels&&locked&&<Lock size={13} className="gs-lock" aria-hidden/>}
+        {showLabels&&(locked||ownerOnly)&&<span className="gs-lock" title={ownerOnly?"للمالك فقط":"قريباً"}><Lock size={13} aria-hidden/></span>}
         {showLabels&&badge&&!locked?<span className="gs-badge">{badge}</span>:null}
       </motion.button>
-      {!showLabels&&<span role="tooltip" id={tipId} className="gs-tip">{n.ar}{locked?" · قريباً":""}</span>}
+      {!showLabels&&<span role="tooltip" id={tipId} className="gs-tip">{n.ar}{locked?" · قريباً":ownerOnly?" · للمالك فقط":""}</span>}
     </div>);
   };
 
@@ -213,7 +215,7 @@ const CSS=`
 .gs-dot{position:absolute;top:-6px;left:-6px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--p);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;line-height:1;font-variant-numeric:tabular-nums}
 .gs-lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gs-bn{display:block;font-size:10.5px;font-weight:600;opacity:.75;line-height:1.3;font-family:system-ui,-apple-system,"Noto Sans Bengali","Segoe UI",sans-serif}
-.gs-lock{flex:none;opacity:.7}
+.gs-lock{flex:none;opacity:.7;display:inline-flex;align-items:center}
 .gs-badge{flex:none;border-radius:99px;background:rgba(var(--p-rgb),.18);color:var(--p);font-size:10.5px;font-weight:800;padding:1px 7px;font-variant-numeric:tabular-nums}
 .gs-tip{position:absolute;top:50%;right:calc(100% + 10px);transform:translateY(-50%);z-index:50;white-space:nowrap;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;background:var(--gs-tipbg);color:var(--gs-txt);border:1px solid var(--gs-line);box-shadow:0 8px 24px -8px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .15s}
 .gs-wrap:hover .gs-tip,.gs-wrap:focus-within .gs-tip{opacity:1}
