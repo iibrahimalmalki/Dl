@@ -1,6 +1,7 @@
 // الاستلام اليومي — صفحة المتابعة للمالك والمشرف: اليوم، الأرصدة، سجل التسليمات، المناشف، الإعدادات.
 import { useEffect, useMemo, useState } from "react";
-import { balances, isLate, monthSummary, riyadhDay, riyadhHM, normPhone, csvCell, waMessage } from "./engine";
+import { balances, isLate, monthSummary, riyadhDay, riyadhHM, normPhone, csvCell, waMessage, deliverySlot, SLOTS, WINDOWS, courierStats, missedDays } from "./engine";
+import { courierReport } from "./report";
 import { loadAdmin, photoUrl, addAdjustment, saveItem, saveCourier, loadSplit, setSplit, copyText } from "./store";
 
 const CSS = `
@@ -33,6 +34,12 @@ const CSS = `
 `;
 const fmt = t => riyadhDay(t).split("-").reverse().join("/") + " · " + riyadhHM(t);
 const monthOf = t => riyadhDay(t).slice(0, 7);
+// شارة تصنيف وقت التسليم: لا شيء داخل النافذتين، وإلا «ليلي» أو «متأخر +المدة»
+const SlotBadge = ({ t }) => { const s = deliverySlot(t); if (!s || s.ok) return null;
+  return <span className={"g-badge " + SLOTS[s.kind].tone}>{s.kind === "late" ? "متأخر " + fmtMin(s.lateMin) : "ليلي — خارج النافذة"}</span>; };
+// مدة بالعربية بلا اتجاه LTR حتى لا تنقلب الأرقام: «1 س 50 د»
+const fmtMin = m => m >= 60 ? Math.floor(m / 60) + " س " + (m % 60) + " د" : m + " د";
+const hhmm = m => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
 const AR_M = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const mLabel = m => { const [y, mm] = m.split("-"); return AR_M[+mm - 1] + " " + y; };
 
@@ -55,7 +62,7 @@ export default function DailyAdmin({ me, owner }) {
     return { empName, item, courier, bal: balances(d.shares, d.adjustments, undist) };
   }, [d]);
   const reloadAll = () => setReload(x => x + 1);
-  const TABS = [["today", "اليوم"], ["bal", "الأرصدة"], ["log", "سجل التسليمات"], ["towels", "المناشف"], ["settings", "الإعدادات"]];
+  const TABS = [["today", "اليوم"], ["bal", "الأرصدة"], ["log", "سجل التسليمات"], ["courier", "أداء المندوب"], ["towels", "المناشف"], ["settings", "الإعدادات"]];
   return <div className="da"><style>{CSS}</style>
     <div className="g-tabs" role="tablist">{TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={"g-tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)}>{l}</button>)}</div>
     {d && !d.ready && <div className="da-note warn">جداول الاستلام اليومي لم تُنشأ بعد (docs/sql/daily_receive.sql بانتظار موافقة المالك). الصفحة للعرض فقط حتى التطبيق.</div>}
@@ -64,6 +71,7 @@ export default function DailyAdmin({ me, owner }) {
       : tab === "today" ? <Today d={d} c={ctx} onZoom={setZoom} />
       : tab === "bal" ? <Bal d={d} c={ctx} me={me} onSaved={reloadAll} />
       : tab === "log" ? <Log d={d} c={ctx} />
+      : tab === "courier" ? <Courier d={d} c={ctx} />
       : tab === "towels" ? <Towels d={d} />
       : <Settings d={d} owner={owner} onSaved={reloadAll} />}
     {zoom && <div className="da-zoom" role="dialog" aria-label="صورة الشحنة" onClick={() => setZoom(null)}><img src={zoom} alt="صورة الشحنة مكبّرة" /><button className="g-btn" onClick={() => setZoom(null)}>إغلاق</button></div>}
@@ -89,7 +97,7 @@ function DeliveryCard({ x, d, c, onZoom }) {
   const co = c.courier(x.courier_id), sh = d.shares.filter(s => s.delivery_id === x.id);
   const pend = [...new Set(sh.filter(s => s.status === "pending").map(s => s.employee_id))], short = [...new Set(sh.filter(s => s.status === "short").map(s => s.employee_id))];
   return <div className="g-card da-card">
-    <div className="da-top"><div><h3><span className="da-num">{fmt(x.received_at)}</span> {isLate(x.received_at) && <span className="g-badge warn"><i />متأخر</span>}</h3>
+    <div className="da-top"><div><h3><span className="da-num">{fmt(x.received_at)}</span> <SlotBadge t={x.received_at} /></h3>
       <span className="da-mut">المستلم: <b>{c.empName(x.received_by)}</b> · المندوب: <b>{co ? co.name : "—"}</b> {co && <a className="da-num" href={"tel:" + co.phone}>{co.phone}</a>}</span></div>
       <div className="da-kv">{x.status === "distributed" ? <span className="g-badge ok"><i />وُزّع</span> : <span className="g-badge warn"><i />بانتظار التوزيع</span>}<SentBadges x={x} /></div></div>
     <Lines x={x} c={c} />
@@ -156,25 +164,63 @@ function Log({ d, c }) {
   const list = d.deliveries.filter(x => monthOf(x.received_at) === m), sum = monthSummary(list);
   const csv = () => {
     const items = d.items;
-    const head = ["التاريخ", "وقت التسليم", "متأخر", "المستلم", "المندوب", "جوال المندوب", ...items.map(i => i.name_ar), "ربطات مستعملة مُرجَعة", "الحالة", "ملاحظة", "أُرسل لسويتر", "أُرسل للعمليات"];
+    const head = ["التاريخ", "وقت التسليم", "التصنيف", "دقائق التأخير", "المستلم", "المندوب", "جوال المندوب", ...items.map(i => i.name_ar), "ربطات مستعملة مُرجَعة", "الحالة", "ملاحظة", "أُرسل لسويتر", "أُرسل للعمليات"];
     const rows = list.map(x => { const co = c.courier(x.courier_id), L = Object.fromEntries((x.daily_delivery_lines || []).map(l => [l.item_key, l.qty]));
-      return [riyadhDay(x.received_at), riyadhHM(x.received_at), isLate(x.received_at) ? "نعم" : "لا", c.empName(x.received_by), co ? co.name : "", co ? co.phone : "", ...items.map(i => L[i.key] || 0), x.towels_returned || 0, x.status === "distributed" ? "وُزّع" : "بانتظار التوزيع", x.note || "", x.shared_sweater_at ? riyadhDay(x.shared_sweater_at) + " " + riyadhHM(x.shared_sweater_at) : "لا", x.shared_ops_at ? riyadhDay(x.shared_ops_at) + " " + riyadhHM(x.shared_ops_at) : "لا"]; });
+      const sl = deliverySlot(x.received_at);
+      return [riyadhDay(x.received_at), riyadhHM(x.received_at), SLOTS[sl.kind].ar, sl.lateMin || 0, c.empName(x.received_by), co ? co.name : "", co ? co.phone : "", ...items.map(i => L[i.key] || 0), x.towels_returned || 0, x.status === "distributed" ? "وُزّع" : "بانتظار التوزيع", x.note || "", x.shared_sweater_at ? riyadhDay(x.shared_sweater_at) + " " + riyadhHM(x.shared_sweater_at) : "لا", x.shared_ops_at ? riyadhDay(x.shared_ops_at) + " " + riyadhHM(x.shared_ops_at) : "لا"]; });
     const txt = "﻿" + [head, ...rows].map(r => r.map(csvCell).join(",")).join("\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type: "text/csv;charset=utf-8" })); a.download = `daily-deliveries-${m}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
   return <>
     <div className="da-top"><label className="da-f" style={{ minWidth: 180 }}>الشهر<select className="g-select" value={m} onChange={e => setM(e.target.value)}>{months.map(x => <option key={x} value={x}>{mLabel(x)}</option>)}</select></label>
       <button className="g-btn" disabled={!list.length} onClick={csv}>تصدير CSV</button></div>
-    <div className="da-kpis"><div><b className="da-num">{sum.count}</b><span>تسليمات</span></div><div><b className="da-num" style={{ color: sum.late ? "var(--warn-ink)" : undefined }}>{sum.late}</b><span>متأخرة (23:00–08:00)</span></div>
+    <div className="da-kpis"><div><b className="da-num">{sum.count}</b><span>تسليمات</span></div><div><b className="da-num" style={{ color: sum.late ? "var(--warn-ink)" : undefined }}>{sum.late}</b><span>خارج النافذتين</span></div>
       <div><b className="da-num">{sum.avgTime || "—"}</b><span>متوسط وقت التسليم</span></div>
       {d.items.filter(i => sum.items[i.key]).map(i => <div key={i.key}><b className="da-num">{sum.items[i.key]}</b><span>{i.name_ar}</span></div>)}</div>
     {list.length ? <div className="g-card da-card" style={{ padding: "8px 6px" }}><div className="da-twrap"><table className="g-tbl da-tbl"><thead><tr><th>التاريخ</th><th>وقت التسليم</th><th>المستلم</th><th>المندوب</th><th>الكميات</th><th>الحالة</th></tr></thead>
       <tbody>{list.map(x => { const co = c.courier(x.courier_id); return <tr key={x.id}><td className="da-num">{riyadhDay(x.received_at)}</td>
-        <td><span className="da-num">{riyadhHM(x.received_at)}</span> {isLate(x.received_at) && <span className="g-badge warn">متأخر</span>}</td>
+        <td><span className="da-num">{riyadhHM(x.received_at)}</span> <SlotBadge t={x.received_at} /></td>
         <td>{c.empName(x.received_by)}</td><td>{co ? <>{co.name} <a className="da-num" href={"tel:" + co.phone}>{co.phone}</a></> : "—"}</td>
         <td style={{ whiteSpace: "normal" }}><Lines x={x} c={c} /></td>
         <td><div className="da-kv">{x.status === "distributed" ? <span className="g-badge ok">وُزّع</span> : <span className="g-badge warn">بانتظار التوزيع</span>}<SentBadges x={x} /></div></td></tr>; })}</tbody></table></div></div>
       : <div className="g-card da-card"><div className="g-empty" style={{ padding: "26px 10px" }}><b>لا تسليمات في {mLabel(m)}</b></div></div>}
+  </>;
+}
+
+// أداء مندوب سويتر: الالتزام بالنافذتين، التأخير، الأيام بلا تسليم، النقص — وتقرير للطباعة يُرسل لسويتر
+function Courier({ d, c }) {
+  const months = useMonths(d), [m, setM] = useState(months[0]);
+  const list = d.deliveries.filter(x => monthOf(x.received_at) === m), ids = new Set(list.map(x => x.id));
+  const st = courierStats(list, d.shares.filter(s => ids.has(s.delivery_id))), a = st.all;
+  const today = riyadhDay(Date.now()), end = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5), 0)).toISOString().slice(0, 10);
+  const missed = missedDays(d.deliveries, m + "-01", today < end ? today : end);
+  const exc = list.filter(x => isLate(x.received_at)).sort((p, q) => (p.received_at < q.received_at ? 1 : -1));
+  const print = () => { const w = window.open("", "_blank"); if (!w) return;
+    w.document.write(courierReport({ month: m, deliveries: d.deliveries, shares: d.shares, items: d.items, couriers: d.couriers, today }) + "<script>window.onload=()=>window.print()<\/script>"); w.document.close(); };
+  const K = ({ v, l, tone, rtl }) => <div><b className={rtl ? undefined : "da-num"} style={{ color: tone ? `var(--${tone}-ink)` : undefined }}>{v}</b><span>{l}</span></div>;
+  return <>
+    <div className="da-top"><label className="da-f" style={{ minWidth: 180 }}>الشهر<select className="g-select" value={m} onChange={e => setM(e.target.value)}>{months.map(x => <option key={x} value={x}>{mLabel(x)}</option>)}</select></label>
+      <button className="g-btn primary" onClick={print}>تقرير لسويتر (طباعة / PDF)</button></div>
+    <div className="da-note">النافذتان المتفق عليهما: مسائية من <b className="da-num">{hhmm(WINDOWS.eveningFrom)}</b> إلى <b className="da-num">00:00</b> بعد انتهاء الدوام، أو صباحية من <b className="da-num">{hhmm(WINDOWS.morningFrom)}</b> إلى <b className="da-num">{hhmm(WINDOWS.morningTo)}</b> قبل أول طلب، وتسليم كل يوم أو يومين. ما بعد {hhmm(WINDOWS.morningTo)} يُحسب تأخيراً بالدقائق.</div>
+    <div className="da-kpis">
+      <K v={a.count} l="تسليمات" />
+      <K v={a.onTimePct == null ? "—" : a.onTimePct + "%"} l="في الموعد" tone={a.onTimePct == null ? null : a.onTimePct >= 90 ? "ok" : "bad"} />
+      <K v={a.late} l="متأخر خلال الدوام" tone={a.late ? "bad" : null} />
+      <K v={a.late ? fmtMin(a.lateMinAvg) : "—"} l="متوسط التأخير" rtl />
+      <K v={a.night} l="ليلي خارج النافذة" tone={a.night ? "warn" : null} />
+      <K v={missed.length} l="أيام بلا تسليم" tone={missed.length ? "bad" : null} />
+      <K v={a.shortDeliveries} l="تسليمات فيها نقص" tone={a.shortDeliveries ? "warn" : null} />
+    </div>
+    {Object.keys(st.byCourier).length > 0 && <div className="g-card da-card" style={{ padding: "8px 6px" }}><div className="da-twrap"><table className="g-tbl da-tbl"><thead><tr><th>المندوب</th><th>تسليمات</th><th>في الموعد</th><th>ليلي</th><th>متأخر</th><th>متوسط / أقصى تأخير</th><th>فيها نقص</th><th>آخر تسليم</th></tr></thead>
+      <tbody>{Object.entries(st.byCourier).map(([id, s]) => { const co = c.courier(id); return <tr key={id}><td>{co ? <>{co.name} <a className="da-num" href={"tel:" + co.phone}>{co.phone}</a></> : "—"}</td>
+        <td className="num">{s.count}</td><td className="num"><span className="da-num">{s.onTimePct}%</span></td><td className="num">{s.night}</td><td className="num">{s.late}</td>
+        <td>{s.late ? fmtMin(s.lateMinAvg) + " / " + fmtMin(s.lateMinMax) : "—"}</td><td className="num">{s.shortDeliveries}</td><td className="da-num">{s.last ? fmt(s.last) : "—"}</td></tr>; })}</tbody></table></div></div>}
+    {missed.length > 0 && <div className="da-note bad">أيام عمل بلا تسليم بعد مهلة يومين: <span className="da-num">{missed.map(x => x.slice(8) + "/" + x.slice(5, 7)).join(" · ")}</span></div>}
+    {exc.length > 0 ? <div className="g-card da-card"><h3>التسليمات خارج النافذتين</h3>
+      <div className="da-twrap"><table className="g-tbl compact da-tbl"><thead><tr><th>التاريخ</th><th>الوقت</th><th>التصنيف</th><th>المندوب</th><th>المستلم</th></tr></thead>
+        <tbody>{exc.map(x => { const co = c.courier(x.courier_id); return <tr key={x.id}><td className="da-num">{riyadhDay(x.received_at)}</td><td className="da-num">{riyadhHM(x.received_at)}</td><td><SlotBadge t={x.received_at} /></td><td>{co ? co.name : "—"}</td><td>{c.empName(x.received_by)}</td></tr>; })}</tbody></table></div></div>
+      : list.length > 0 && <div className="da-note ok">كل تسليمات {mLabel(m)} داخل النافذتين.</div>}
+    {!list.length && <div className="g-card da-card"><div className="g-empty" style={{ padding: "26px 10px" }}><b>لا تسليمات مسجّلة في {mLabel(m)}</b><p>يُبنى الأداء من تسليمات «الاستلام اليومي». سجّل كل تسليم من بوابة المستلم بدل واتساب ليظهر هنا وفي التقرير.</p></div></div>}
   </>;
 }
 

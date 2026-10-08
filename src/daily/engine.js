@@ -42,8 +42,31 @@ export function normPhone(v) {
 export const riyadhHour = t => { const d = new Date(t); return Number.isNaN(d.getTime()) ? null : (d.getUTCHours() + 3) % 24; };
 export const riyadhDay = t => new Date(new Date(t).getTime() + 3 * 3600e3).toISOString().slice(0, 10);
 export const riyadhHM = t => { const d = new Date(new Date(t).getTime() + 3 * 3600e3); return d.toISOString().slice(11, 16); };
-// متأخر: بين 23:00 و08:00 بتوقيت الرياض
-export const isLate = t => { const h = riyadhHour(t); return h != null && (h >= 23 || h < 8); };
+const riyadhMin = t => { const x = new Date(t).getTime(); if (Number.isNaN(x)) return null; const d = new Date(x + 3 * 3600e3); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
+
+// نافذتا التسليم المتفق عليهما مع مندوب سويتر (دقائق من منتصف الليل بتوقيت الرياض):
+// مسائية من نهاية وردية البايكر حتى 00:00، وصباحية 07:00–08:30 شاملة.
+// eveningFrom (21:00) افتراض حتى يحدّد المالك نهاية الوردية.
+export const WINDOWS = { eveningFrom: 21 * 60, morningFrom: 7 * 60, morningTo: 8 * 60 + 30 };
+export const SLOTS = {
+  evening: { ar: "مسائي — في الموعد", en: "Evening — on time", tone: "ok" },
+  morning: { ar: "صباحي — في الموعد", en: "Morning — on time", tone: "ok" },
+  night: { ar: "ليلي — خارج النافذة", en: "Night — outside window", tone: "warn" },
+  late: { ar: "متأخر — خلال الدوام", en: "Late — during shift", tone: "bad" },
+};
+// تصنيف وقت التسليم ← {kind, ok, lateMin}؛ lateMin = الدقائق بعد 08:30 للمتأخر فقط
+export function deliverySlot(t, w = WINDOWS) {
+  const m = riyadhMin(t);
+  if (m == null) return null;
+  if (m >= w.eveningFrom) return { kind: "evening", ok: true, lateMin: 0 };
+  if (m >= w.morningFrom && m <= w.morningTo) return { kind: "morning", ok: true, lateMin: 0 };
+  if (m < w.morningFrom) return { kind: "night", ok: false, lateMin: 0 };
+  return { kind: "late", ok: false, lateMin: m - w.morningTo };
+}
+// خارج النافذتين (ليلي أو متأخر)
+export const isLate = t => { const s = deliverySlot(t); return !!s && !s.ok; };
+// يوم العمل الذي يخدمه التسليم: المسائي لليوم التالي، وما عداه لنفس اليوم
+export const serviceDay = (t, w = WINDOWS) => { const s = deliverySlot(t, w); return riyadhDay(new Date(t).getTime() + (s && s.kind === "evening" ? 864e5 : 0)); };
 
 // حدود وقت الاستلام: لا مستقبل، وحتى 12 ساعة للخلف
 export const MAX_BACK_H = 12;
@@ -100,6 +123,42 @@ export function monthSummary(deliveries = []) {
 }
 
 // تحويل وقت محلي من حقل datetime-local إلى ISO والعكس
+// ── أداء المندوب ──
+const addDays = (day, n) => new Date(Date.parse(day + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+
+// أيام العمل بلا تسليم بعد مهلة maxGap يوماً (المتفق: تسليم كل يوم أو يومين ⇒ اليوم الثاني المتتالي بلا تسليم فائت).
+// from/to أيام 'YYYY-MM-DD' شاملة؛ لا يبدأ العدّ قبل أول تسليم مسجّل في النظام (startDay) حتى لا يُحسب ما قبل الاستخدام.
+export function missedDays(deliveries = [], from, to, { maxGap = 2, startDay = null, w = WINDOWS } = {}) {
+  const served = new Set(deliveries.map(d => serviceDay(d.received_at, w)));
+  const first = startDay || [...served].sort()[0];
+  if (!first || !from || !to) return [];
+  const out = []; let run = 0;
+  for (let day = first < from ? first : from; day <= to; day = addDays(day, 1)) {
+    if (day < first) continue;
+    run = served.has(day) ? 0 : run + 1;
+    if (run >= maxGap && day >= from) out.push(day);
+  }
+  return out;
+}
+
+// ملخص المندوبين: deliveries [{id, courier_id, received_at}]، shares [{delivery_id, status, qty, qty_actual}]
+// ← {all, byCourier:{id: stats}}؛ stats: العدد، في الموعد، ليلي، متأخر، متوسط/أقصى دقائق التأخير، تسليمات فيها نقص وكميته، آخر تسليم
+export function courierStats(deliveries = [], shares = [], w = WINDOWS) {
+  const shortBy = {};
+  shares.forEach(s => { if (s.status !== "short") return; const n = Math.max(0, (s.qty || 0) - Math.max(0, s.qty_actual ?? 0)); shortBy[s.delivery_id] = (shortBy[s.delivery_id] || 0) + n; });
+  const blank = () => ({ count: 0, onTime: 0, night: 0, late: 0, lateMinSum: 0, lateMinMax: 0, shortDeliveries: 0, shortQty: 0, last: null });
+  const all = blank(), byCourier = {};
+  const add = (st, d, s) => {
+    st.count++;
+    if (s.ok) st.onTime++; else if (s.kind === "night") st.night++; else { st.late++; st.lateMinSum += s.lateMin; st.lateMinMax = Math.max(st.lateMinMax, s.lateMin); }
+    if (d.id in shortBy) { st.shortDeliveries++; st.shortQty += shortBy[d.id]; }
+    if (!st.last || d.received_at > st.last) st.last = d.received_at;
+  };
+  deliveries.forEach(d => { const s = deliverySlot(d.received_at, w); if (!s) return; add(all, d, s); add(byCourier[d.courier_id] = byCourier[d.courier_id] || blank(), d, s); });
+  const fin = st => ({ ...st, onTimePct: st.count ? Math.round(st.onTime * 100 / st.count) : null, lateMinAvg: st.late ? Math.round(st.lateMinSum / st.late) : 0 });
+  return { all: fin(all), byCourier: Object.fromEntries(Object.entries(byCourier).map(([k, v]) => [k, fin(v)])) };
+}
+
 export const toLocalInput = t => { const d = new Date(t); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
 export const csvCell = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 
