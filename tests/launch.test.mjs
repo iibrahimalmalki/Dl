@@ -29,7 +29,7 @@ ok('المفتوح 3، والمتأخر بلا رد بعد 24 ساعة 1 (الم
 ok('العدّ لكل حالة',S.by.new===2&&S.by.in_review===1&&S.by.done===1&&S.by.wont_do===1);
 
 // ── متتبع الحصر ──
-ok('الخطوات الست بالترتيب وسفيرها',L.STEPS.map(s=>s.k).join()==='profile,docs,bike,assets,daily,academy'&&L.STEPS.filter(s=>s.by==='عمر').map(s=>s.k).join()==='docs,academy');
+ok('الخطوات الست بالترتيب وسفيرها («بياناتي» للمالك)',L.STEPS.map(s=>s.k).join()==='profile,docs,bike,assets,daily,academy'&&L.STEPS.filter(s=>s.by==='عمر').map(s=>s.k).join()==='docs,academy'&&L.STEPS[0].by==='المالك'&&L.STEPS.filter(s=>s.by==='سلمان').map(s=>s.k).join()==='bike,assets,daily');
 const M=L.stepMap([{employee_id:'a',step:'profile',status:'approved'},{employee_id:'a',step:'docs',status:'needs_fix',note:'صورة الرخصة غير واضحة'},{employee_id:'b',step:'profile',status:'approved'},{employee_id:'b',step:'hack',status:'approved'}]);
 ok('خطوة غير معروفة تُتجاهل، والغائب «لم يبدأ»',!('hack' in M.b)&&L.statusAt(M,'b','docs')==='none'&&L.statusAt(M,'zz','profile')==='none');
 const pa=L.bikerProgress(M,'a');

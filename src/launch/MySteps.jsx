@@ -14,7 +14,7 @@ export default function MySteps({ me }) {
       return <div className="bp-item" key={s.k}>
         <div className="t">{s.ar} <span className="bn" style={{ fontWeight: 600, color: "var(--mut)" }}>{s.bn}</span>
           <span className={"g-badge " + S.tone}><i />{S.ar} · <span lang="bn">{S.bn}</span></span></div>
-        <div className="m">السفير: {s.by}</div>
+        <div className="m">يعتمدها: {s.by}</div>
         {st === "needs_fix" && r && r.note && <div className="bp-note" style={{ color: "var(--bad-ink)" }}>المطلوب: {r.note}</div>}
       </div>; })}
     {p.complete && <div className="bp-msg bp-ok">اكتملت خطواتك كلها. شكراً لك. <span className="bn">আপনার সব ধাপ সম্পন্ন। ধন্যবাদ।</span></div>}
