@@ -5,10 +5,10 @@
 // extra: عقدة اختيارية تظهر أعلى القائمة في وضع الدرج على الجوال فقط (≤640px) — مثل اختيار المشغّل المخفي من الرأس
 import{useCallback,useEffect,useId,useMemo,useRef,useState}from"react";
 import{AnimatePresence,motion,useReducedMotion}from"framer-motion";
-import{GraduationCap,PackageCheck,CircleUser,Fuel,LayoutDashboard,Megaphone,UserPlus,MessagesSquare,Compass,ClipboardCheck,Users,UserMinus,Sparkles,Activity,Gauge,MapPinned,MessageSquareWarning,ShieldAlert,UsersRound,Wallet,CalendarCheck,BadgeDollarSign,Scale,FileCheck2,CarFront,Receipt,ShieldCheck,Bike,House,FileBadge,Package,PackagePlus,KeyRound,Network,ChartColumn,UserCog,ScrollText,Settings,LogOut,Circle,Lock,PanelRightClose,PanelRightOpen,Search,X}from"lucide-react";
+import{SlidersHorizontal,GraduationCap,PackageCheck,CircleUser,Fuel,LayoutDashboard,Megaphone,UserPlus,MessagesSquare,Compass,ClipboardCheck,Users,UserMinus,Sparkles,Activity,Gauge,MapPinned,MessageSquareWarning,ShieldAlert,UsersRound,Wallet,CalendarCheck,BadgeDollarSign,Scale,FileCheck2,CarFront,Receipt,ShieldCheck,Bike,House,FileBadge,Package,PackagePlus,KeyRound,Network,ChartColumn,UserCog,ScrollText,Settings,LogOut,Circle,Lock,PanelRightClose,PanelRightOpen,Search,X}from"lucide-react";
 
 // أيقونة كل صفحة حسب مفتاحها في NAV | Lucide icon per NAV key
-const ICON_BY_KEY={dashboard:LayoutDashboard,job_ad:Megaphone,recruitment:UserPlus,interviews:MessagesSquare,sourcing:Compass,onboarding:ClipboardCheck,academy:GraduationCap,daily:PackageCheck,
+const ICON_BY_KEY={biker_tabs:SlidersHorizontal,dashboard:LayoutDashboard,job_ad:Megaphone,recruitment:UserPlus,interviews:MessagesSquare,sourcing:Compass,onboarding:ClipboardCheck,academy:GraduationCap,daily:PackageCheck,
   profile:CircleUser,handover:Bike,fuel:Fuel,perf:Gauge,docs:FileBadge,assets:KeyRound,employees:Users,offboarding:UserMinus,tma:Sparkles,
   operations:Activity,performance:Gauge,field_rounds:MapPinned,complaints:MessageSquareWarning,incidents:ShieldAlert,myteam:UsersRound,
   close:CalendarCheck,payroll:Wallet,pricing:BadgeDollarSign,settlement:Scale,reconciliation:FileCheck2,damage_claims:CarFront,vendors:Receipt,gosi:ShieldCheck,
