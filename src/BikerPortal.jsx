@@ -11,6 +11,8 @@ import BottomNav from "./BottomNav";
 import { useTheme } from "./theme";
 import { humanError, normalizeId, adminWaLink, ADMIN_WA } from "./errors";
 import { KitStyle, Btn, ErrorNote, FieldErr, UploadBar, Skel, StickyBar, NetBar, OfflineHint, useOnline, useConfirm, useKeyboardOpen, loadDraft, saveDraft, Bn } from "./uiKit";
+import { resolveTabs } from "./bikerTabs";
+import { loadTabRules } from "./bikerTabsStore";
 import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, receivedRecord, itemsOk, HANDOVER_STEPS, stepError, firstStepError, stepMove, stepSkipped, boxNeeded, odoNum } from "./handover";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
@@ -195,17 +197,8 @@ const CSS = `
 
 /* قائمة التحقق الأساسية للدراجة (أفضل الممارسات) */
 /* خلفية الكرات + زر الثيم في الزاوية — مرة واحدة في جذر كل شاشة */
-// تنقّل البوابة: القائمة الجانبية/«المزيد» (كل التبويبات) والشريط السفلي للجوال (أربعة + المزيد)
-const BP_NAV = [
-  { k: "profile", ar: "ملفي", bn: "প্রোফাইল" }, { k: "handover", ar: "الدراجة", bn: "বাইক" },
-  { k: "fuel", ar: "الوقود", bn: "জ্বালানি" }, { k: "perf", ar: "أدائي", bn: "আমার কাজ" },
-  { k: "docs", ar: "وثائقي", bn: "আমার কাগজপত্র" }, { k: "assets", ar: "العهدة", bn: "সরঞ্জাম" },
-  { k: "daily", ar: "الاستلام", bn: "ডেলিভারি" }, { k: "academy", ar: "الأكاديمية", bn: "একাডেমি" },
-];
-const BP_BOTTOM = [
-  { k: "profile", ar: "الرئيسية", bn: "হোম", ic: "home" }, { k: "handover", ar: "الدراجة", bn: "বাইক", ic: "bike" },
-  { k: "daily", ar: "الاستلام", bn: "ডেলিভারি", ic: "inbox" }, { k: "academy", ar: "الأكاديمية", bn: "একাডেমি", ic: "star" },
-];
+// تنقّل البوابة: القائمة الجانبية/«المزيد» والشريط السفلي للجوال («الرئيسية» + حتى ثلاثة + المزيد)
+// يحدّدها المالك من «صلاحيات البايكرز» (biker_tab_rules ← src/bikerTabs.js)؛ قبل الجدول أو بلا صفوف ⇒ كل التبويبات كما كانت
 const Chrome = () => <><Orbs /><div className="g-corner"><ThemeToggle /></div></>;
 
 
@@ -326,6 +319,9 @@ function Portal() {
   const [open, setOpen] = useState(false);           // قائمة «المزيد» / الدرج
   const [opName, setOpName] = useState("دلو ورغوة");  // اسم المشغّل (operators.name)
   const [pending, setPending] = useState(0);         // أنصبة الاستلام بانتظار تأكيدي
+  const [tabRules, setTabRules] = useState([]);     // صلاحيات التبويبات (إعداد عام من المالك)
+  useEffect(() => { loadTabRules().then(r => setTabRules(r.rules || []), () => {}); }, []);
+  const TABS = React.useMemo(() => resolveTabs(tabRules), [tabRules]);
   const dirty = React.useRef(false);                 // نموذج فيه مدخلات (تسليم الدراجة / استلام المندوب)
   const { resolved: theme } = useTheme();
   // شارة «الاستلام»: أنصبة بانتظار تأكيدي (يتجاهل الخطأ قبل/بدون جداول الاستلام)
@@ -372,6 +368,7 @@ function Portal() {
 
   // التنقّل: نموذج فيه صور غير محفوظة يطلب تأكيداً (باقي المدخلات محفوظة في المسودة)
   const go = async k => {
+    if (!TABS.isOpen(k)) { setOpen(false); return; }
     if (k === tab) { setOpen(false); return; }
     if (dirty.current) {
       setOpen(false);
@@ -396,10 +393,10 @@ function Portal() {
   return (
     <div className="bp-wrap bp-shell">
       <style>{CSS}</style><KitStyle /><Orbs /><NetBar />{dlg}
-      <GlassSidebar items={BP_NAV} active={tab} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={theme} noSettings
+      <GlassSidebar items={TABS.nav} active={tab} onGo={go} badges={badges} open={open} onOpenChange={setOpen} theme={theme} noSettings
         user={{ name: me.name, role: "بايكر · " + me.biker_employee_id }} onLogout={() => supabase.auth.signOut()}
         platform={{ name: opName, subtitle: "بوابة البايكر · বাইকার পোর্টাল" }} />
-      <BottomNav items={BP_BOTTOM} active={tab} onGo={go} onMore={() => setOpen(true)} badges={badges} />
+      <BottomNav items={TABS.bottom} active={tab} onGo={go} onMore={() => setOpen(true)} badges={badges} />
 
       <div className="bp-main">
         <header className="bp-top">
@@ -426,17 +423,20 @@ function Portal() {
               <div className="bp-pcell"><div className="k">رقم البايكر · নম্বর</div><div className="v">{me.biker_employee_id}</div></div>
               <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div></div>
             </div>
-            <StartHere me={me} myBike={myBike} pending={pending} onGo={go} />
+            <StartHere me={me} myBike={myBike} pending={pending} onGo={go} can={TABS.isOpen} />
             {tempCard}
-            <Profile me={me} myBike={myBike} onGo={go} />
+            <Profile me={me} myBike={myBike} onGo={go} can={TABS.isOpen} />
           </>}
-          {tab === "handover" && <>{tempCard}<Handover me={me} myBike={myBike} onDirty={setDirty} /></>}
-          {tab === "fuel" && <Fuel me={me} myBike={myBike} />}
-          {tab === "assets" && <Assets me={me} />}
-          {tab === "docs" && <Docs me={me} />}
-          {tab === "perf" && <MyPerf me={me} />}
-          {tab === "daily" && <Suspense fallback={loading}><DailyReceive me={me} onDirty={setDirty} onPending={setPending} /></Suspense>}
-          {tab === "academy" && <Suspense fallback={loading}><Academy me={me} /></Suspense>}
+          {tab !== "profile" && !TABS.isOpen(tab) && <div className="bp-card g-card"><div className="bp-sec">
+            <div className="g-empty" style={{ padding: "22px 10px" }}><b>غير متاح حالياً<span className="bn" style={{ display: "block" }}>বর্তমানে উপলব্ধ নয়</span></b></div>
+            <Btn kind="primary" block onClick={() => setTab("profile")} bn="হোমে ফিরুন">العودة إلى الرئيسية</Btn></div></div>}
+          {TABS.isOpen(tab) && tab === "handover" && <>{tempCard}<Handover me={me} myBike={myBike} onDirty={setDirty} /></>}
+          {TABS.isOpen(tab) && tab === "fuel" && <Fuel me={me} myBike={myBike} />}
+          {TABS.isOpen(tab) && tab === "assets" && <Assets me={me} />}
+          {TABS.isOpen(tab) && tab === "docs" && <Docs me={me} />}
+          {TABS.isOpen(tab) && tab === "perf" && <MyPerf me={me} />}
+          {TABS.isOpen(tab) && tab === "daily" && <Suspense fallback={loading}><DailyReceive me={me} onDirty={setDirty} onPending={setPending} /></Suspense>}
+          {TABS.isOpen(tab) && tab === "academy" && <Suspense fallback={loading}><Academy me={me} /></Suspense>}
         </div>
       </div>
     </div>
@@ -577,7 +577,7 @@ function StatusBadge({ s }) {
 
 /* ================= ابدأ من هنا: الخطوة التالية المطلوبة فقط ================= */
 // الترتيب: استلام الدراجة (إن كان مطلوباً) ← الأكاديمية (إن لم تكتمل) ← نصيب اليوم (إن وُجد)
-function StartHere({ me, myBike, pending, onGo }) {
+function StartHere({ me, myBike, pending, onGo, can = () => true }) {
   const [acad, setAcad] = useState(undefined);
   useEffect(() => { if (!me.emp_id) { setAcad(null); return; } let on = true;
     import("./academy/status").then(m => m.academyStatus(me.emp_id)).then(a => { if (on) setAcad(a); }, () => { if (on) setAcad(null); });
@@ -586,7 +586,7 @@ function StartHere({ me, myBike, pending, onGo }) {
   if (myBike && myBike.needs_receipt_update) st = { k: "handover", ic: "🏍️", ar: "سجّل استلام دراجتك", bn: "আপনার বাইক গ্রহণ রেকর্ড করুন", sub: "قراءة العدّاد والصور في 7 خطوات قصيرة.", subBn: "ওডোমিটার ও ছবি — ৭টি ছোট ধাপে।", b: "افتح الدراجة", bBn: "বাইক খুলুন" };
   else if (acad && acad.ready && !acad.certified) st = { k: "academy", ic: "🎓", ar: "أكمل الأكاديمية", bn: "একাডেমি শেষ করুন", sub: `أنجزت ${acad.done || 0} محطات. أكمل المحطة التالية.`, subBn: `${acad.done || 0}টি ধাপ শেষ। পরের ধাপ করুন।`, b: "افتح الأكاديمية", bBn: "একাডেমি খুলুন" };
   else if (pending > 0) st = { k: "daily", ic: "📦", ar: "أكّد نصيبك اليوم", bn: "আজকের ভাগ নিশ্চিত করুন", sub: "زميلك سلّمك نصيباً من الشحنة، أكّد أنه وصلك.", subBn: "আপনার ভাগ এসেছে, নিশ্চিত করুন।", b: "افتح الاستلام", bBn: "ডেলিভারি খুলুন" };
-  if (!st) return null;
+  if (!st || !can(st.k)) return null;
   return <div className="bp-card g-card bp-start"><div className="bp-sec">
     <span className="bp-eyebrow">ابدأ من هنا · <span className="bn" style={{ display: "inline" }}>এখান থেকে শুরু করুন</span></span>
     <div className="bp-start-t"><span aria-hidden="true">{st.ic}</span><div><b>{st.ar}</b><span className="bn">{st.bn}</span></div></div>
@@ -596,7 +596,7 @@ function StartHere({ me, myBike, pending, onGo }) {
 }
 
 /* ================= ملفي ================= */
-function Profile({ me, myBike, onGo }) {
+function Profile({ me, myBike, onGo, can = () => true }) {
   const [ho, setHo] = useState(0);
   const [fl, setFl] = useState(0);
   useEffect(() => { (async () => {
@@ -616,10 +616,12 @@ function Profile({ me, myBike, onGo }) {
         <div className="bp-pcell"><div className="k">تعبئات الوقود · রিফুয়েল</div><div className="v">{fl}</div></div>
       </div>
 
+      {(can("handover") || can("fuel")) && <>
       <label className="bp-lbl" style={{ marginTop: 14 }}>النماذج <span className="bn">/ ফর্মসমূহ</span></label>
-      <div className="bp-stack"><Btn kind="secondary" block onClick={() => onGo("handover")} bn="বাইক হস্তান্তর / গ্রহণ">📋 تسليم / استلام الدراجة</Btn>
-      <Btn kind="secondary" block onClick={() => onGo("fuel")} bn="জ্বালানি রেকর্ড">⛽ تسجيل تعبئة وقود</Btn></div>
+      <div className="bp-stack">{can("handover") && <Btn kind="secondary" block onClick={() => onGo("handover")} bn="বাইক হস্তান্তর / গ্রহণ">📋 تسليم / استلام الدراجة</Btn>}
+      {can("fuel") && <Btn kind="secondary" block onClick={() => onGo("fuel")} bn="জ্বালানি রেকর্ড">⛽ تسجيل تعبئة وقود</Btn>}</div>
       <div className="bp-note">التوثيق المنتظم يحمي حقّك ويوضّح التزامك. · নিয়মিত ডকুমেন্টেশন আপনার অধিকার রক্ষা করে।</div>
+      </>}
     </div></div>
   );
 }
