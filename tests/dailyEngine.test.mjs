@@ -32,8 +32,26 @@ ok('normPhone: رقم ناقص أو غير جوال ⇒ مرفوض',E.normPhone(
 
 // ── isLate (الرياض UTC+3) ──
 const at=hm=>`2026-10-03T${hm}:00+03:00`;
-ok('isLate: 23:30 و03:00 و07:59 ⇒ متأخر',['23:30','03:00','07:59'].every(t=>E.isLate(at(t))));
-ok('isLate: 08:00 و14:00 و22:59 ⇒ لا',['08:00','14:00','22:59'].every(t=>!E.isLate(at(t))));
+const K=t=>E.deliverySlot(at(t)).kind;
+ok('النافذة المسائية 21:00–23:59 في الموعد',['21:00','23:30','23:59'].every(t=>K(t)==='evening'&&E.deliverySlot(at(t)).ok));
+ok('النافذة الصباحية 07:00–08:30 شاملة في الموعد',['07:00','08:00','08:30'].every(t=>K(t)==='morning'&&!E.isLate(at(t))));
+ok('00:00–06:59 ليلي خارج النافذة بلا دقائق تأخير',['00:00','03:00','06:59'].every(t=>K(t)==='night'&&E.isLate(at(t))&&E.deliverySlot(at(t)).lateMin===0));
+ok('بعد 08:30 متأخر بالدقائق: 08:31⇒1 و10:00⇒90 و20:59⇒749',E.deliverySlot(at('08:31')).lateMin===1&&E.deliverySlot(at('10:00')).lateMin===90&&E.deliverySlot(at('20:59')).lateMin===749&&K('14:00')==='late');
+ok('وقت غير صالح ⇒ null ولا يُحسب متأخراً',E.deliverySlot('x')===null&&!E.isLate('x'));
+ok('يوم الخدمة: المسائي لليوم التالي، والصباحي والمتأخر لنفس اليوم',E.serviceDay(at('22:00'))==='2026-10-04'&&E.serviceDay(at('07:30'))==='2026-10-03'&&E.serviceDay(at('11:00'))==='2026-10-03'&&E.serviceDay('2026-10-03T23:30:00+03:00')==='2026-10-04');
+
+// ── الأيام الفائتة وأداء المندوب ──
+const dv=(day,hm,extra={})=>({received_at:`${day}T${hm}:00+03:00`,...extra});
+const D=[dv('2026-10-01','07:30'),dv('2026-10-02','22:00'),dv('2026-10-07','10:00')]; // يخدم 01 و03 و07
+ok('يوم واحد بلا تسليم مسموح، والثاني المتتالي فائت',JSON.stringify(E.missedDays(D,'2026-10-01','2026-10-08'))===JSON.stringify(['2026-10-05','2026-10-06'])&&!E.missedDays(D,'2026-10-01','2026-10-08').includes('2026-10-02'));
+ok('لا يُحسب ما قبل أول تسليم في النظام',E.missedDays([dv('2026-10-10','07:30')],'2026-10-01','2026-10-10').length===0&&E.missedDays([],'2026-10-01','2026-10-31').length===0);
+ok('السلسلة تمتد عبر بداية الشهر',JSON.stringify(E.missedDays([dv('2026-09-29','07:30')],'2026-10-01','2026-10-02'))===JSON.stringify(['2026-10-01','2026-10-02']));
+const CD=[dv('2026-10-01','07:30',{id:'1',courier_id:'s'}),dv('2026-10-02','09:30',{id:'2',courier_id:'s'}),dv('2026-10-03','10:30',{id:'3',courier_id:'s'}),dv('2026-10-04','02:00',{id:'4',courier_id:'k'})];
+const CS=E.courierStats(CD,[{delivery_id:'2',status:'short',qty:4,qty_actual:1},{delivery_id:'2',status:'short',qty:2,qty_actual:2},{delivery_id:'3',status:'confirmed',qty:4},{delivery_id:'1',status:'short',qty:3,qty_actual:null}]);
+ok('أداء المندوب: العدد والنسبة والمتأخر ومتوسط/أقصى التأخير',CS.all.count===4&&CS.all.onTime===1&&CS.all.onTimePct===25&&CS.all.night===1&&CS.all.late===2&&CS.byCourier.s.lateMinAvg===90&&CS.byCourier.s.lateMinMax===120);
+ok('النقص: عدد التسليمات وكميته (qty_actual فارغ = لا شيء استُلم)',CS.all.shortDeliveries===2&&CS.all.shortQty===6&&CS.byCourier.k.shortDeliveries===0);
+ok('آخر تسليم لكل مندوب',CS.byCourier.s.last===CD[2].received_at&&CS.byCourier.k.count===1&&CS.byCourier.k.onTimePct===0);
+ok('بلا تسليمات ⇒ النسبة فارغة لا صفر',E.courierStats([]).all.onTimePct===null);
 
 // ── الرصيد ──
 const sh=[
@@ -61,7 +79,7 @@ ok('يُرفض وقت في المستقبل أو أقدم من 12 ساعة',E.va
 
 // ── الملخص الشهري ──
 const m=E.monthSummary([{received_at:at('23:30'),towels_returned:5,lines:[{item_key:'mat',qty:4}]},{received_at:at('00:30'),towels_returned:3,lines:[{item_key:'mat',qty:2},{item_key:'tissue',qty:6}]},{received_at:at('10:00'),lines:[]}]);
-ok('الملخص: العدد والمتأخر والمجموع لكل صنف',m.count===3&&m.late===2&&m.items.mat===6&&m.items.tissue===6&&m.towelsReturned===8);
+ok('الملخص: العدد وخارج النافذتين (00:30 و10:00 لا 23:30) والمجموع لكل صنف',m.count===3&&m.late===2&&m.items.mat===6&&m.items.tissue===6&&m.towelsReturned===8);
 ok('متوسط الوقت لا يفسده منتصف الليل (23:30 و00:30 ⇒ 00:00)',E.monthSummary([{received_at:at('23:30')},{received_at:at('00:30')}]).avgTime==='00:00');
 
 // ── رسالتا واتساب ──
@@ -91,4 +109,15 @@ const L6=IT6.map(i=>({item_key:i.key,qty:24})), S6=T6.flatMap(t=>IT6.map(i=>({em
 const big=E.waMessage({...base,lines:L6,shares:S6,team:T6,delivery:{...DEL,note:'ملاحظة طويلة نسبياً عن تأخر المندوب ونقص بعض الأصناف'}},'ops'),url=E.waLink(big);
 console.log('   (طول رابط 6 أصناف × 6 بايكرز:',url.length,'حرفاً)');
 ok('طول الرابط لـ6 أصناف و6 بايكرز ضمن الحد الآمن (< 8000) ويُفك ترميزه كما هو',url.length<8000&&decodeURIComponent(url.split('text=')[1])===big&&(big.match(/^- /gm)||[]).length===12);
+
+// ── تقرير سويتر ──
+execSync(`npx esbuild src/daily/report.js --bundle --format=esm --platform=node --outfile=${tmp}/r.mjs --log-level=error`,{stdio:'inherit'});
+const R=await import(`${tmp}/r.mjs`);
+const RD=[dv('2026-10-01','07:30',{id:'1',courier_id:'s',daily_delivery_lines:[{item_key:'towel_clean',qty:20},{item_key:'mat',qty:0}],towels_returned:7}),dv('2026-10-02','10:15',{id:'2',courier_id:'s',daily_delivery_lines:[]}),dv('2026-09-30','22:00',{id:'0',courier_id:'s'})];
+const html=R.courierReport({month:'2026-10',deliveries:RD,shares:[{delivery_id:'2',status:'short',qty:5,qty_actual:2}],items:IT,couriers:[{id:'s',name:'سعيد <b>x</b>',phone:'0551234567'}],today:'2026-10-05'});
+ok('التقرير: تسليمات الشهر فقط (2 لا 3) والنسبة 50%',(html.match(/<tr class="(ok|bad|warn)">/g)||[]).length===2&&/<b>50%<\/b>/.test(html));
+ok('التقرير: المتأخر بالمدة (+1h 45m) والنقص 3 والأصناف بكمية صفر محذوفة',/\+1h 45m/.test(html)&&/<b>3<\/b><\/td><\/tr>/.test(html)&&/<b>20<\/b> — ربطة مناشف \(لكل غسلة\)<br><i dir="ltr">Towel bundle \(per wash\)/.test(html)&&!/Floor mat/.test(html));
+ok('التقرير: الأيام الفائتة حتى اليوم فقط (04 و05)',/04\/10\/2026 · 05\/10\/2026/.test(html)&&!/06\/10\/2026 ·/.test(html));
+ok('التقرير: تهريب HTML في أسماء المندوبين',!/<b>x<\/b>/.test(html)&&/&lt;b&gt;x&lt;\/b&gt;/.test(html));
+ok('التقرير: شهر بلا تسليمات لا ينكسر',/No deliveries recorded/.test(R.courierReport({month:'2026-11',deliveries:[],today:'2026-11-03'})));
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
