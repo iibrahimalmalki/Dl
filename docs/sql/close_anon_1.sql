@@ -1,5 +1,12 @@
 -- ═══ إغلاق الوصول بلا تسجيل دخول — المرحلة 1 ═══
--- المشروع: cnmggdrlkgsyrjxmvydv · لا يُطبَّق قبل موافقة المالك الصريحة.
+-- المشروع: cnmggdrlkgsyrjxmvydv
+-- الحالة: طُبِّق أثره على الإنتاج بأمر المالك في 2026-10-08، بطريقة مختلفة عن نص هذا الملف:
+--   DROP POLICY عبر apply_migration ينتهي مهلته (60 ث) دائماً، فطُبِّق المكافئ بلا حذف:
+--   close_anon_1a_revoke     : revoke كل صلاحيات anon على employees و notifications و admin_sessions، و select/update/delete… على page_visits (يبقى insert)
+--   close_anon_1c_notif_policy_scope : alter policy allow_all_anon on notifications to anon (كانت للدور public فتشمل المسجّلين)
+--   close_anon_1d_visits_select      : alter policy visits_auth_select using (reports أو applicants)
+--   سياسات anon القديمة (emp_anon_*، anon_admin، allow_all_anon، allow_public_read_visits) ما زالت موجودة لكنها بلا أثر لأن anon بلا صلاحيات جدول.
+--   حذفها لاحقاً من SQL Editor اختياري (تنظيف). لا تُعد تشغيل هذا الملف كما هو.
 -- ترتيب التطبيق: يُنشر أولاً كود حذف الصفحة العامة /?employee= ثم يُطبَّق هذا الملف.
 --
 -- ما يغلقه:
