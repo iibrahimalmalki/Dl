@@ -53,7 +53,7 @@ export function inboxSummary(tickets = [], now = Date.now()) {
 // ═══ متتبع الحصر ═══
 // الخطوات بالترتيب، والسفير المعتمد لكل خطوة، ومفتاح تبويب البوابة الذي تفتحه
 export const STEPS = [
-  { k: "profile", ar: "بياناتي", bn: "আমার তথ্য", by: "سلمان", tab: "profile" },
+  { k: "profile", ar: "بياناتي", bn: "আমার তথ্য", by: "المالك", tab: "profile" },
   { k: "docs", ar: "وثائقي", bn: "আমার কাগজপত্র", by: "عمر", tab: "docs" },
   { k: "bike", ar: "الدراجة", bn: "বাইক", by: "سلمان", tab: "handover" },
   { k: "assets", ar: "العهدة", bn: "সরঞ্জাম", by: "سلمان", tab: "assets" },
