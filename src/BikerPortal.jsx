@@ -17,6 +17,8 @@ import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, receivedRecord, i
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
 const DailyReceive = lazy(() => import("./daily/DailyReceive"));
+const SupportBiker = lazy(() => import("./launch/SupportBiker"));
+const MySteps = lazy(() => import("./launch/MySteps"));
 const HandoverReport = lazy(() => import("./HandoverReport"));
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
@@ -319,9 +321,12 @@ function Portal() {
   const [open, setOpen] = useState(false);           // قائمة «المزيد» / الدرج
   const [opName, setOpName] = useState("دلو ورغوة");  // اسم المشغّل (operators.name)
   const [pending, setPending] = useState(0);         // أنصبة الاستلام بانتظار تأكيدي
-  const [tabRules, setTabRules] = useState([]);     // صلاحيات التبويبات (إعداد عام من المالك)
-  useEffect(() => { loadTabRules().then(r => setTabRules(r.rules || []), () => {}); }, []);
-  const TABS = React.useMemo(() => resolveTabs(tabRules), [tabRules]);
+  // صلاحيات التبويبات (إعداد عام من المالك). حتى تصل أو إن فشلت قراءتها ⇒ مقفلة: «ملفي» و«الدعم» فقط
+  const [tabRules, setTabRules] = useState({ rows: [], locked: true });
+  const [tabsTry, setTabsTry] = useState(0);
+  useEffect(() => { let on = true; loadTabRules().then(r => { if (on) setTabRules({ rows: r.rules || [], locked: !!(r.error || r.missing) }); }, () => {}); return () => { on = false; }; }, [tabsTry]);
+  const TABS = React.useMemo(() => resolveTabs(tabRules.rows, { locked: tabRules.locked }), [tabRules]);
+  const lastTab = React.useRef(null);                // الشاشة التي فُتح منها «الدعم» (تُحفظ مع الطلب)
   const dirty = React.useRef(false);                 // نموذج فيه مدخلات (تسليم الدراجة / استلام المندوب)
   const { resolved: theme } = useTheme();
   // شارة «الاستلام»: أنصبة بانتظار تأكيدي (يتجاهل الخطأ قبل/بدون جداول الاستلام)
@@ -375,7 +380,7 @@ function Portal() {
       const ok = await ask({ title: "مغادرة النموذج؟", titleBn: "ফর্ম ছেড়ে যাবেন?", ar: "الصور التي التقطتها ستضيع، أما باقي مدخلاتك فمحفوظة وتعود حين ترجع.", bn: "তোলা ছবিগুলো হারাবে, বাকি তথ্য সংরক্ষিত থাকবে।", ok: "مغادرة", okBn: "চলে যান", cancel: "البقاء", cancelBn: "থাকুন" });
       if (!ok) return;
     }
-    dirty.current = false; setTab(k); setOpen(false); try { window.scrollTo(0, 0); } catch (e) { /* */ }
+    dirty.current = false; lastTab.current = tab; setTab(k); setOpen(false); try { window.scrollTo(0, 0); } catch (e) { /* */ }
   };
   const badges = { handover: myBike && myBike.needs_receipt_update ? 1 : 0, daily: pending };
   const loading = <Skel />;
@@ -423,7 +428,11 @@ function Portal() {
               <div className="bp-pcell"><div className="k">رقم البايكر · নম্বর</div><div className="v">{me.biker_employee_id}</div></div>
               <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div></div>
             </div>
+            {tabRules.locked && <div className="bp-card g-card"><div className="bp-sec">
+              <div className="bp-note" style={{ marginTop: 0 }}>بقية الصفحات تظهر بعد تحميل الإعداد. <span className="bn">সেটিংস লোড হলে বাকি পাতা দেখা যাবে।</span></div>
+              <Btn kind="text" block onClick={() => setTabsTry(x => x + 1)} bn="আবার চেষ্টা করুন">إعادة المحاولة</Btn></div></div>}
             <StartHere me={me} myBike={myBike} pending={pending} onGo={go} can={TABS.isOpen} />
+            <Suspense fallback={null}><MySteps me={me} /></Suspense>
             {tempCard}
             <Profile me={me} myBike={myBike} onGo={go} can={TABS.isOpen} />
           </>}
@@ -437,6 +446,7 @@ function Portal() {
           {TABS.isOpen(tab) && tab === "perf" && <MyPerf me={me} />}
           {TABS.isOpen(tab) && tab === "daily" && <Suspense fallback={loading}><DailyReceive me={me} onDirty={setDirty} onPending={setPending} /></Suspense>}
           {TABS.isOpen(tab) && tab === "academy" && <Suspense fallback={loading}><Academy me={me} /></Suspense>}
+          {tab === "support" && <Suspense fallback={loading}><SupportBiker me={me} from={lastTab.current} /></Suspense>}
         </div>
       </div>
     </div>
