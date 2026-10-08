@@ -1,6 +1,6 @@
 // صلاحيات بوابة البايكر: أيّ التبويبات تظهر، وأيّها في الشريط السفلي للجوال — منطق نقي (بلا DOM ولا Supabase)
 // المصدر: جدول biker_tab_rules (docs/sql/biker_tabs.sql) — صف لكل تبويب، إعداد عام لكل البايكرز.
-// الجدول الفارغ أو غير الموجود ⇒ الوضع الافتراضي (كل التبويبات ظاهرة والشريط السفلي كما كان).
+// الجدول الفارغ ⇒ الوضع الافتراضي (كل التبويبات ظاهرة والشريط السفلي كما كان). فشل القراءة ⇒ قفل (locked).
 
 // ترتيب التبويبات كما في البوابة. «ملفي» (profile) الصفحة الرئيسية: ظاهر دائماً وأول الشريط السفلي.
 export const BIKER_TABS = [
@@ -12,6 +12,8 @@ export const BIKER_TABS = [
   { k: "assets", ar: "العهدة", bn: "সরঞ্জাম", ic: "key" },
   { k: "daily", ar: "الاستلام", bn: "ডেলিভারি", ic: "inbox" },
   { k: "academy", ar: "الأكاديمية", bn: "একাডেমি", ic: "star" },
+  // «الدعم والأفكار»: ظاهر دائماً مثل «ملفي» (مشكلة، فكرة، سؤال، طلب) — خارج إعداد المالك
+  { k: "support", ar: "الدعم والأفكار", bn: "সহায়তা ও আইডিয়া", ic: "chat", fixed: true },
 ];
 export const TAB_KEYS = BIKER_TABS.map(t => t.k);
 export const RULE_KEYS = BIKER_TABS.filter(t => !t.fixed).map(t => t.k);   // ما يمكن التحكم فيه
@@ -33,12 +35,14 @@ export function ruleMap(rules) {
   return out;
 }
 
+const FIXED = BIKER_TABS.filter(t => t.fixed).map(t => t.k);
 // ما يراه البايكر: nav (القائمة الجانبية/«المزيد») و bottom (الشريط السفلي) و isOpen(k)
-export function resolveTabs(rules) {
+// locked: قبل وصول إعداد المالك أو عند فشل قراءته ⇒ التبويبات الثابتة فقط (لا يُكشف ما أخفاه المالك)
+export function resolveTabs(rules, { locked = false } = {}) {
   const m = ruleMap(rules);
-  const isOpen = k => k === "profile" || !!(m[k] && m[k].visible);
+  const isOpen = k => FIXED.includes(k) || (!locked && !!(m[k] && m[k].visible));
   const nav = BIKER_TABS.filter(t => isOpen(t.k)).map(({ k, ar, bn }) => ({ k, ar, bn }));
-  const extra = RULE_KEYS.filter(k => m[k].visible && m[k].bottom).slice(0, MAX_BOTTOM);
+  const extra = locked ? [] : RULE_KEYS.filter(k => m[k].visible && m[k].bottom).slice(0, MAX_BOTTOM);
   const bottom = ["profile", ...extra].map(k => {
     const t = BIKER_TABS.find(x => x.k === k);
     return { k, ar: t.bar || t.ar, bn: t.barBn || t.bn, ic: t.ic };

@@ -11,18 +11,25 @@ const keys=a=>a.map(x=>x.k).join(',');
 
 // الافتراضي = البوابة الحالية تماماً
 const d=T.resolveTabs([]);
-ok('بلا صفوف: التبويبات الثمانية ظاهرة بالترتيب',keys(d.nav)==='profile,handover,fuel,perf,docs,assets,daily,academy');
+ok('بلا صفوف: التبويبات الثمانية + «الدعم» ظاهرة بالترتيب',keys(d.nav)==='profile,handover,fuel,perf,docs,assets,daily,academy,support');
 ok('بلا صفوف: الشريط السفلي كما كان (الرئيسية، الدراجة، الاستلام، الأكاديمية)',keys(d.bottom)==='profile,handover,daily,academy'&&d.bottom[0].ar==='الرئيسية');
 ok('null أو undefined = الافتراضي',keys(T.resolveTabs(null).nav)===keys(d.nav)&&keys(T.resolveTabs(undefined).bottom)===keys(d.bottom));
 
 // الإخفاء
 const h=T.resolveTabs([{tab_key:'fuel',visible:false,in_bottom_nav:false},{tab_key:'daily',visible:false,in_bottom_nav:true}]);
-ok('الوقود والاستلام مخفيان من القائمة',!h.nav.some(x=>x.k==='fuel'||x.k==='daily')&&h.nav.length===6);
+ok('الوقود والاستلام مخفيان من القائمة',!h.nav.some(x=>x.k==='fuel'||x.k==='daily')&&h.nav.length===7);
 ok('المخفي لا يظهر في الشريط السفلي حتى لو in_bottom_nav=true',keys(h.bottom)==='profile,handover,academy');
 ok('isOpen: المخفي مغلق، والباقي مفتوح',!h.isOpen('fuel')&&!h.isOpen('daily')&&h.isOpen('assets')&&h.isOpen('profile'));
 ok('«ملفي» لا يُخفى حتى لو جاء صف له',T.resolveTabs([{tab_key:'profile',visible:false}]).isOpen('profile')&&T.resolveTabs([{tab_key:'profile',visible:false}]).nav[0].k==='profile');
 ok('مفتاح غير معروف يُتجاهل',keys(T.resolveTabs([{tab_key:'hack',visible:true,in_bottom_nav:true}]).bottom)===keys(d.bottom));
 ok('isOpen لمفتاح غير معروف = مغلق',!d.isOpen('hack'));
+
+// القفل (قبل وصول الإعداد أو عند فشل قراءته)
+const L=T.resolveTabs([],{locked:true});
+ok('مقفل: «ملفي» و«الدعم» فقط، والشريط «الرئيسية» وحدها',keys(L.nav)==='profile,support'&&keys(L.bottom)==='profile'&&!L.isOpen('perf')&&L.isOpen('support'));
+const LA=T.resolveTabs(T.RULE_KEYS.map(k=>({tab_key:k,visible:true,in_bottom_nav:true})),{locked:true});
+ok('مقفل: حتى لو كل التبويبات مفتوحة في الإعداد',keys(LA.nav)==='profile,support'&&keys(LA.bottom)==='profile');
+ok('«الدعم» لا يُخفى ولا يُحفظ له صف',T.resolveTabs(T.RULE_KEYS.map(k=>({tab_key:k,visible:false}))).isOpen('support')&&!T.RULE_KEYS.includes('support')&&!T.toRows(T.ruleMap([]),'u').some(r=>r.tab_key==='support'));
 
 // اختيار الشريط السفلي
 const b=T.resolveTabs([{tab_key:'handover',visible:true,in_bottom_nav:false},{tab_key:'daily',visible:true,in_bottom_nav:false},{tab_key:'academy',visible:true,in_bottom_nav:false},{tab_key:'fuel',visible:true,in_bottom_nav:true},{tab_key:'docs',visible:true,in_bottom_nav:true}]);
