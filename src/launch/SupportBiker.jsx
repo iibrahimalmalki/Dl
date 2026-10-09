@@ -73,7 +73,7 @@ export default function SupportBiker({ me, from }) {
 
       {msg && <div className={"bp-msg " + (msg.ok ? "bp-ok" : "")} role={msg.ok ? "status" : "alert"} style={msg.ok ? undefined : { background: "var(--bad-bg)", color: "var(--bad-ink)" }}>{msg.ar}<Bn>{msg.bn}</Bn></div>}
       <Btn kind="primary" block busy={busy} disabled={busy || !ready} style={{ marginTop: 14 }} onClick={send} bn="পাঠান">إرسال</Btn>
-      <div className="bp-note">الخلافات مع الزملاء والراتب الشخصي تبقى مع المشرف سلمان مباشرة. <span className="bn">সহকর্মীর সাথে বিরোধ ও ব্যক্তিগত বেতন — সরাসরি সুপারভাইজার সালমানের সাথে।</span></div>
+      <div className="bp-note">الخلافات مع الزملاء والراتب الشخصي تبقى مع المشرف سلمان مباشرة. أسئلة الراتب خلال 3 أيام من استلام المسير. <span className="bn">সহকর্মীর সাথে বিরোধ ও ব্যক্তিগত বেতন — সরাসরি সুপারভাইজার সালমানের সাথে। বেতন নিয়ে প্রশ্ন বেতন-স্লিপ পাওয়ার ৩ দিনের মধ্যে।</span></div>
     </div></div>
 
     <div className="bp-card g-card" style={{ marginTop: 14 }}><div className="bp-sec">
