@@ -164,7 +164,7 @@ export const stepMove = (i, d, f) => { let j = i + d; while (j > 0 && j < HANDOV
 export const odoNum = v => String(v ?? "").replace(/[٠-٩]/g, d => d.charCodeAt(0) - 0x0660).replace(/[০-৯]/g, d => d.charCodeAt(0) - 0x09E6).replace(/[^\d.]/g, "");
 
 // خطأ الخطوة i بجانب الحقل نفسه → {field, ar, bn} أو null
-// f: {odometer, photos, checks:{[id]: true|false|undefined}, received, pledge}
+// f: {odometer, photos, checks:{[id]: true|false|undefined}, received, damages:[بطاقات الأضرار], pledge}
 export function stepError(i, f) {
   const k = (HANDOVER_STEPS[i] || {}).k, p = f.photos || {}, r = f.received || {}, ck = f.checks || {};
   const E = (field, ar, bn) => ({ field, ar, bn });
@@ -183,6 +183,7 @@ export function stepError(i, f) {
     if (it.count && r[it.id] === true && !(Number.isInteger(r[it.count]) && r[it.count] >= 1 && r[it.count] <= 3)) return E("rc_" + it.id, `اختر عدد ${it.ar}.`, "চাবির সংখ্যা বাছুন।");
   }
   if (k === "box" && boxNeeded(r)) { const b = BOX_PHOTOS.find(x => !p[x.id]); if (b) return E("ph_" + b.id, "التقط صور الصندوق الخمس.", "বক্সের পাঁচটি ছবি তুলুন।"); }
+  if (k === "notes") { const e = damagesError(f.damages); if (e) return e; }
   if (k === "review" && !f.pledge) return E("pledge", "وافق على التعهّد قبل الحفظ.", "সংরক্ষণের আগে অঙ্গীকারে সম্মতি দিন।");
   return null;
 }
@@ -191,3 +192,52 @@ export function firstStepError(f) {
   for (let i = 0; i < HANDOVER_STEPS.length; i++) { if (stepSkipped(i, f)) continue; const e = stepError(i, f); if (e) return { i, err: e }; }
   return null;
 }
+
+/* ── بطاقات الأضرار: كل ضرر بصورتين (قريبة + بعيدة) ومكان ونوع ووصف ── */
+export const MAX_DAMAGES = 8, MIN_DAMAGE_NOTE = 5;
+export const DAMAGE_PARTS = [
+  { v: "front", ar: "الأمام", bn: "সামনে", en: "Front" },
+  { v: "back", ar: "الخلف", bn: "পিছনে", en: "Rear" },
+  { v: "right", ar: "اليمين", bn: "ডান", en: "Right side" },
+  { v: "left", ar: "اليسار", bn: "বাম", en: "Left side" },
+  { v: "seat", ar: "المقعد", bn: "সিট", en: "Seat" },
+  { v: "tank", ar: "الخزان", bn: "ট্যাংক", en: "Tank" },
+  { v: "wheels", ar: "العجلات", bn: "চাকা", en: "Wheels" },
+  { v: "handlebar", ar: "المقود", bn: "হ্যান্ডেল", en: "Handlebar" },
+  { v: "lights", ar: "الإضاءة", bn: "লাইট", en: "Lights" },
+  { v: "other", ar: "أخرى", bn: "অন্যান্য", en: "Other" },
+];
+export const DAMAGE_TYPES = [
+  { v: "scratch", ar: "خدش", bn: "দাগ/আঁচড়", en: "Scratch" },
+  { v: "dent", ar: "صدمة/انبعاج", bn: "টোল/ধাক্কা", en: "Dent" },
+  { v: "broken", ar: "كسر", bn: "ভাঙা", en: "Broken" },
+  { v: "crack", ar: "شرخ", bn: "ফাটল", en: "Crack" },
+  { v: "missing", ar: "قطعة ناقصة", bn: "অংশ নেই", en: "Missing part" },
+  { v: "rust", ar: "صدأ", bn: "মরিচা", en: "Rust" },
+  { v: "other", ar: "أخرى", bn: "অন্যান্য", en: "Other" },
+];
+const optOf = (list, v) => list.find(x => x.v === v) || null;
+export const damagePart = v => optOf(DAMAGE_PARTS, v) || { v, ar: v || "—", bn: v || "—", en: v || "—" };
+export const damageType = v => optOf(DAMAGE_TYPES, v) || { v, ar: v || "—", bn: v || "—", en: v || "—" };
+export const emptyDamage = () => ({ id: Math.random().toString(36).slice(2, 9), close: null, wide: null, part: "", type: "", note: "" });
+
+// خطأ بطاقة ضرر رقم i (من 0) → {field, ar, bn} أو null. close/wide: ملف أو رابط
+export function damageItemError(d, i) {
+  const n = i + 1, E = (f, ar, bn) => ({ field: `dmg_${i}_${f}`, ar: `الضرر ${n}: ${ar}`, bn: `ক্ষতি ${n}: ${bn}` });
+  if (!d) return E("close", "البطاقة فارغة.", "কার্ড খালি।");
+  if (!d.close) return E("close", "صوّر الضرر من قريب.", "কাছ থেকে ক্ষতির ছবি তুলুন।");
+  if (!d.wide) return E("wide", "صوّر الدراجة من بعيد ليظهر مكان الضرر.", "দূর থেকে ছবি তুলুন যাতে জায়গাটা দেখা যায়।");
+  if (!optOf(DAMAGE_PARTS, d.part)) return E("part", "اختر مكان الضرر.", "ক্ষতির জায়গা বাছুন।");
+  if (!optOf(DAMAGE_TYPES, d.type)) return E("type", "اختر نوع الضرر.", "ক্ষতির ধরন বাছুন।");
+  if (String(d.note || "").trim().length < MIN_DAMAGE_NOTE) return E("note", `اكتب وصفاً قصيراً (${MIN_DAMAGE_NOTE} أحرف على الأقل).`, `ছোট বিবরণ লিখুন (কমপক্ষে ${MIN_DAMAGE_NOTE} অক্ষর)।`);
+  return null;
+}
+export function damagesError(list) {
+  const a = list || [];
+  if (a.length > MAX_DAMAGES) return { field: "dmg_add", ar: `حتى ${MAX_DAMAGES} أضرار فقط.`, bn: `সর্বোচ্চ ${MAX_DAMAGES}টি ক্ষতি।` };
+  for (let i = 0; i < a.length; i++) { const e = damageItemError(a[i], i); if (e) return e; }
+  return null;
+}
+// ما يُحفظ في photos.damage_items ⇒ [{close, wide, part, type, note}] (روابط)؛ وdamage_photos تبقى مسطّحة للتوافق
+export const damageItemsRecord = (list, urlOf) => (list || []).map(d => ({ close: urlOf(d.close), wide: urlOf(d.wide), part: d.part, type: d.type, note: String(d.note || "").trim() }));
+export const damagePhotosFlat = items => (items || []).flatMap(x => [x.close, x.wide]).filter(Boolean);

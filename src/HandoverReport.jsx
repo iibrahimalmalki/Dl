@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./supabase";
 import { humanError } from "./errors";
-import { checklistOf, RECEIVED_ITEMS, BOX_PHOTOS, handoverIssues, handoverSweaterMessage, riyadhStamp } from "./handover";
+import { checklistOf, RECEIVED_ITEMS, BOX_PHOTOS, handoverIssues, handoverSweaterMessage, riyadhStamp, damagePart, damageType } from "./handover";
 import { copyText } from "./daily/store";
 
 const CSS = `
@@ -45,6 +45,12 @@ const CSS = `
 .hr-ph img{width:100%;height:100%;object-fit:cover;display:block}
 .hr-ph span{font-size:11.5px;font-weight:700;color:var(--mut);text-align:center;overflow-wrap:anywhere}
 .hr-sub{font-size:12.5px;font-weight:800;color:var(--ink-2);margin-top:4px}
+.hr-dmg{border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;margin-top:8px;min-width:0}
+.hr-dmg-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-weight:900;font-size:14px}
+.hr-tag{display:inline-flex;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:800;background:var(--soft);color:var(--ink-2)}
+.hr-tag.t{background:var(--bad-bg);color:var(--bad-ink)}
+.hr-dmg .hr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.hr-dmg p{margin:0;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
 .hr-acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
 .hr-acts .g-btn{min-height:48px}
 .hr-msg{margin:0;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;font-family:inherit;font-size:13px;line-height:1.7;padding:12px;border-radius:12px;background:var(--soft);border:1px solid var(--line);unicode-bidi:plaintext;text-align:start}
@@ -78,12 +84,15 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
   const v = veh || veh0 || {}, ck = row.checklist || {}, rec = ck.received || null, p = row.photos || {}, notes = ck.notes || {};
   const ret = row.direction === "return", issues = useMemo(() => handoverIssues(row), [row]);
   const bikerNote = String(row.condition_notes || "").trim();
+  const dItems = Array.isArray(p.damage_items) ? p.damage_items.filter(Boolean) : [];
   const items = checklistOf(ck).slice().sort((a, b) => (ck[a.id] === false ? 0 : 1) - (ck[b.id] === false ? 0 : 1));
   const photos = [
     ...[["front", "الدراجة — أمام"], ["back", "الدراجة — خلف"], ["right", "الدراجة — يمين"], ["left", "الدراجة — يسار"]].map(([k, l]) => ({ url: p[k] || row["photo_" + k], label: l, g: "bike" })),
     { url: p.odometer || row.photo_odometer, label: "العدّاد", g: "bike" },
     ...BOX_PHOTOS.map(b => ({ url: p[b.id], label: b.ar, g: "box" })),
-    ...(p.damages || row.damage_photos || []).filter(Boolean).map((u, i) => ({ url: u, label: "ضرر " + (i + 1), g: "dmg" })),
+    // بطاقات الأضرار (photos.damage_items) أو الصور القديمة بلا تفاصيل
+    ...(dItems.length ? dItems.flatMap((d, n) => [{ url: d.close, label: `ضرر ${n + 1} — قريبة`, g: "dmg", d: n }, { url: d.wide, label: `ضرر ${n + 1} — بعيدة`, g: "dmg", d: n }])
+      : (p.damages || row.damage_photos || []).filter(Boolean).map((u, i) => ({ url: u, label: "ضرر " + (i + 1), g: "dmg" }))),
   ].filter(x => x.url);
   nPh.current = photos.length;
   const msgKeys = [...issues.map(i => i.key), ...(bikerNote ? ["biker_note"] : [])];
@@ -103,7 +112,7 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
     setBusy("pdf"); setNote("");
     try {
       const [{ renderHTML, canvasToPdfA4 }, { FONT_STACK }] = await Promise.all([import("./exportKit"), import("./fonts")]);
-      const canvas = await renderHTML(reportHTML({ row, v, issues, bikerNote, items, rec, photos, ret, FONT_STACK }), { width: 794 });
+      const canvas = await renderHTML(reportHTML({ row, v, issues, bikerNote, items, rec, photos, ret, dItems, FONT_STACK }), { width: 794 });
       await canvasToPdfA4(canvas, `handover-${(row.plate || "").replace(/\s+/g, "")}-${riyadhStamp(row.created_at).date.replace(/\//g, "-")}.pdf`);
     } catch (e) { const h = humanError(e); setNote("تعذّر إنشاء PDF — " + h.ar + " (" + h.code + ")"); }
     setBusy("");
@@ -146,9 +155,17 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
           : <span className="hr-mut">— (سجل قبل إضافة المستلَمات)</span>}</section>
 
       <section className="g-card hr-card"><h2>الصور<span className="bn" lang="bn">ছবি</span> <span className="hr-mut hr-num">({photos.length})</span></h2>
-        {[["bike", "الدراجة والعدّاد"], ["box", "الصندوق"], ["dmg", "الأضرار"]].map(([g, t]) => { const list = photos.map((x, i) => ({ ...x, i })).filter(x => x.g === g); return list.length ? <div key={g}><div className="hr-sub">{t}</div>
+        {[["bike", "الدراجة والعدّاد"], ["box", "الصندوق"], ...(dItems.length ? [] : [["dmg", "الأضرار"]])].map(([g, t]) => { const list = photos.map((x, i) => ({ ...x, i })).filter(x => x.g === g); return list.length ? <div key={g}><div className="hr-sub">{t}</div>
           <div className="hr-grid">{list.map(x => <div className="hr-ph" key={x.i}><button type="button" onClick={() => setZoom(x.i)} aria-label={"تكبير " + x.label}><img src={x.url} alt={x.label} loading="lazy" /></button><span>{x.label}</span></div>)}</div></div> : null; })}
         {!photos.length && <span className="hr-mut">لا صور في هذا السجل.</span>}</section>
+
+      {dItems.length > 0 && <section className="g-card hr-card"><h2>الأضرار ({dItems.length})<span className="bn" lang="bn">ক্ষতি</span></h2>
+        {dItems.map((d, n) => { const pr = damagePart(d.part), ty = damageType(d.type), ph = photos.map((x, i) => ({ ...x, i })).filter(x => x.g === "dmg" && x.d === n);
+          return <div className="hr-dmg" key={n}>
+            <div className="hr-dmg-h">ضرر {n + 1} <span className="hr-tag">📍 {pr.ar}</span><span className="hr-tag t">{ty.ar}</span></div>
+            <div className="hr-grid">{ph.map(x => <div className="hr-ph" key={x.i}><button type="button" onClick={() => setZoom(x.i)} aria-label={"تكبير " + x.label}><img src={x.url} alt={x.label} loading="lazy" /></button><span>{x.label.split("— ")[1]}</span></div>)}</div>
+            <p>{d.note || <span className="hr-mut">بلا وصف</span>}</p>
+          </div>; })}</section>}
 
       <section className="g-card hr-card"><h2>ملاحظات البايكر والتعهّد<span className="bn" lang="bn">নোট ও অঙ্গীকার</span></h2>
         <div style={{ fontSize: 14 }}>{bikerNote || <span className="hr-mut">لا ملاحظات.</span>}</div>
@@ -183,7 +200,7 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
 
 // قالب A4 عمودي (794px) للطباعة/PDF بالشعار
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-function reportHTML({ row, v, issues, bikerNote, items, rec, photos, ret, FONT_STACK }) {
+function reportHTML({ row, v, issues, bikerNote, items, rec, photos, ret, dItems = [], FONT_STACK }) {
   const ck = row.checklist || {}, notes = ck.notes || {}, site = (typeof location !== "undefined" && location.origin) || "";
   const kv = [["التاريخ والوقت", fmtFull(row.created_at)], [ret ? "المسلِّم" : "المستلم", `${row.biker_name || "—"} — ${row.biker_employee_id || "—"}`], ["اللوحة", `${row.plate || v.plate || "—"}${v.plate_en ? " · " + v.plate_en : ""}`],
     ["الصنع والموديل", [v.make, v.model_year].filter(Boolean).join(" · ") || "—"], ["اللون", v.color || "—"], ["رقم الهيكل (VIN)", v.vin || "—"], ["الرقم التسلسلي", v.serial_no || "—"], ["العدّاد", row.odometer != null ? row.odometer + " km" : "—"],
@@ -206,6 +223,7 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}td{padding:5px 6px;bo
 .ph div{font-size:10.5px;color:#64748B;text-align:center}
 .ph img{width:100%;height:120px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;display:block;margin-bottom:3px}
 .ft{font-size:10.5px;color:#94A3B8;text-align:center;margin-top:14px}
+.dm{border:1px solid #F5C77E;background:#FFF8EC;border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:6px}
 </style>
 <div class="hd"><img src="${site}/brand-logo.png" alt=""/><div><h1>تقرير ${ret ? "تسليم" : "استلام"} دراجة</h1><div class="m">دلو ورغوة — شريك 47 · ${esc(row.plate || "")} · ${esc(fmtFull(row.created_at))}</div></div></div>
 <div class="bd">
@@ -217,6 +235,7 @@ ${issues.length || bikerNote ? `<div class="warn">${issues.length ? `<ol>${issue
 <h3>المستلَمات</h3>
 <div class="cols">${rec ? RECEIVED_ITEMS.map(it => { const ok = rec[it.id] === true, bn = it.id === "box" && rec.box_note;
     return `<div class="${bn ? "y b" : ok ? "g" : "r b"}">${bn ? "!" : ok ? "✓" : "✗"} ${esc(it.ar)}${it.count && ok ? ` (${rec[it.count]})` : ""}${bn ? " — " + esc(rec.box_note) : !ok && (rec.reasons || {})[it.id] ? " — " + esc(rec.reasons[it.id]) : ""}</div>`; }).join("") : "<div>— (سجل قبل إضافة المستلَمات)</div>"}</div>
+${dItems.length ? `<h3>الأضرار (${dItems.length})</h3>${dItems.map((d, n) => `<div class="dm"><div class="b">ضرر ${n + 1} — المكان: ${esc(damagePart(d.part).ar)} · النوع: ${esc(damageType(d.type).ar)}</div><div>${esc(d.note || "")}</div></div>`).join("")}` : ""}
 ${photos.length ? `<h3>الصور</h3><div class="ph">${photos.map(x => `<div><img src="${esc(x.url)}" crossorigin="anonymous" alt=""/>${esc(x.label)}</div>`).join("")}</div>` : ""}
 <h3>التعهّد</h3><div style="font-size:12px">${row.pledge_accepted ? "✓ وافق البايكر على التعهّد بالمحافظة على الدراجة والالتزام بتعليمات المرور." : "— لم يُسجَّل التعهّد."}</div>
 <div class="ft">أُنشئ من المنصة التشغيلية — دلو ورغوة · ${esc(fmtFull(new Date().toISOString()))}</div>
