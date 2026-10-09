@@ -10,6 +10,7 @@ import GlassSidebar from "./GlassSidebar";
 import BottomNav from "./BottomNav";
 import { useTheme } from "./theme";
 import { humanError, normalizeId, adminWaLink, ADMIN_WA } from "./errors";
+import { idToEmail } from "./bikerLogin";
 import { KitStyle, Btn, ErrorNote, FieldErr, UploadBar, Skel, StickyBar, NetBar, OfflineHint, useOnline, useConfirm, useKeyboardOpen, loadDraft, saveDraft, Bn } from "./uiKit";
 import { resolveTabs } from "./bikerTabs";
 import { loadTabRules } from "./bikerTabsStore";
@@ -242,12 +243,6 @@ const CONDITIONS = [
   { v: "fair", ar: "متوسطة", bn: "মাঝারি" },
   { v: "damaged", ar: "تالفة", bn: "ক্ষতিগ্রস্ত" },
 ];
-
-function idToEmail(v) {
-  const t = normalizeId(v);
-  if (/^\d+$/.test(t)) return `biker${t}@dalu.sa`;
-  return `biker.${t.toLowerCase()}@dalu.sa`;
-}
 
 /* ---------- شاشة الدخول ---------- */
 function Login() {

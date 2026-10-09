@@ -2,6 +2,7 @@ import{useState,useEffect}from"react";
 import{supabase,SITE_URL}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
+import{bikerLoginId,hasBikerAlias}from"./bikerLogin";
 import{phoneOf,isTechEmail,roleLabel,permSummary,permText,lastSeen,FILTERS,filterUsers,counts,canHardDelete,confirmName}from"./usersLib";
 
 const waNum=raw=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
@@ -114,9 +115,13 @@ export default function UserManagement(){
     setSaving(false);
   };
   const credMsg=(c,lang)=>{
-    // رسالة ترحيب خاصة (واتساب للشخص نفسه): إنشاء الحساب أو تحديث بيانات الدخول
-    const ar=`مرحباً ${c.name} 👋\nأهلاً بك في فريق دلو ورغوة.\n${c.isNew?"تم إنشاء حسابك في المنصة.":"تم تحديث بيانات دخولك إلى المنصة."}\n\n🔗 رابط الدخول:\n${loginURL(c.biker)}\n\n👤 اسم المستخدم:\n${c.email}\n\n🔑 الرقم السري المؤقت:\n${c.password}\n\nهذه البيانات لك وحدك — لا تشاركها مع أحد. غيّر الرقم السري بعد أول دخول.`;
-    const bn=`স্বাগতম ${c.name} 👋\nদালু ওয়ারাগওয়া টিমে আপনাকে স্বাগতম।\n${c.isNew?"প্ল্যাটফর্মে আপনার অ্যাকাউন্ট তৈরি হয়েছে।":"প্ল্যাটফর্মে আপনার লগইন তথ্য আপডেট হয়েছে।"}\n\n🔗 লগইন লিংক:\n${loginURL(c.biker)}\n\n👤 ইউজারনেম:\n${c.email}\n\n🔑 অস্থায়ী পাসওয়ার্ড:\n${c.password}\n\nএই তথ্য শুধু আপনার জন্য — কারো সাথে শেয়ার করবেন না। প্রথম লগইনের পর পাসওয়ার্ড পরিবর্তন করুন।`;
+    // رسالة ترحيب خاصة (واتساب للشخص نفسه): إنشاء الحساب أو تحديث بيانات الدخول.
+    // البايكر يدخل بـ«رقم البايكر» (biker1700@dalu.sa ← 1700)، والإداري باسم المستخدم كاملاً.
+    const alias=c.biker&&hasBikerAlias(c.email);
+    const idAr=alias?`🆔 رقم البايكر:\n${bikerLoginId(c.email)}\n(اكتب الرقم فقط)`:`👤 اسم المستخدم:\n${c.email}`;
+    const idBn=alias?`🆔 বাইকার নম্বর:\n${bikerLoginId(c.email)}\n(শুধু নম্বরটি লিখুন)`:`👤 ইউজারনেম:\n${c.email}`;
+    const ar=`مرحباً ${c.name} 👋\nأهلاً بك في فريق دلو ورغوة.\n${c.isNew?"تم إنشاء حسابك في المنصة.":"تم تحديث بيانات دخولك إلى المنصة."}\n\n🔗 رابط الدخول:\n${loginURL(c.biker)}\n\n${idAr}\n\n🔑 الرقم السري المؤقت:\n${c.password}\n\nهذه البيانات لك وحدك — لا تشاركها مع أحد. غيّر الرقم السري بعد أول دخول.`;
+    const bn=`স্বাগতম ${c.name} 👋\nদালু ওয়ারাগওয়া টিমে আপনাকে স্বাগতম।\n${c.isNew?"প্ল্যাটফর্মে আপনার অ্যাকাউন্ট তৈরি হয়েছে।":"প্ল্যাটফর্মে আপনার লগইন তথ্য আপডেট হয়েছে।"}\n\n🔗 লগইন লিংক:\n${loginURL(c.biker)}\n\n${idBn}\n\n🔑 অস্থায়ী পাসওয়ার্ড:\n${c.password}\n\nএই তথ্য শুধু আপনার জন্য — কারো সাথে শেয়ার করবেন না। প্রথম লগইনের পর পাসওয়ার্ড পরিবর্তন করুন।`;
     return lang==="ar"?ar:lang==="bn"?bn:ar+"\n\n———\n\n"+bn;
   };
   const waSendCred=(c)=>{window.open(`https://wa.me/${waNum(c.phone)}?text=${encodeURIComponent(credMsg(c,credLang))}`);};
@@ -172,7 +177,8 @@ export default function UserManagement(){
       {/* بطاقة بيانات الدخول بعد الإنشاء */}
       {cred&&<div className="um-cred">
         <div className="um-cred-h"><Icon n="checkCircle" s={16}/> {cred.isNew?"تم إنشاء حساب":"كلمة مرور جديدة لـ"} «{cred.name}»</div>
-        <div className="um-cred-row"><span>اسم المستخدم</span><b dir="ltr">{cred.email}</b></div>
+        {cred.biker&&hasBikerAlias(cred.email)?<div className="um-cred-row"><span>رقم البايكر (يكتبه فقط)</span><b dir="ltr">{bikerLoginId(cred.email)}</b></div>
+          :<div className="um-cred-row"><span>اسم المستخدم</span><b dir="ltr">{cred.email}</b></div>}
         <div className="um-cred-row"><span>كلمة المرور المؤقتة</span><b dir="ltr">{cred.password}</b></div>
         <div className="um-cred-row"><span>رابط الدخول</span><b dir="ltr">{loginURL(cred.biker)}</b></div>
         <div className="um-cred-lang">
