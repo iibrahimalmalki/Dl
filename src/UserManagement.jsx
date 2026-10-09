@@ -2,6 +2,7 @@ import{useState,useEffect}from"react";
 import{supabase,SITE_URL}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
+import{phoneOf,isTechEmail,roleLabel,permSummary,permText,lastSeen,FILTERS,filterUsers,counts,canHardDelete,confirmName}from"./usersLib";
 
 const waNum=raw=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
 const genPass=()=>{const a="abcdefghjkmnpqrstuvwxyz",A="ABCDEFGHJKLMNPQRSTUVWXYZ",n="23456789";const p=s=>s[Math.floor(Math.random()*s.length)];let s=p(A)+p(a)+p(a)+p(n)+p(n)+p(a)+p(n)+p(a);return s;};
@@ -50,8 +51,20 @@ export default function UserManagement(){
   const[credLang,setCredLang]=useState("both");                  // ar | bn | both
   const[pwFor,setPwFor]=useState(null);const[pwVal,setPwVal]=useState("");
   const[mob,setMob]=useState("");   // جوال الحساب الإداري لرسائل الوثائق (app_users.mobile)
+  const[act,setAct]=useState(null);       // {user_id: last_sign_in_at|null} — null حتى تُطبَّق admin_users_activity
+  const[psum,setPsum]=useState({});        // ملخص الصلاحيات لكل مستخدم
+  const[filt,setFilt]=useState("all");const[srch,setSrch]=useState("");
+  const[menuFor,setMenuFor]=useState(null);  // قائمة «⋯» المفتوحة
+  const[ask,setAsk]=useState(null);          // تأكيد الإيقاف/الحذف: {type:"off"|"del", u, typed}
+  useEffect(()=>{if(!menuFor)return;const close=e=>{if(!e.target.closest(".um-more"))setMenuFor(null);};const esc=e=>{if(e.key==="Escape")setMenuFor(null);};
+    document.addEventListener("click",close);document.addEventListener("keydown",esc);return()=>{document.removeEventListener("click",close);document.removeEventListener("keydown",esc);};},[menuFor]);
 
-  const loadUsers=async()=>{setLoading(true);const{data}=await supabase.from("app_users").select("id,email,display_name,is_owner,active,biker_employee_id,mobile").order("created_at");setUsers(data||[]);setLoading(false);};
+  const loadUsers=async()=>{setLoading(true);
+    const[u,p,a]=await Promise.all([supabase.from("app_users").select("id,email,display_name,is_owner,active,biker_employee_id,mobile,position").order("created_at"),
+      supabase.from("user_permissions").select("user_id,can_edit"),supabase.rpc("admin_users_activity")]);
+    setUsers(u.data||[]);setPsum(permSummary(p.data||[]));
+    setAct(a.error?null:Object.fromEntries((a.data||[]).map(r=>[r.user_id,r.last_sign_in_at||null])));
+    setLoading(false);};
   useEffect(()=>{loadUsers();supabase.auth.getUser().then(({data})=>setMyId(data.user&&data.user.id));
     supabase.from("employees").select("id,full_name,mobile,employee_id").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
@@ -59,7 +72,14 @@ export default function UserManagement(){
   const setRaci=(mod,code)=>setPerms(p=>({...p,[mod]:p[mod]===code?null:code}));
   const grantAll=()=>{const m={};MOD_KEYS.forEach(x=>m[x.k]="R");setPerms(m);};
   const revokeAll=()=>setPerms({});
-  const savePerms=async()=>{if(!sel)return;setSaving(true);note("");await supabase.from("user_permissions").delete().eq("user_id",sel.id);const rows=MOD_KEYS.filter(x=>perms[x.k]).map(x=>({user_id:sel.id,module:x.k,raci:perms[x.k],can_view:true,can_edit:raciEdit(perms[x.k])}));if(rows.length){const{error}=await supabase.from("user_permissions").insert(rows);if(error){note("خطأ: "+error.message);setSaving(false);return;}}setSaving(false);note("تم حفظ مصفوفة RACI",true);};
+  // الحفظ دفعة واحدة عبر set_user_permissions (لا يُحذف شيء إن فشل)؛ قبل تطبيقها على الخادم ⇒ الطريقة القديمة
+  const savePerms=async()=>{if(!sel)return;setSaving(true);note("");
+    const picked=MOD_KEYS.filter(x=>perms[x.k]);
+    const{error:rErr}=await supabase.rpc("set_user_permissions",{p_user:sel.id,p_rows:picked.map(x=>({module:x.k,raci:perms[x.k]}))});
+    if(rErr&&!(rErr.code==="PGRST202"||rErr.code==="42883")){note("خطأ: "+rErr.message);setSaving(false);return;}
+    if(rErr){await supabase.from("user_permissions").delete().eq("user_id",sel.id);const rows=picked.map(x=>({user_id:sel.id,module:x.k,raci:perms[x.k],can_view:true,can_edit:raciEdit(perms[x.k])}));if(rows.length){const{error}=await supabase.from("user_permissions").insert(rows);if(error){note("خطأ: "+error.message);setSaving(false);return;}}}
+    setPsum(m=>({...m,[sel.id]:{edit:picked.filter(x=>raciEdit(perms[x.k])).length,view:picked.filter(x=>!raciEdit(perms[x.k])).length}}));
+    setSaving(false);note("تم حفظ مصفوفة RACI",true);};
 
   // حفظ الجوال بصيغة 9665xxxxxxxx (05… ← 9665…)
   const saveMobile=async()=>{if(!sel)return;const raw=mob.trim();const m=raw?waNum(raw):null;
@@ -99,8 +119,8 @@ export default function UserManagement(){
   };
   const waSendCred=(c)=>{window.open(`https://wa.me/${waNum(c.phone)}?text=${encodeURIComponent(credMsg(c,credLang))}`);};
   const copyCred=async(c)=>{try{await navigator.clipboard.writeText(credMsg(c,credLang));note("تم نسخ الرسالة",true);}catch{note(`${c.email} / ${c.password}`,true);}};
-  const doDelete=async(u)=>{if(!confirm(`حذف ${u.display_name||u.email} نهائياً؟`))return;note("");const r=await call({action:"delete",user_id:u.id});if(r.error){note("خطأ: "+r.error);return;}if(sel&&sel.id===u.id)setSel(null);note("تم الحذف",true);loadUsers();};
-  const toggleActive=async(u)=>{const r=await call({action:"update",user_id:u.id,active:!u.active});if(r.error){note("خطأ: "+r.error);return;}loadUsers();if(sel&&sel.id===u.id)setSel({...u,active:!u.active});};
+  const doDelete=async(u)=>{if(!canHardDelete(u,act)){note("هذا الحساب استُخدم من قبل — أوقفه بدل حذفه ليبقى سجلّه.");return;}note("");const r=await call({action:"delete",user_id:u.id});if(r.error){note("خطأ: "+r.error);return;}if(sel&&sel.id===u.id)setSel(null);note("تم الحذف",true);loadUsers();};
+  const toggleActive=async(u)=>{const r=await call({action:"update",user_id:u.id,active:!u.active});if(r.error){note("خطأ: "+r.error);return;}note(u.active?"تم إيقاف الحساب":"تم تفعيل الحساب",true);loadUsers();if(sel&&sel.id===u.id)setSel({...u,active:!u.active});};
   const savePw=async(u)=>{if(pwVal.length<6){note("كلمة المرور 6 أحرف على الأقل");return;}note("");const r=await call({action:"set_password",user_id:u.id,password:pwVal});if(r.error){note("خطأ: "+r.error);return;}setPwFor(null);setPwVal("");note("تم تغيير كلمة المرور",true);};
 
   return(<div className="um">
@@ -186,29 +206,62 @@ export default function UserManagement(){
         </div>
       </div>}
 
-      <div className="um-list">{users.map(u=>(<div className="um-u" key={u.id}>
+      {/* فلاتر وبحث */}
+      {(()=>{const c=counts(users,act);return <div className="um-filt">
+        <div className="um-chips" role="tablist" aria-label="تصفية المستخدمين">{FILTERS.filter(x=>x.k!=="never"||act).map(x=>
+          <button key={x.k} role="tab" aria-selected={filt===x.k} className={filt===x.k?"on":""} onClick={()=>setFilt(x.k)}>{x.ar} <b>{c[x.k]}</b></button>)}</div>
+        <input className="um-in" value={srch} onChange={e=>setSrch(e.target.value)} placeholder="بحث بالاسم أو الجوال أو رقم البايكر"/>
+      </div>;})()}
+      {!act&&<div className="um-hint"><Icon n="lock" s={12}/> «آخر دخول» يظهر بعد تطبيق docs/sql/users_admin.sql.</div>}
+
+      <div className="um-list">{(()=>{const list=filterUsers(users,filt,srch,act);return list.length?list.map(u=>{
+        const ls=lastSeen(act?act[u.id]:undefined),ph=phoneOf(u),sm=psum[u.id];
+        return(<div className="um-u" key={u.id}>
         <div className="um-u-top">
           <div className="um-av">{(u.display_name||u.email||"?").trim().charAt(0).toUpperCase()}</div>
           <div style={{flex:1,minWidth:0}}>
             <div className="um-u-name">{u.display_name||u.email}
               {u.is_owner&&<span className="um-tag owner">مالك</span>}
-              {u.biker_employee_id&&<span className="um-tag">بايكر {u.biker_employee_id}</span>}
-              {!u.is_owner&&<span className={"um-tag "+(u.active?"on":"off")}>{u.active?"مُفعّل":"موقوف"}</span>}
+              {!u.is_owner&&!u.active&&<span className="um-tag off">موقوف</span>}
             </div>
-            <div className="um-u-mail" dir="ltr">{u.email}</div>
+            <div className="um-u-role">{roleLabel(u)}</div>
+            <div className="um-u-meta">
+              {ph&&<span dir="ltr">{ph}</span>}
+              {!isTechEmail(u.email)&&<span dir="ltr">{u.email}</span>}
+              {ls&&<span className={"um-ls "+ls.tone}>{ls.t}</span>}
+              {!u.is_owner&&!u.biker_employee_id&&<span>{permText(sm)}</span>}
+            </div>
+          </div>
+          <div className="um-more">
+            <button className="um-dots" aria-label={"إجراءات "+(u.display_name||"")} aria-expanded={menuFor===u.id} onClick={()=>setMenuFor(menuFor===u.id?null:u.id)}>⋯</button>
+            {menuFor===u.id&&<div className="um-menu" role="menu">
+              <button role="menuitem" onClick={()=>{setMenuFor(null);setPwFor(u.id);setPwVal("");}}><Icon n="key" s={14}/> تعيين كلمة مرور</button>
+              {!u.is_owner&&<button role="menuitem" onClick={()=>{setMenuFor(null);u.active?setAsk({type:"off",u}):toggleActive(u);}}><Icon n={u.active?"x":"check"} s={14}/> {u.active?"إيقاف الحساب":"تفعيل الحساب"}</button>}
+              {!u.is_owner&&<button role="menuitem" className="danger" onClick={()=>{setMenuFor(null);setAsk({type:"del",u,typed:""});}}><Icon n="trash" s={14}/> حذف نهائي</button>}
+            </div>}
           </div>
         </div>
-        <div className="um-u-actions">
-          <button className="um-sb" onClick={()=>{setPwFor(pwFor===u.id?null:u.id);setPwVal("");}}><Icon n="key" s={13}/> كلمة المرور</button>
-          {!u.is_owner&&<button className="um-sb" onClick={()=>toggleActive(u)}><Icon n={u.active?"x":"check"} s={13}/> {u.active?"إيقاف":"تفعيل"}</button>}
-          {!u.is_owner&&<button className="um-sb brand" onClick={()=>openUser(u)}><Icon n="users" s={13}/> الصلاحيات</button>}
-          {!u.is_owner&&<button className="um-sb danger" onClick={()=>doDelete(u)}><Icon n="trash" s={13}/> حذف</button>}
-        </div>
+        {!u.is_owner&&<div className="um-u-actions"><button className="um-sb brand" onClick={()=>openUser(u)}><Icon n="users" s={13}/> الصلاحيات</button></div>}
         {pwFor===u.id&&<div className="um-pw">
-          <input className="um-in ltr" type="text" placeholder="كلمة مرور جديدة (6+)" value={pwVal} onChange={e=>setPwVal(e.target.value)}/>
+          <input className="um-in ltr" type="text" autoComplete="off" placeholder="كلمة مرور جديدة (6+)" value={pwVal} onChange={e=>setPwVal(e.target.value)}/>
           <button className="um-btn ok" onClick={()=>savePw(u)}><Icon n="save" s={14}/> حفظ</button>
+          <button className="um-btn ghost" onClick={()=>{setPwFor(null);setPwVal("");}}>إلغاء</button>
         </div>}
-      </div>))}</div>
+        {ask&&ask.u.id===u.id&&(ask.type==="off"?<div className="um-ask">
+          <b>إيقاف حساب {u.display_name||u.email}؟</b>
+          <span>لن يستطيع الدخول، وتبقى بياناته وسجلّه. يمكن التفعيل لاحقاً.</span>
+          <div className="um-ask-act"><button className="um-btn ghost" onClick={()=>setAsk(null)}>إلغاء</button><button className="um-btn danger" onClick={()=>{setAsk(null);toggleActive(u);}}>إيقاف</button></div>
+        </div>:canHardDelete(u,act)?<div className="um-ask">
+          <b>حذف نهائي — لا يمكن التراجع</b>
+          <span>للتأكيد اكتب الاسم كما هو: <b>{u.display_name||u.email}</b></span>
+          <input className="um-in" value={ask.typed} onChange={e=>setAsk({...ask,typed:e.target.value})} aria-label="اكتب الاسم للتأكيد"/>
+          <div className="um-ask-act"><button className="um-btn ghost" onClick={()=>setAsk(null)}>إلغاء</button><button className="um-btn danger" disabled={!confirmName(u,ask.typed)} onClick={()=>{setAsk(null);doDelete(u);}}>حذف نهائي</button></div>
+        </div>:<div className="um-ask">
+          <b>لا يُحذف حساب استُخدم من قبل</b>
+          <span>دخل هذا الحساب إلى النظام، وحذفه يُضيّع سجلّه. أوقفه بدلاً من ذلك.</span>
+          <div className="um-ask-act"><button className="um-btn ghost" onClick={()=>setAsk(null)}>إلغاء</button>{u.active&&<button className="um-btn danger" onClick={()=>setAsk({type:"off",u})}>إيقاف الحساب</button>}</div>
+        </div>)}
+      </div>);}):<div className="um-empty">لا مستخدمين مطابقين</div>;})()}</div>
     </>)}
   </div>);
 }
@@ -286,5 +339,24 @@ const CSS=`
 .um-cred-lang button.on{background:var(--ok);border-color:var(--ok-ink);color:#fff}
 .um-cred-act{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
 .um-cred-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:var(--warn-ink);background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);border-radius:9px;padding:8px 10px;margin-top:11px;line-height:1.6}
+.um-filt{display:flex;flex-direction:column;gap:9px;margin:14px 0 10px}
+.um-chips{display:flex;gap:6px;flex-wrap:wrap}
+.um-chips button{border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink-2);border-radius:20px;padding:6px 12px;min-height:36px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.um-chips button b{font-weight:800;color:var(--mut);margin-inline-start:3px}
+.um-chips button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}.um-chips button.on b{color:inherit}
+.um-hint{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mut);margin-bottom:10px}
+.um-empty{text-align:center;padding:24px 10px;color:var(--mut);font-size:13px;font-weight:700}
+.um-u-role{font-size:12px;font-weight:700;color:var(--ink-2);margin-top:2px}
+.um-u-meta{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:4px;font-size:11.5px;color:var(--mut-2)}
+.um-ls{font-weight:700}.um-ls.ok{color:var(--ok-ink)}.um-ls.warn{color:var(--warn-ink)}
+.um-more{position:relative;flex:none;align-self:flex-start}
+.um-dots{width:40px;height:40px;border-radius:11px;border:1px solid var(--line);background:var(--glass-2);color:var(--ink-2);font-size:20px;font-weight:900;line-height:1;cursor:pointer}
+.um-menu{position:absolute;top:44px;inset-inline-end:0;z-index:5;min-width:180px;background:var(--bg);border:1px solid var(--line-2);border-radius:12px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column}
+.um-menu button{display:flex;align-items:center;gap:8px;border:none;background:none;text-align:start;padding:10px 11px;min-height:40px;border-radius:9px;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--ink-2);cursor:pointer}
+.um-menu button:hover{background:var(--hover)}.um-menu button.danger{color:var(--bad-ink)}
+.um-ask{display:flex;flex-direction:column;gap:8px;margin-top:11px;padding:11px 12px;border-radius:12px;background:var(--bad-bg);font-size:12.5px;color:var(--ink-2);line-height:1.7}
+.um-ask>b{color:var(--bad-ink);font-size:13px}
+.um-ask-act{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.um-btn.danger:disabled{opacity:.5}
 @media(max-width:640px){.um-grid2{grid-template-columns:1fr}}
 `;
