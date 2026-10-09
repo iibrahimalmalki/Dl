@@ -14,7 +14,8 @@ import { idToEmail } from "./bikerLogin";
 import { KitStyle, Btn, ErrorNote, FieldErr, UploadBar, Skel, StickyBar, NetBar, OfflineHint, useOnline, useConfirm, useKeyboardOpen, loadDraft, saveDraft, Bn } from "./uiKit";
 import { resolveTabs } from "./bikerTabs";
 import { loadTabRules } from "./bikerTabsStore";
-import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, receivedRecord, itemsOk, HANDOVER_STEPS, stepError, firstStepError, stepMove, stepSkipped, boxNeeded, odoNum } from "./handover";
+import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, receivedRecord, itemsOk, HANDOVER_STEPS, stepError, firstStepError, stepMove, stepSkipped, boxNeeded, odoNum, MAX_DAMAGES, DAMAGE_PARTS, DAMAGE_TYPES, emptyDamage, damagePart, damageType, damagePhotosFlat } from "./handover";
+import { checkPhoto } from "./photoQuality";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
 const DailyReceive = lazy(() => import("./daily/DailyReceive"));
@@ -107,6 +108,15 @@ const CSS = `
 .bp-pbox img{width:100%;height:96px;object-fit:cover;display:block}
 .bp-pbox .tag{position:absolute;top:5px;inset-inline-start:5px;background:rgba(10,14,39,.75);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px}
 .bp-photo{margin-top:6px}
+.bp-pbox.chk{opacity:.6;pointer-events:none}
+.bp-pbox .chkm{position:absolute;inset:auto 0 0 0;background:rgba(10,14,39,.75);color:#fff;font-size:10.5px;font-weight:800;padding:3px}
+.bp-dmg{border:1px solid var(--line-2);border-radius:14px;padding:12px;margin-top:10px;background:var(--glass-2)}
+.bp-dmg-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:900;font-size:14px;color:var(--ink)}
+.bp-dmg-h button{min-height:40px;padding:6px 12px;border-radius:10px;border:1px solid color-mix(in srgb,var(--bad) 40%,transparent);background:none;color:var(--bad-ink);font:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.bp-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.bp-chips button{min-height:44px;padding:6px 10px;border-radius:10px;border:1px solid var(--line-2);background:var(--glass-2);font:inherit;font-weight:800;font-size:12.5px;color:var(--mut);cursor:pointer;line-height:1.3}
+.bp-chips button .bn{display:block;font-size:10px;font-weight:600}
+.bp-chips button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .bp-photo input{display:none}
 .bp-photo label{display:inline-flex;align-items:center;gap:7px;min-height:46px;box-sizing:border-box;padding:11px 15px;background:var(--p-50);border:1.5px dashed rgba(var(--p-rgb),.5);border-radius:11px;color:var(--p-700);font-weight:800;font-size:13px;cursor:pointer}
 .bp-thumbs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
@@ -641,12 +651,13 @@ async function uploadPhoto(file, folder, bikerId) {
 }
 
 /* مربّع تصوير اتجاه واحد */
-function PhotoBox({ id, cap, capBn, tag, file, onPick }) {
+function PhotoBox({ id, cap, capBn, tag, file, onPick, checking }) {
   return (
-    <label className={"bp-pbox" + (file ? " done" : "")} htmlFor={id}>
+    <label className={"bp-pbox" + (file ? " done" : "") + (checking ? " chk" : "")} htmlFor={id}>
       {file ? <img src={URL.createObjectURL(file)} alt="" /> : <><div className="em">📷</div><div className="cap">{cap}<span className="bn">{capBn}</span></div></>}
       <span className="tag">{tag}{file ? " ✓" : ""}</span>
-      <input id={id} type="file" accept="image/*" capture="environment" onChange={e => onPick((e.target.files || [])[0] || null)} />
+      {checking && <span className="chkm">جارٍ فحص الوضوح… · <span lang="bn">যাচাই হচ্ছে…</span></span>}
+      <input id={id} type="file" accept="image/*" capture="environment" onChange={e => { const x = (e.target.files || [])[0] || null; e.target.value = ""; onPick(x); }} />
     </label>
   );
 }
@@ -664,7 +675,8 @@ function Handover({ me, myBike, onDirty }) {
   const draft0 = React.useMemo(() => loadDraft(H_DRAFT(bid)), [bid]);
   const [f, setF] = useState(() => ({ ...H_EMPTY(), ...(draft0 || {}) }));     // كل المدخلات النصية (تُحفظ مسودةً)
   const [ph, setPh] = useState({});          // الصور: front/back/right/left/odometer + الصندوق الخمس (لا تُحفظ في المسودة)
-  const [damages, setDamages] = useState([]);
+  const [damages, setDamages] = useState([]);  // بطاقات الأضرار: [{id, close, wide, part, type, note}] (لا تُحفظ في المسودة)
+  const [chk, setChk] = useState(null);        // حقل صورة قيد فحص الوضوح
   const [restored, setRestored] = useState(!!(draft0 && (draft0.odometer || Object.keys(draft0.checks || {}).length || draft0.step)));
   const [fe, setFe] = useState(null);        // خطأ تحقق بجانب الحقل {field, ar, bn}
   const [err, setErr] = useState(null);      // humanError عند الحفظ
@@ -677,9 +689,22 @@ function Handover({ me, myBike, onDirty }) {
   const [dlg, ask] = useConfirm();
   const online = useOnline();
   const set = p => setF(x => ({ ...x, ...p }));
-  const setP = k => file => { setPh(s => ({ ...s, [k]: file })); if (fe && fe.field === "ph_" + k) setFe(null); };
+  // فحص وضوح الصورة قبل قبولها (الجهات الأربع والعدّاد وصور الأضرار)؛ المرفوضة لا تُحفظ وتظهر الرسالة بجانبها
+  async function pickChecked(field, file, apply) {
+    if (!file) return;
+    setChk(field);
+    const bad = await checkPhoto(file);
+    setChk(null);
+    if (bad) { setFe({ field, ar: bad.ar, bn: bad.bn }); return; }
+    setFe(x => x && x.field === field ? null : x); apply(file);
+  }
+  const CHECKED = ["front", "back", "right", "left", "odometer"];
+  const setP = k => file => { const apply = x => setPh(s => ({ ...s, [k]: x }));
+    if (CHECKED.includes(k)) return pickChecked("ph_" + k, file, apply);
+    apply(file); if (fe && fe.field === "ph_" + k) setFe(null); };
+  const updD = (i, patch) => { setDamages(a => a.map((d, j) => j === i ? { ...d, ...patch } : d)); setFe(x => x && x.field.startsWith(`dmg_${i}_`) ? null : x); };
   const setR = patch => { set({ received: { ...f.received, ...patch } }); if (fe && fe.field.startsWith("rc_")) setFe(null); };
-  const recv = f.direction === "receive", step = f.step, form = { ...f, photos: ph };
+  const recv = f.direction === "receive", step = f.step, form = { ...f, photos: ph, damages };
   const S = HANDOVER_STEPS.length;
 
   async function loadRecent() {
@@ -725,7 +750,7 @@ function Handover({ me, myBike, onDirty }) {
       const box = boxNeeded(f.received);
       const jobs = [["front", "handover-front"], ["back", "handover-back"], ["right", "handover-right"], ["left", "handover-left"], ["odometer", "handover-odometer"],
         ...(box ? BOX_PHOTOS.map(b => [b.id, b.folder]) : [])].map(([k, folder]) => ({ k, folder, file: ph[k] }))
-        .concat(damages.map((file, i) => ({ k: "dmg" + i, folder: "handover-damage", file })));
+        .concat(damages.flatMap((d, i) => [{ k: `dmg${i}c`, folder: "handover-damage", file: d.close }, { k: `dmg${i}w`, folder: "handover-damage", file: d.wide }]));
       const urls = {}; let done = 0; setProg({ done: 0, total: jobs.length });
       for (const j of jobs) {
         let url = uploaded.current.get(j.file);
@@ -739,7 +764,9 @@ function Handover({ me, myBike, onDirty }) {
         urls[j.k] = url; setProg({ done: ++done, total: jobs.length });
       }
       photoNo = null;
-      const dmg = damages.map((_, i) => urls["dmg" + i]);
+      // تفاصيل كل ضرر في photos.damage_items؛ damage_photos تبقى مصفوفة روابط (قريبة ثم بعيدة لكل ضرر) للتوافق
+      const dmgItems = damages.map((d, i) => ({ close: urls[`dmg${i}c`], wide: urls[`dmg${i}w`], part: d.part, type: d.type, note: String(d.note || "").trim() }));
+      const dmg = damagePhotosFlat(dmgItems);
       const boxPhotos = box ? Object.fromEntries(BOX_PHOTOS.map(b => [b.id, urls[b.id]])) : {};
       const rec = receivedRecord(f.received);
       const checks = Object.fromEntries(CHECKLIST.map(c => [c.id, f.checks[c.id] === true]));
@@ -752,7 +779,7 @@ function Handover({ me, myBike, onDirty }) {
         checklist: { ...checks, received: rec, ...(Object.keys(ckN).length ? { notes: ckN } : {}) },
         photo_front: urls.front, photo_back: urls.back, photo_right: urls.right, photo_left: urls.left, photo_odometer: urls.odometer,
         damage_photos: dmg,
-        photos: { front: urls.front, back: urls.back, right: urls.right, left: urls.left, odometer: urls.odometer, damages: dmg, ...boxPhotos },
+        photos: { front: urls.front, back: urls.back, right: urls.right, left: urls.left, odometer: urls.odometer, damages: dmg, ...(dmgItems.length ? { damage_items: dmgItems } : {}), ...boxPhotos },
         condition_notes: f.notes || null, pledge_accepted: true, created_by: me.uid,
       }).select("*").single();
       if (error) throw error;
@@ -790,7 +817,7 @@ function Handover({ me, myBike, onDirty }) {
   const Mark = ({ v, t }) => <span className={"bp-mk " + (v == null ? "na" : v ? "ok" : "bad")} title={t}>{t} {v == null ? "—" : v ? "✓" : "✗"}</span>;
   const errAt = id => fe && fe.field === id ? <FieldErr t={fe} /> : null;
   const inv = id => fe && fe.field === id ? " k-inv" : "";
-  const Box = (id, k, cap, capBn, tag) => <div className={inv("ph_" + k)}><PhotoBox id={"ph_" + k} cap={cap} capBn={capBn} tag={tag} file={ph[k]} onPick={setP(k)} /></div>;
+  const Box = (id, k, cap, capBn, tag) => <div className={inv("ph_" + k)}><PhotoBox id={"ph_" + k} cap={cap} capBn={capBn} tag={tag} file={ph[k]} onPick={setP(k)} checking={chk === "ph_" + k} /></div>;
   const badList = CHECKLIST.filter(c => f.checks[c.id] === false);
   const rcText = it => { const v = f.received[it.id]; return v === true ? "نعم" + (it.count ? ` (${f.received[it.count]})` : "") : v === "note" ? "نعم مع ملاحظة" : v === false ? "لا" : "—"; };
 
@@ -836,12 +863,31 @@ function Handover({ me, myBike, onDirty }) {
     </div>
     {BOX_PHOTOS.map(b => <React.Fragment key={b.id}>{errAt("ph_" + b.id)}</React.Fragment>)}</>;
   else if (k === "notes") body = <>
-    <label className="bp-lbl" style={{ marginTop: 0 }}>صور الأضرار (اختياري) <span className="bn">/ ক্ষতির ছবি (ঐচ্ছিক)</span></label>
-    <div className="bp-photo">
-      <label htmlFor="dmg">📷 إضافة صور أضرار · <span className="bn" style={{ display: "inline" }}>ক্ষতির ছবি</span></label>
-      <input id="dmg" type="file" accept="image/*" capture="environment" multiple onChange={e => setDamages(d => [...d, ...Array.from(e.target.files || [])].slice(0, 8))} />
-    </div>
-    {damages.length > 0 && <div className="bp-thumbs">{damages.map((x, i) => <span key={i} className="bp-thumb"><img src={URL.createObjectURL(x)} alt={"ضرر " + (i + 1)} /><button type="button" aria-label="حذف الصورة" onClick={() => setDamages(d => d.filter((_, j) => j !== i))}>×</button></span>)}</div>}
+    <label className="bp-lbl" style={{ marginTop: 0 }}>الأضرار (اختياري) <span className="bn">/ ক্ষতি (ঐচ্ছিক)</span></label>
+    <div className="bp-note" style={{ marginTop: 0 }}>لكل ضرر: صورة قريبة، وصورة بعيدة يظهر فيها مكانه، ثم المكان والنوع ووصف قصير. · <span className="bn">প্রতিটি ক্ষতির জন্য: কাছের ছবি, দূরের ছবি, জায়গা, ধরন ও ছোট বিবরণ।</span></div>
+    {damages.map((d, i) => { const id = x => `dmg_${i}_${x}`; return <div className="bp-dmg" key={d.id}>
+      <div className="bp-dmg-h"><span>الضرر {i + 1} <span className="bn" style={{ fontSize: 11, color: "var(--mut)" }}>/ ক্ষতি {i + 1}</span></span>
+        <button type="button" onClick={() => { setDamages(a => a.filter((_, j) => j !== i)); setFe(null); }} aria-label={"حذف الضرر " + (i + 1)}>حذف · <span lang="bn">মুছুন</span></button></div>
+      <div className="bp-pgrid">
+        <div className={inv(id("close"))}><PhotoBox id={id("close")} cap="صورة قريبة للضرر" capBn="কাছ থেকে" tag="قريبة" file={d.close} checking={chk === id("close")} onPick={x => pickChecked(id("close"), x, f2 => updD(i, { close: f2 }))} /></div>
+        <div className={inv(id("wide"))}><PhotoBox id={id("wide")} cap="صورة بعيدة يظهر فيها المكان" capBn="দূর থেকে, জায়গা দেখা যায়" tag="بعيدة" file={d.wide} checking={chk === id("wide")} onPick={x => pickChecked(id("wide"), x, f2 => updD(i, { wide: f2 }))} /></div>
+      </div>
+      {errAt(id("close"))}{errAt(id("wide"))}
+      <label className="bp-lbl">مكان الضرر <span className="bp-req">*</span> <span className="bn">/ ক্ষতির জায়গা</span></label>
+      <div className={"bp-chips" + inv(id("part"))} id={id("part")} tabIndex={-1} role="radiogroup" aria-label={"مكان الضرر " + (i + 1)}>
+        {DAMAGE_PARTS.map(o => <button type="button" key={o.v} role="radio" aria-checked={d.part === o.v} className={d.part === o.v ? "on" : ""} onClick={() => updD(i, { part: o.v })}>{o.ar}<span className="bn">{o.bn}</span></button>)}
+      </div>{errAt(id("part"))}
+      <label className="bp-lbl">نوع الضرر <span className="bp-req">*</span> <span className="bn">/ ক্ষতির ধরন</span></label>
+      <div className={"bp-chips" + inv(id("type"))} id={id("type")} tabIndex={-1} role="radiogroup" aria-label={"نوع الضرر " + (i + 1)}>
+        {DAMAGE_TYPES.map(o => <button type="button" key={o.v} role="radio" aria-checked={d.type === o.v} className={d.type === o.v ? "on" : ""} onClick={() => updD(i, { type: o.v })}>{o.ar}<span className="bn">{o.bn}</span></button>)}
+      </div>{errAt(id("type"))}
+      <label className="bp-lbl" htmlFor={id("note")}>وصف قصير <span className="bp-req">*</span> <span className="bn">/ ছোট বিবরণ</span></label>
+      <input id={id("note")} className={"g-input bp-in" + inv(id("note"))} value={d.note} maxLength={300} onChange={e => updD(i, { note: e.target.value })} placeholder="مثال: خدش طويل على غطاء الخزان · যেকোনো ভাষায় লিখুন" />
+      {errAt(id("note"))}
+    </div>; })}
+    {damages.length < MAX_DAMAGES ? <Btn kind="secondary" block style={{ marginTop: 10 }} onClick={() => { setDamages(a => [...a, emptyDamage()]); if (fe && fe.field === "dmg_add") setFe(null); }} bn="ক্ষতি যোগ করুন">+ إضافة ضرر</Btn>
+      : <div className="bp-note">وصلت للحد الأقصى ({MAX_DAMAGES} أضرار). · <span className="bn">সর্বোচ্চ {MAX_DAMAGES}টি।</span></div>}
+    {errAt("dmg_add")}
     <label className="bp-lbl" htmlFor="h_notes">ملاحظات الحالة (اختياري) <span className="bn">/ অবস্থার নোট</span></label>
     <textarea id="h_notes" className="g-textarea bp-ta" value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="أي عطل أو خدش… · কোনো ত্রুটি বা দাগ…" /></>;
   else body = <>
@@ -851,7 +897,7 @@ function Handover({ me, myBike, onDirty }) {
         [2, "قائمة التحقق", badList.length ? badList.length + " غير سليم: " + badList.map(c => c.short).join("، ") : "كلها سليمة ✓"],
         ...RECEIVED_ITEMS.map(it => [3, it.ar, rcText(it)]),
         ...(boxNeeded(f.received) ? [[4, "صور الصندوق", BOX_PHOTOS.filter(b => ph[b.id]).length + " / 5"]] : []),
-        [5, "الأضرار والملاحظات", (damages.length ? damages.length + " صورة" : "لا صور") + (f.notes.trim() ? " · " + f.notes.trim().slice(0, 40) : "")],
+        [5, "الأضرار والملاحظات", (damages.length ? damages.length + " ضرر: " + damages.map(d => `${damagePart(d.part).ar} (${damageType(d.type).ar})`).join("، ") : "لا أضرار") + (f.notes.trim() ? " · " + f.notes.trim().slice(0, 40) : "")],
       ].map(([i, l, v], n) => <div className="bp-rev-r" key={n}><span className="l">{l}</span><b>{v}</b><Btn kind="text" onClick={() => goStep(i)} aria-label={"تعديل " + l}>تعديل</Btn></div>)}
     </div>
     <label className={"bp-chk pledge" + inv("pledge")} htmlFor="pledge">
