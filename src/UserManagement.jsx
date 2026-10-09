@@ -114,14 +114,19 @@ export default function UserManagement(){
     setSaving(false);
   };
   const credMsg=(c,lang)=>{
-    const ar=`مرحباً ${c.name} 👋\n${c.isNew?"تم إنشاء حسابك في نظام دلو ورغوة.":"بيانات دخولك إلى نظام دلو ورغوة."}\n\n🔗 رابط الدخول:\n${loginURL(c.biker)}\n\n👤 اسم المستخدم:\n${c.email}\n\n🔑 كلمة المرور المؤقتة:\n${c.password}\n\nيُرجى الدخول وتغيير كلمة المرور.`;
-    const bn=`স্বাগতম ${c.name} 👋\n${c.isNew?"আপনার দালু ওয়ারাগওয়া অ্যাকাউন্ট তৈরি হয়েছে।":"দালু ওয়ারাগওয়া-তে আপনার লগইন তথ্য।"}\n\n🔗 লগইন লিংক:\n${loginURL(c.biker)}\n\n👤 ইউজারনেম:\n${c.email}\n\n🔑 অস্থায়ী পাসওয়ার্ড:\n${c.password}\n\nঅনুগ্রহ করে লগইন করে পাসওয়ার্ড পরিবর্তন করুন।`;
+    // رسالة ترحيب خاصة (واتساب للشخص نفسه): إنشاء الحساب أو تحديث بيانات الدخول
+    const ar=`مرحباً ${c.name} 👋\nأهلاً بك في فريق دلو ورغوة.\n${c.isNew?"تم إنشاء حسابك في المنصة.":"تم تحديث بيانات دخولك إلى المنصة."}\n\n🔗 رابط الدخول:\n${loginURL(c.biker)}\n\n👤 اسم المستخدم:\n${c.email}\n\n🔑 الرقم السري المؤقت:\n${c.password}\n\nهذه البيانات لك وحدك — لا تشاركها مع أحد. غيّر الرقم السري بعد أول دخول.`;
+    const bn=`স্বাগতম ${c.name} 👋\nদালু ওয়ারাগওয়া টিমে আপনাকে স্বাগতম।\n${c.isNew?"প্ল্যাটফর্মে আপনার অ্যাকাউন্ট তৈরি হয়েছে।":"প্ল্যাটফর্মে আপনার লগইন তথ্য আপডেট হয়েছে।"}\n\n🔗 লগইন লিংক:\n${loginURL(c.biker)}\n\n👤 ইউজারনেম:\n${c.email}\n\n🔑 অস্থায়ী পাসওয়ার্ড:\n${c.password}\n\nএই তথ্য শুধু আপনার জন্য — কারো সাথে শেয়ার করবেন না। প্রথম লগইনের পর পাসওয়ার্ড পরিবর্তন করুন।`;
     return lang==="ar"?ar:lang==="bn"?bn:ar+"\n\n———\n\n"+bn;
   };
   const waSendCred=(c)=>{window.open(`https://wa.me/${waNum(c.phone)}?text=${encodeURIComponent(credMsg(c,credLang))}`);};
   const copyCred=async(c)=>{try{await navigator.clipboard.writeText(credMsg(c,credLang));note("تم نسخ الرسالة",true);}catch{note(`${c.email} / ${c.password}`,true);}};
   const doDelete=async(u)=>{if(!canHardDelete(u,act)){note("هذا الحساب استُخدم من قبل — أوقفه بدل حذفه ليبقى سجلّه.");return;}note("");const r=await call({action:"delete",user_id:u.id});if(r.error){note("خطأ: "+r.error);return;}if(sel&&sel.id===u.id)setSel(null);note("تم الحذف",true);loadUsers();};
   const toggleActive=async(u)=>{const r=await call({action:"update",user_id:u.id,active:!u.active});if(r.error){note("خطأ: "+r.error);return;}note(u.active?"تم إيقاف الحساب":"تم تفعيل الحساب",true);loadUsers();if(sel&&sel.id===u.id)setSel({...u,active:!u.active});};
+  // «رسالة ترحيب»: يولّد رقماً سرياً مؤقتاً جديداً (القديم لا يُسترجع) ثم يجهّز رسالة واتساب خاصة
+  const sendWelcome=async(u)=>{note("");const password=genPass();const r=await call({action:"set_password",user_id:u.id,password});if(r.error){note("خطأ: "+r.error);return;}
+    setCred({name:u.display_name||u.email,email:u.email,password,phone:u.mobile||(/^(\d{9,15})@/.exec(u.email||"")||[])[1]||"",biker:!!u.biker_employee_id,isNew:false});
+    note("رقم سري مؤقت جديد جاهز — أرسل الرسالة له مباشرة",true);window.scrollTo({top:0,behavior:"smooth"});};
   const savePw=async(u)=>{if(pwVal.length<6){note("كلمة المرور 6 أحرف على الأقل");return;}note("");const r=await call({action:"set_password",user_id:u.id,password:pwVal});if(r.error){note("خطأ: "+r.error);return;}setCred({name:u.display_name||u.email,email:u.email,password:pwVal,phone:u.mobile||(/^(\d{9,15})@/.exec(u.email||"")||[])[1]||"",biker:!!u.biker_employee_id,isNew:false});setPwFor(null);setPwVal("");setMenuFor(null);note("تم تغيير كلمة المرور — أرسل البيانات له مباشرة",true);window.scrollTo({top:0,behavior:"smooth"});};
 
   return(<div className="um">
@@ -236,6 +241,7 @@ export default function UserManagement(){
           <div className="um-more">
             <button className="um-dots" aria-label={"إجراءات "+(u.display_name||"")} aria-expanded={menuFor===u.id} onClick={()=>setMenuFor(menuFor===u.id?null:u.id)}>⋯</button>
             {menuFor===u.id&&<div className="um-menu" role="menu">
+              {!u.is_owner&&<button role="menuitem" onClick={()=>{setMenuFor(null);setAsk({type:"welcome",u});}}><Icon n="phone" s={14}/> رسالة ترحيب وبيانات الدخول</button>}
               <button role="menuitem" onClick={()=>{setMenuFor(null);setPwFor(u.id);setPwVal("");}}><Icon n="key" s={14}/> تعيين كلمة مرور</button>
               {!u.is_owner&&<button role="menuitem" onClick={()=>{setMenuFor(null);u.active?setAsk({type:"off",u}):toggleActive(u);}}><Icon n={u.active?"x":"check"} s={14}/> {u.active?"إيقاف الحساب":"تفعيل الحساب"}</button>}
               {!u.is_owner&&<button role="menuitem" className="danger" onClick={()=>{setMenuFor(null);setAsk({type:"del",u,typed:""});}}><Icon n="trash" s={14}/> حذف نهائي</button>}
@@ -248,7 +254,12 @@ export default function UserManagement(){
           <button className="um-btn ok" onClick={()=>savePw(u)}><Icon n="save" s={14}/> حفظ</button>
           <button className="um-btn ghost" onClick={()=>{setPwFor(null);setPwVal("");}}>إلغاء</button>
         </div>}
-        {ask&&ask.u.id===u.id&&(ask.type==="off"?<div className="um-ask">
+        {ask&&ask.u.id===u.id&&ask.type==="welcome"&&<div className="um-ask" style={{background:"var(--soft)"}}>
+          <b style={{color:"var(--ink)"}}>رسالة ترحيب وبيانات الدخول لـ {u.display_name||u.email}</b>
+          <span>يُنشأ رقم سري مؤقت جديد ويتوقف القديم، ثم تظهر رسالة جاهزة (عربي/বাংলা) ترسلها له في واتساب خاص.</span>
+          <div className="um-ask-act"><button className="um-btn ghost" onClick={()=>setAsk(null)}>إلغاء</button><button className="um-btn ok" onClick={()=>{setAsk(null);sendWelcome(u);}}>تجهيز الرسالة</button></div>
+        </div>}
+        {ask&&ask.u.id===u.id&&ask.type!=="welcome"&&(ask.type==="off"?<div className="um-ask">
           <b>إيقاف حساب {u.display_name||u.email}؟</b>
           <span>لن يستطيع الدخول، وتبقى بياناته وسجلّه. يمكن التفعيل لاحقاً.</span>
           <div className="um-ask-act"><button className="um-btn ghost" onClick={()=>setAsk(null)}>إلغاء</button><button className="um-btn danger" onClick={()=>{setAsk(null);toggleActive(u);}}>إيقاف</button></div>
