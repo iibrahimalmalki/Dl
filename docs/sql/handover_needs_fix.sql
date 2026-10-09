@@ -1,5 +1,5 @@
 -- «يحتاج تصحيح» في مراجعة استلام الدراجة: إشعار للبايكر عند الإرجاع.
--- الحالة: لم يُطبَّق — بانتظار موافقة المالك. آمن لإعادة التشغيل. لا يغيّر أي جدول ولا سياسة.
+-- الحالة: لم يُطبَّق — بانتظار موافقة المالك. آمن لإعادة التشغيل. لا يغيّر أي جدول ولا سياسة؛ يسحب تنفيذ push_notification من العموم.
 --
 -- ما يعمل بلا هذا الملف: الإرجاع نفسه (status='needs_fix' + checklist.fix) — العمود status نص بلا قيد CHECK،
 -- وسياسة bh_upd تسمح بالتعديل لمن يملك تعديل «الأسطول». الواجهة تعرض الحالة للبايكر في تبويب «الدراجة».
@@ -29,10 +29,17 @@ drop trigger if exists bike_handover_fix_notify on public.bike_handovers;
 create trigger bike_handover_fix_notify after update of status, checklist on public.bike_handovers
   for each row execute function public.bike_handover_fix_notify();
 
+-- إغلاق push_notification أمام الاستدعاء المباشر (كان أي مستخدم مسجّل يستطيع إرسال إشعار لأي أحد عبر RPC).
+-- لا يستدعيها شيء في الواجهة (src)؛ كل من يستدعيها دوال security definer يملكها postgres، فلا تتأثر.
+revoke execute on function public.push_notification(text, uuid, text, text, text, text, text, text, text) from public, anon, authenticated;
+
 -- ═══ تحقّق (قراءة فقط) ═══
--- select tgname, tgenabled from pg_trigger where tgname = 'bike_handover_fix_notify';
+-- select tgname, tgenabled from pg_trigger where tgname = 'bike_handover_fix_notify';   -- المتوقع: صف واحد، tgenabled = O
+-- select has_function_privilege('anon', 'public.push_notification(text, uuid, text, text, text, text, text, text, text)', 'execute');           -- المتوقع false
+-- select has_function_privilege('authenticated', 'public.push_notification(text, uuid, text, text, text, text, text, text, text)', 'execute');  -- المتوقع false
 -- بعد أول «يحتاج تصحيح»: select title, body, audience, user_id is not null from notifications where dedupe_key like 'hfix-%' order by created_at desc limit 3;
 
 -- ═══ تراجع ═══
 -- drop trigger if exists bike_handover_fix_notify on public.bike_handovers;
 -- drop function if exists public.bike_handover_fix_notify();
+-- grant execute on function public.push_notification(text, uuid, text, text, text, text, text, text, text) to public, anon, authenticated;
