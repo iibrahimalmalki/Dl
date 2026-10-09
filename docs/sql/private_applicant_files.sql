@@ -4,7 +4,9 @@
 --
 -- قبل التطبيق: الحاويات الثلاث عامة، وعليها read_licenses/read_photos/read_videos (SELECT لـ anon) ⇒
 -- أي أحد بالمفتاح العام يسرد الملفات وينزّلها (14 رخصة/إقامة/جواز، 12 صورة، 13 مقطعاً).
--- بعد التطبيق: خاصة؛ الرفع لـ anon باقٍ (upload_*) ليستمر نموذج التقديم؛ القراءة للمالك فقط بروابط موقّعة.
+-- بعد التطبيق: خاصة؛ الرفع لـ anon باقٍ (upload_*) ليستمر نموذج التقديم؛ القراءة بروابط موقّعة:
+--   الرخص (رخصة/إقامة/جواز) والمقاطع ⇒ المالك فقط؛ الصور الشخصية ⇒ المالك + من يملك «الأداء» أو «الجولات الميدانية» (قراءة).
+-- has_perm(p_module text, p_need_edit boolean default false): false = عرض أو تعديل؛ تُرجع true للمالك وتشترط حساباً نشطاً.
 -- الواجهة (نفس الـ PR) تعرض الملفات عبر createSignedUrl، والنموذج يرفع بلا upsert فلا يحتاج قراءة.
 
 -- ═══ 0) تحقّق قبل (للقراءة فقط) ═══
@@ -27,10 +29,16 @@ drop policy if exists applicant_files_owner_read on storage.objects;
 create policy applicant_files_owner_read on storage.objects
   for select to authenticated
   using (bucket_id in ('applicant-licenses', 'applicant-photos', 'applicant-videos') and public.is_owner());
+
+-- صور البايكرز في «الأداء» وتقرير الجولة الميدانية (applicant-photos فقط)
+drop policy if exists applicant_photos_staff_read on storage.objects;
+create policy applicant_photos_staff_read on storage.objects
+  for select to authenticated
+  using (bucket_id = 'applicant-photos' and (public.has_perm('performance', false) or public.has_perm('field_rounds', false)));
 commit;
 
 -- ═══ 2) تحقّق بعد ═══
--- (أ) في SQL Editor — المتوقع: public = false للثلاث، والسياسات: upload_* لـ anon + applicant_files_owner_read فقط:
+-- (أ) في SQL Editor — المتوقع: public = false للثلاث، والسياسات: upload_* لـ anon + applicant_files_owner_read + applicant_photos_staff_read فقط:
 select id, public from storage.buckets where id in ('applicant-licenses','applicant-photos','applicant-videos') order by id;
 select policyname, cmd, roles::text from pg_policies
   where schemaname = 'storage' and tablename = 'objects'
@@ -48,6 +56,7 @@ rollback;
 -- begin;
 -- update storage.buckets set public = true where id in ('applicant-licenses','applicant-photos','applicant-videos');
 -- drop policy if exists applicant_files_owner_read on storage.objects;
+-- drop policy if exists applicant_photos_staff_read on storage.objects;
 -- create policy read_licenses on storage.objects for select to anon using (bucket_id = 'applicant-licenses');
 -- create policy read_photos   on storage.objects for select to anon using (bucket_id = 'applicant-photos');
 -- create policy read_videos   on storage.objects for select to anon using (bucket_id = 'applicant-videos');
