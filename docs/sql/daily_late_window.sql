@@ -1,7 +1,7 @@
 -- تصحيح وصف «متأخر» في إشعار الاستلام اليومي (daily_notify_delivery) ليطابق النوافذ المعتمدة في src/daily/engine.js:
 -- مسائي 21:00–00:00 وصباحي 07:00–08:30 (بتوقيت الرياض) = في الموعد؛ 00:00–07:00 = «ليلي — خارج النافذة»؛ 08:31–20:59 = «متأخر — خلال الدوام».
 -- كان: 23:00–08:00 = متأخر (يعكس النوافذ القديمة).
--- الحالة: لم يُطبَّق — بانتظار موافقة المالك. آمن لإعادة التشغيل (create or replace فقط).
+-- الحالة: **طُبِّق** 2026-10-09 بموافقة المالك (تحقّق: المنطق الجديد في الدالة، والمشغّل مفعّل). آمن لإعادة التشغيل.
 create or replace function public.daily_notify_delivery()
 returns trigger language plpgsql security definer set search_path to 'public' as $function$
 declare v_who text; v_cour text; v_m int; v_tag text;
