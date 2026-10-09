@@ -142,6 +142,13 @@
   - المراجعة (`HandoverReport`) وPDF: بطاقة لكل ضرر؛ السجلات القديمة كما هي. اختبار: `tests/handoverDamage.test.mjs` (30).
   - **متابعة:** عتبات `QUALITY` تقديرية — راجعها مع أول صور فعلية؛ إن رُفضت صور واضحة (خصوصاً القريبة لسطح أملس) خفّض `minSharp`.
 
+- [x] Step 14: مراجعة الاستلام «يحتاج تصحيح»، PR #46 دُمج 2026-10-09:
+  - الحالات (`src/handoverStatus.js`): بانتظار المراجعة / تمت المراجعة (`status='reviewed'` + reviewed_*) / يحتاج تصحيح (`status='needs_fix'`). السبب ووقته ومن أرجعه في `checklist.fix = {reason, at, by, by_name}` (status نص بلا CHECK؛ bh_upd لمن يملك تعديل «الأسطول»).
+  - الإدارة (`HandoverReport`): زر «↩ يحتاج تصحيح» بسبب إلزامي (≥ 5 أحرف). السجل (`HandoverLog`): شارة الحالة وفلتر «المراجعة» بعدّاد.
+  - البايكر (تبويب «الدراجة»): بطاقة «حالة آخر تسجيل»، ومع «يحتاج تصحيح» السبب وزر «↻ أعد التسجيل»؛ السجل الجديد يحمل `checklist.redo_of` و`redo_reason`.
+  - `docs/sql/handover_needs_fix.sql` **طُبِّق** (شغّله المالك): المشغّل `bike_handover_fix_notify` يرسل إشعاراً للبايكر (audience=user، فئة handover، عربي/বাংলা) عند الإرجاع وعند تغيّر السبب فقط. ومعه **سُحب تنفيذ `push_notification` من public/anon/authenticated** (كان أي مسجّل يرسل إشعاراً لأي أحد). تحقّق: المشغّل مفعّل، وanon=false وauthenticated=false. مهام cron (تستدعيها كمالك) نجحت بعدها.
+  - اختبار: `tests/handoverStatus.test.mjs` (26).
+
 **قواعد ثابتة من المالك:**
 - لا SQL على الإنتاج، ولا دمج في `main`، إلا بموافقة صريحة لكل خطوة.
 - العمل على فرع جديد وPR.
