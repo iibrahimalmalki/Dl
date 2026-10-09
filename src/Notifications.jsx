@@ -4,7 +4,7 @@ import Icon from"./Icon";
 
 const OWNER_WA="966566884419"; // رقم المالك لخطّ واتساب الأخير
 const SEV={crit:{c:"var(--bad-ink)",bg:"var(--bad-bg)",ic:"alert"},warn:{c:"var(--warn-ink)",bg:"var(--warn-bg)",ic:"alert"},info:{c:"var(--info-ink)",bg:"var(--info-bg)",ic:"bell"}};
-const CATS=[["incidents","الحوادث"],["renewals","الوثائق والإقامات"],["housing","السكن"],["supply","الإمداد"],["support","الدعم والأفكار"],["settlement","التسوية"],["field_rounds","الجولات"],["escalation","التصعيد"],["digest","الملخّص اليومي"],["system","النظام"]];
+const CATS=[["incidents","الحوادث"],["renewals","الوثائق والإقامات"],["housing","السكن"],["supply","الإمداد"],["handover","استلام الدراجة"],["support","الدعم والأفكار"],["settlement","التسوية"],["field_rounds","الجولات"],["escalation","التصعيد"],["digest","الملخّص اليومي"],["system","النظام"]];
 const CAT_AR=Object.fromEntries(CATS);
 const timeAgo=t=>{if(!t)return"";const s=Math.max(0,(Date.now()-new Date(t).getTime())/1000);
   if(s<60)return"الآن";if(s<3600)return Math.floor(s/60)+" د";if(s<86400)return Math.floor(s/3600)+" س";return Math.floor(s/86400)+" ي";};
