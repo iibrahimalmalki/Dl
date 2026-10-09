@@ -6,6 +6,7 @@ import { supabase } from "./supabase";
 import { humanError } from "./errors";
 import { checklistOf, RECEIVED_ITEMS, BOX_PHOTOS, handoverIssues, handoverSweaterMessage, riyadhStamp, damagePart, damageType } from "./handover";
 import { copyText } from "./daily/store";
+import { STATES, handoverState, fixInfo, redoOf, validateFixReason, fixPatch, approvePatch } from "./handoverStatus";
 
 const CSS = `
 .hr-ov{position:fixed;inset:0;z-index:1200;background:var(--bg);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;direction:rtl;font-family:var(--font);color:var(--ink)}
@@ -58,6 +59,9 @@ const CSS = `
 .hr-pick:first-of-type{border-top:none}
 .hr-pick input{width:20px;height:20px;flex:none;margin-top:2px;accent-color:var(--p)}
 .hr-pick span{flex:1;min-width:0;overflow-wrap:anywhere}
+.hr-st{display:inline-flex;align-items:center;gap:4px;font-weight:800}.hr-st.ok{color:var(--ok-ink)}.hr-st.warn{color:var(--warn-ink)}.hr-st.bad{color:var(--bad-ink)}
+.hr-fix{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--bad-bg);border:1px solid color-mix(in srgb,var(--bad) 35%,transparent)}
+.hr-fix textarea{width:100%;min-height:72px;border-radius:10px;border:1px solid var(--line-2);padding:10px;font:inherit;font-size:14px;background:var(--glass-3);color:var(--ink);resize:vertical}
 .hr-wa{background:linear-gradient(135deg,#128C7E,#075E54)!important;color:#fff!important;border-color:transparent!important}
 .hr-zoom{position:fixed;inset:0;z-index:1300;background:rgba(5,8,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px}
 .hr-zoom img{max-width:100%;max-height:calc(100dvh - 120px);border-radius:12px;object-fit:contain}
@@ -74,6 +78,7 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
   const [veh, setVeh] = useState(veh0 && veh0.vin !== undefined ? veh0 : null);
   const [zoom, setZoom] = useState(null), nPh = useRef(0); // index في قائمة الصور
   const [wa, setWa] = useState(false), [ex, setEx] = useState([]), [note, setNote] = useState(""), [busy, setBusy] = useState("");
+  const [fix, setFix] = useState(null), [fixErr, setFixErr] = useState(""); // نص سبب «يحتاج تصحيح» أثناء الكتابة
   // بيانات الدراجة: المالك/المشرف بصلاحية الأسطول، والبايكر لدراجته فقط (fleet_biker_self_sel)
   useEffect(() => { if (veh || !row.vehicle_id) return; let on = true;
     supabase.from("fleet_vehicles").select(VEH_COLS).eq("id", row.vehicle_id).maybeSingle().then(({ data }) => { if (on) setVeh(data || veh0 || {}); }, () => { if (on) setVeh(veh0 || {}); });
@@ -98,14 +103,27 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
   const msgKeys = [...issues.map(i => i.key), ...(bikerNote ? ["biker_note"] : [])];
   const msg = handoverSweaterMessage(row, v, { exclude: ex });
 
+  const denied = error => /row-level|42501|PGRST116/.test(String(error.message || error.code)) ? "لا تملك صلاحية المراجعة (تحتاج صلاحية تعديل «الأسطول»)." : "تعذّر الحفظ: " + error.message;
   const review = async () => {
     setBusy("review"); setNote("");
     const { data: u } = await supabase.auth.getUser();
-    const { data, error } = await supabase.from("bike_handovers").update({ reviewed_by: u && u.user ? u.user.id : null, reviewed_at: new Date().toISOString() }).eq("id", row.id).select("*").single();
+    const { data, error } = await supabase.from("bike_handovers").update(approvePatch(u && u.user ? u.user.id : null)).eq("id", row.id).select("*").single();
     setBusy("");
-    if (error) return setNote(/row-level|42501|PGRST116/.test(String(error.message || error.code)) ? "لا تملك صلاحية المراجعة (تحتاج صلاحية تعديل «الأسطول»)." : "تعذّر الحفظ: " + error.message);
+    if (error) return setNote(denied(error));
     setRow(data); onReviewed && onReviewed(data);
   };
+  // «يحتاج تصحيح»: سبب إلزامي ← status='needs_fix' + checklist.fix؛ إشعار البايكر يرسله مشغّل SQL (docs/sql/handover_needs_fix.sql)
+  const sendFix = async () => {
+    const e = validateFixReason(fix); if (e) return setFixErr(e);
+    setBusy("fix"); setFixErr(""); setNote("");
+    const { data: u } = await supabase.auth.getUser();
+    const uid = u && u.user ? u.user.id : null, name = u && u.user && u.user.user_metadata ? u.user.user_metadata.display_name || null : null;
+    const { data, error } = await supabase.from("bike_handovers").update(fixPatch(row, fix, uid, name)).eq("id", row.id).select("*").single();
+    setBusy("");
+    if (error) return setFixErr(denied(error));
+    setRow(data); setFix(null); setNote("أُرجع التسجيل للبايكر ✓"); onReviewed && onReviewed(data);
+  };
+  const st = handoverState(row), fx = fixInfo(row), prevId = redoOf(row);
   const copy = async () => { const ok = await copyText(msg); setNote(ok ? "تم نسخ الرسالة ✓" : "تعذّر النسخ — حدّد النص وانسخه يدوياً"); };
   const openWa = () => window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank", "noopener");
   const pdf = async () => {
@@ -130,7 +148,7 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
       <section className="g-card hr-card">
         <div className="hr-kv">
           <div><span>التاريخ والوقت</span><b className="hr-num">{fmtFull(row.created_at)}</b></div>
-          <div><span>المراجعة</span><b>{row.reviewed_at ? <span style={{ color: "var(--ok-ink)" }}>✓ روجع <span className="hr-num">{riyadhStamp(row.reviewed_at).date}</span></span> : <span style={{ color: "var(--warn-ink)" }}>بانتظار المراجعة</span>}</b></div>
+          <div><span>المراجعة</span><b><span className={"hr-st " + STATES[st].tone}>{st === "reviewed" ? "✓ " : st === "needs_fix" ? "↩ " : ""}{STATES[st].ar}{st === "reviewed" && row.reviewed_at ? <> <span className="hr-num">{riyadhStamp(row.reviewed_at).date}</span></> : null}</span></b></div>
           <div><span>{ret ? "المسلِّم" : "المستلم"}</span><b>{row.biker_name || "—"} <span className="hr-num hr-mut">{row.biker_employee_id}</span></b></div>
           <div><span>اللوحة</span><b>{row.plate || v.plate || "—"}{v.plate_en ? <> <span className="hr-mut">·</span> <span className="hr-num hr-mut">{v.plate_en}</span></> : null}</b></div>
           <div><span>الصنع والموديل</span><b>{[v.make, v.model_year].filter(Boolean).join(" · ") || "—"}</b></div>
@@ -140,6 +158,11 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
           <div><span>قراءة العدّاد</span><b className="hr-num">{row.odometer != null ? row.odometer + " km" : "—"}</b></div>
         </div>
       </section>
+
+      {st === "needs_fix" && fx && <section className="g-card hr-card hr-fix" role="status"><b style={{ color: "var(--bad-ink)" }}>↩ أُرجع للبايكر — يحتاج تصحيح</b>
+        <div style={{ fontSize: 14, overflowWrap: "anywhere" }}>{fx.reason}</div>
+        <span className="hr-mut">{fx.by_name ? fx.by_name + " · " : ""}<span className="hr-num">{fx.at ? fmtFull(fx.at) : ""}</span></span></section>}
+      {prevId && <section className="g-card hr-card hr-mut" style={{ fontSize: 13 }}>↻ إعادة تسجيل لسجل سابق أُرجع للتصحيح{ck.redo_reason ? <> — السبب كان: {ck.redo_reason}</> : null}</section>}
 
       {issues.length || bikerNote ? <section className="g-card hr-card hr-warn"><h2>⚠ ملاحظات ({issues.length})<span className="bn" lang="bn">সমস্যা</span></h2>
         {issues.length > 0 && <ol className="hr-ol">{issues.map(i => <li key={i.key}>{i.ar}</li>)}</ol>}
@@ -173,10 +196,17 @@ export default function HandoverReport({ row: row0, vehicle: veh0, mode = "biker
 
       {admin && <section className="g-card hr-card"><h2>الإجراءات</h2>
         <div className="hr-acts">
-          {!row.reviewed_at && <button className="g-btn primary" disabled={busy === "review"} onClick={review}>{busy === "review" ? "…" : "✓ تمت المراجعة"}</button>}
+          {st !== "reviewed" && <button className="g-btn primary" disabled={busy === "review"} onClick={review}>{busy === "review" ? "…" : "✓ تمت المراجعة"}</button>}
+          {st !== "needs_fix" && <button className="g-btn" aria-expanded={fix != null} style={{ color: "var(--bad-ink)" }} onClick={() => { setFix(f => f == null ? "" : null); setFixErr(""); }}>↩ يحتاج تصحيح</button>}
           <button className="g-btn" aria-expanded={wa} onClick={() => setWa(x => !x)}>💬 رسالة لسويتر</button>
           <button className="g-btn" disabled={busy === "pdf"} onClick={pdf}>{busy === "pdf" ? "جارٍ الإنشاء…" : "🖨 طباعة / PDF"}</button>
         </div>
+        {fix != null && <div className="hr-fix">
+          <label htmlFor="hr-fix-r" style={{ fontWeight: 800, fontSize: 13 }}>سبب الإرجاع للبايكر (إلزامي) — يصله إشعار به</label>
+          <textarea id="hr-fix-r" value={fix} maxLength={500} autoFocus onChange={e => { setFix(e.target.value); setFixErr(""); }} placeholder="مثال: صورة الضرر 3 غير واضحة، أعد تصويرها من قريب" />
+          {fixErr && <div role="alert" style={{ color: "var(--bad-ink)", fontSize: 12.5, fontWeight: 700 }}>{fixErr}</div>}
+          <div className="hr-acts"><button className="g-btn" onClick={() => { setFix(null); setFixErr(""); }}>إلغاء</button><button className="g-btn primary" disabled={busy === "fix"} onClick={sendFix}>{busy === "fix" ? "…" : "إرجاع للبايكر"}</button></div>
+        </div>}
         {note && <div className="hr-mut" role="status" style={{ color: "var(--ink-2)", fontWeight: 700 }}>{note}</div>}
         {wa && <>
           {msgKeys.length > 0 && <div><div className="hr-sub">ما يُرسَل لسويتر (أزل ما لا يخصّهم):</div>
@@ -204,7 +234,7 @@ function reportHTML({ row, v, issues, bikerNote, items, rec, photos, ret, dItems
   const ck = row.checklist || {}, notes = ck.notes || {}, site = (typeof location !== "undefined" && location.origin) || "";
   const kv = [["التاريخ والوقت", fmtFull(row.created_at)], [ret ? "المسلِّم" : "المستلم", `${row.biker_name || "—"} — ${row.biker_employee_id || "—"}`], ["اللوحة", `${row.plate || v.plate || "—"}${v.plate_en ? " · " + v.plate_en : ""}`],
     ["الصنع والموديل", [v.make, v.model_year].filter(Boolean).join(" · ") || "—"], ["اللون", v.color || "—"], ["رقم الهيكل (VIN)", v.vin || "—"], ["الرقم التسلسلي", v.serial_no || "—"], ["العدّاد", row.odometer != null ? row.odometer + " km" : "—"],
-    ["المراجعة", row.reviewed_at ? "روجع " + riyadhStamp(row.reviewed_at).date : "بانتظار المراجعة"]];
+    ["المراجعة", handoverState(row) === "needs_fix" ? "يحتاج تصحيح — " + ((fixInfo(row) || {}).reason || "") : row.reviewed_at ? "روجع " + riyadhStamp(row.reviewed_at).date : "بانتظار المراجعة"]];
   return `<div class="hp" dir="rtl"><style>
 .hp{width:794px;background:#fff;color:#0F172A;font-family:${FONT_STACK};padding:0 0 24px}
 .hp *{box-sizing:border-box}

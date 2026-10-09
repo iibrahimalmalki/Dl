@@ -3,6 +3,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase";
 import { handoverSummary } from "./handover";
+import { STATES, STATE_KEYS, handoverState, fixInfo, filterByState, countByState } from "./handoverStatus";
 
 const HandoverReport = lazy(() => import("./HandoverReport"));
 
@@ -19,6 +20,8 @@ const CSS = `
 .hl-ok{color:var(--ok-ink);font-weight:800}.hl-bad{color:var(--bad-ink);font-weight:800}.hl-na{color:var(--mut-2)}
 .hl-nb{display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:var(--warn-bg);color:var(--warn-ink);white-space:nowrap}
 .hl-nb.ok{background:var(--ok-bg);color:var(--ok-ink)}
+.hl-st{display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;white-space:nowrap}
+.hl-st.ok{background:var(--ok-bg);color:var(--ok-ink)}.hl-st.warn{background:var(--warn-bg);color:var(--warn-ink)}.hl-st.bad{background:var(--bad-bg);color:var(--bad-ink)}
 .hl-cards{display:none;flex-direction:column;gap:10px;padding:12px}
 .hl-card{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--glass-2);cursor:pointer;min-width:0;text-align:start}
 .hl-card:focus-visible{outline:2px solid var(--brand,#3b82f6);outline-offset:2px}
@@ -32,11 +35,12 @@ const CSS = `
 const fmt = t => { try { return new Date(t).toLocaleString("en-GB", { timeZone: "Asia/Riyadh", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return "—"; } };
 const Tick = ({ v, n }) => v == null ? <span className="hl-na">—</span> : v ? <span className="hl-ok">✓{n != null ? <> <span className="hl-num">{n}</span></> : null}</span> : <span className="hl-bad">✗</span>;
 const dirAr = d => d === "receive" ? "استلام" : d === "return" ? "تسليم" : d || "—";
+const StateBadge = ({ r }) => { const k = handoverState(r), f = fixInfo(r); return <span className={"hl-st " + STATES[k].tone} title={k === "needs_fix" && f ? f.reason : undefined}>{k === "reviewed" ? "✓ " : k === "needs_fix" ? "↩ " : ""}{STATES[k].ar}</span>; };
 const NotesBadge = ({ n }) => n ? <span className="hl-nb">ملاحظات: <span className="hl-num">{n}</span></span> : <span className="hl-nb ok">لا ملاحظات ✓</span>;
 
 export default function HandoverLog({ veh = [] }) {
   const [rows, setRows] = useState(null), [err, setErr] = useState(""), [open, setOpen] = useState(null);
-  const [fPlate, setFPlate] = useState(""), [fBiker, setFBiker] = useState("");
+  const [fPlate, setFPlate] = useState(""), [fBiker, setFBiker] = useState(""), [fSt, setFSt] = useState("");
   const load = async () => {
     const { data, error } = await supabase.from("bike_handovers").select("*").order("created_at", { ascending: false }).limit(500);
     if (error) { setErr(error.message); setRows([]); } else setRows(data || []);
@@ -44,7 +48,8 @@ export default function HandoverLog({ veh = [] }) {
   useEffect(() => { load(); }, []);
   const plates = useMemo(() => [...new Set([...(rows || []).map(r => r.plate).filter(Boolean), ...veh.map(v => v.plate)])].sort(), [rows, veh]);
   const bikers = useMemo(() => { const m = new Map(); (rows || []).forEach(r => { if (r.biker_employee_id) m.set(r.biker_employee_id, r.biker_name || r.biker_employee_id); }); return [...m.entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]))); }, [rows]);
-  const list = (rows || []).filter(r => (!fPlate || r.plate === fPlate) && (!fBiker || r.biker_employee_id === fBiker));
+  const base = (rows || []).filter(r => (!fPlate || r.plate === fPlate) && (!fBiker || r.biker_employee_id === fBiker));
+  const counts = countByState(base), list = filterByState(base, fSt);
   const onReviewed = u => setRows(rs => (rs || []).map(x => x.id === u.id ? u : x));
   const openRow = open && (rows || []).find(r => r.id === open);
   if (!rows) return <div style={{ padding: 18 }}><div className="g-skel box" style={{ height: 120 }} /></div>;
@@ -52,6 +57,7 @@ export default function HandoverLog({ veh = [] }) {
     <style>{CSS}</style>
     <div className="hl-filters">
       <label>الدراجة<select className="g-select" value={fPlate} onChange={e => setFPlate(e.target.value)}><option value="">الكل</option>{plates.map(p => <option key={p} value={p}>{p}</option>)}</select></label>
+      <label>المراجعة<select className="g-select" value={fSt} onChange={e => setFSt(e.target.value)}><option value="">الكل ({base.length})</option>{STATE_KEYS.map(k => <option key={k} value={k}>{STATES[k].ar} ({counts[k]})</option>)}</select></label>
       <label>البايكر<select className="g-select" value={fBiker} onChange={e => setFBiker(e.target.value)}><option value="">الكل</option>{bikers.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select></label>
     </div>
     {err && <div style={{ margin: "10px 18px", padding: "10px 12px", borderRadius: 10, background: "var(--bad-bg)", color: "var(--bad-ink)", fontSize: 13 }} role="alert">{err}</div>}
@@ -69,14 +75,14 @@ export default function HandoverLog({ veh = [] }) {
             <td><Tick v={rec ? rec.bike_key : null} n={rec && rec.bike_key ? rec.bike_keys : null} /></td>
             <td><Tick v={rec ? rec.box_key : null} n={rec && rec.box_key ? rec.box_keys : null} /></td>
             <td><NotesBadge n={S.issues.length} /></td>
-            <td>{r.reviewed_at ? <span className="hl-ok">✓ <span className="hl-num">{fmt(r.reviewed_at)}</span></span> : <span className="hl-na">بانتظار المراجعة</span>}</td>
+            <td><StateBadge r={r} /></td>
           </tr>; })}</tbody>
       </table></div>
       <div className="hl-cards">{list.map(r => { const S = handoverSummary(r);
         return <button type="button" key={r.id} className={"hl-card" + (S.warn ? " warn" : "")} onClick={() => setOpen(r.id)}>
           <div className="r"><span className="p">{r.plate || "—"}</span><NotesBadge n={S.issues.length} /></div>
           <div className="m">{r.biker_name || "—"} <span className="hl-na hl-num">{r.biker_employee_id}</span> · {dirAr(r.direction)}</div>
-          <div className="r"><span className="d hl-num">{fmt(r.created_at)}</span>{r.reviewed_at ? <span className="hl-ok" style={{ fontSize: 11.5 }}>✓ تمت المراجعة</span> : <span className="d">بانتظار المراجعة</span>}</div>
+          <div className="r"><span className="d hl-num">{fmt(r.created_at)}</span><StateBadge r={r} /></div>
         </button>; })}</div>
     </>}
     {openRow && <Suspense fallback={null}><HandoverReport row={openRow} vehicle={veh.find(v => v.id === openRow.vehicle_id)} mode="admin" onReviewed={onReviewed} onClose={() => setOpen(null)} /></Suspense>}

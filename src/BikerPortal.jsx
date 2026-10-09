@@ -16,6 +16,7 @@ import { resolveTabs } from "./bikerTabs";
 import { loadTabRules } from "./bikerTabsStore";
 import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, receivedRecord, itemsOk, HANDOVER_STEPS, stepError, firstStepError, stepMove, stepSkipped, boxNeeded, odoNum, MAX_DAMAGES, DAMAGE_PARTS, DAMAGE_TYPES, emptyDamage, damagePart, damageType, damagePhotosFlat } from "./handover";
 import { checkPhoto } from "./photoQuality";
+import { STATES as H_STATES, handoverState, fixInfo, latestRow } from "./handoverStatus";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
 const DailyReceive = lazy(() => import("./daily/DailyReceive"));
@@ -684,6 +685,7 @@ function Handover({ me, myBike, onDirty }) {
   const [prog, setProg] = useState(null);    // {done,total}
   const [report, setReport] = useState(null); // {row, saved}: تقرير مفتوح
   const [recent, setRecent] = useState(null);
+  const [redo, setRedo] = useState(null);    // إعادة تسجيل لسجل أُرجع للتصحيح: {id, reason}
   const uploaded = React.useRef(new Map());  // File → رابط: إعادة المحاولة تكمل من حيث توقفت
   const toast = useToast();
   const [dlg, ask] = useConfirm();
@@ -737,7 +739,7 @@ function Handover({ me, myBike, onDirty }) {
     if (!(await ask({ title: "مسح النموذج؟", titleBn: "ফর্ম মুছবেন?", ar: "ستُمسح كل المدخلات والصور وتبدأ من جديد.", bn: "সব তথ্য ও ছবি মুছে নতুন করে শুরু হবে।", ok: "مسح", okBn: "মুছুন", cancel: "رجوع", cancelBn: "ফিরে যান" }))) return;
     reset();
   }
-  function reset() { saveDraft(H_DRAFT(bid), null); setF(H_EMPTY()); setPh({}); setDamages([]); setFe(null); setErr(null); setRestored(false); uploaded.current = new Map(); }
+  function reset() { saveDraft(H_DRAFT(bid), null); setF(H_EMPTY()); setPh({}); setDamages([]); setRedo(null); setFe(null); setErr(null); setRestored(false); uploaded.current = new Map(); }
 
   async function submit() {
     setErr(null);
@@ -776,7 +778,7 @@ function Handover({ me, myBike, onDirty }) {
         biker_employee_id: bid, biker_name: me.name, direction: f.direction,
         odometer: Number(odoNum(f.odometer)),
         engine_sound_ok: checks.engine, items_ok: itemsOk(checks, f.received, CHECKLIST.map(c => c.id)),
-        checklist: { ...checks, received: rec, ...(Object.keys(ckN).length ? { notes: ckN } : {}) },
+        checklist: { ...checks, received: rec, ...(Object.keys(ckN).length ? { notes: ckN } : {}), ...(redo ? { redo_of: redo.id, redo_reason: redo.reason } : {}) },
         photo_front: urls.front, photo_back: urls.back, photo_right: urls.right, photo_left: urls.left, photo_odometer: urls.odometer,
         damage_photos: dmg,
         photos: { front: urls.front, back: urls.back, right: urls.right, left: urls.left, odometer: urls.odometer, damages: dmg, ...(dmgItems.length ? { damage_items: dmgItems } : {}), ...boxPhotos },
@@ -912,8 +914,21 @@ function Handover({ me, myBike, onDirty }) {
   const last = step === S - 1;
   const shown = HANDOVER_STEPS.map((x, i) => ({ ...x, i })).filter(x => !stepSkipped(x.i, form));
   const pos = shown.findIndex(x => x.i === step) + 1;
+  // حالة آخر تسجيل: بانتظار المراجعة / تمت المراجعة / يحتاج تصحيح (مع السبب وزر «أعد التسجيل»)
+  const lastRec = latestRow(recent), lastSt = lastRec ? handoverState(lastRec) : null, lastFix = lastRec ? fixInfo(lastRec) : null;
+  const startRedo = () => { setRedo({ id: lastRec.id, reason: lastFix ? lastFix.reason : "" }); set({ direction: lastRec.direction || "receive" }); goStep(0); };
   return (<>
+    {lastRec && step === 0 && !redo && <div className="bp-card g-card" style={{ borderInlineStart: `4px solid var(--${lastSt === "needs_fix" ? "bad" : lastSt === "reviewed" ? "ok" : "warn"})` }}><div className="bp-sec">
+      <div style={{ fontWeight: 900, fontSize: 14 }}>حالة آخر تسجيل · <span className="bn" style={{ fontWeight: 600, color: "var(--mut)" }}>শেষ রেকর্ডের অবস্থা</span></div>
+      <div style={{ marginTop: 6 }}><span className={"g-badge " + H_STATES[lastSt].tone}><i />{H_STATES[lastSt].ar} · <span lang="bn">{H_STATES[lastSt].bn}</span></span>
+        <span style={{ fontSize: 12, color: "var(--mut)", marginInlineStart: 8 }}>{lastRec.direction === "receive" ? "استلام" : "تسليم"} · {new Date(lastRec.created_at).toLocaleString("ar")}</span></div>
+      {lastSt === "needs_fix" && <>
+        <div className="bp-msg" role="alert" style={{ background: "var(--bad-bg)", color: "var(--bad-ink)" }}>السبب: {lastFix ? lastFix.reason : "—"}<Bn>কারণ: {lastFix ? lastFix.reason : "—"}</Bn></div>
+        <Btn kind="primary" block style={{ marginTop: 10 }} onClick={startRedo} bn="আবার রেকর্ড করুন">↻ أعد التسجيل</Btn>
+      </>}
+    </div></div>}
     <div className="bp-card g-card bp-free"><div className="bp-sec">
+      {redo && step === 0 && <div className="bp-msg" role="status" style={{ background: "var(--warn-bg)", color: "var(--warn-ink)", marginTop: 0, marginBottom: 10 }}>↻ إعادة تسجيل بعد طلب تصحيح: {redo.reason}<Bn>সংশোধনের পর আবার রেকর্ড: {redo.reason}</Bn></div>}
       <div className="bp-wiz-top">
         {step > 0 ? <Btn kind="secondary" onClick={prev} disabled={busy} bn="আগের">→ السابق</Btn>
           : (f.odometer || Object.keys(f.checks).length || Object.values(ph).some(Boolean)) ? <Btn kind="secondary" onClick={cancel} disabled={busy} bn="বাতিল">✕ إلغاء</Btn> : <span />}
@@ -936,7 +951,7 @@ function Handover({ me, myBike, onDirty }) {
       <div className="bp-list">
         {recent === null ? <Skel rows={2} card={false} /> : recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
           recent.map(r => { const rc = (r.checklist || {}).received || {}; return <div className="bp-item bp-item-open" key={r.id} role="button" tabIndex={0} onClick={() => setReport({ row: r })} onKeyDown={e => { if (e.key === "Enter") setReport({ row: r }); }}>
-            <div className="t">{r.plate || "—"} · {r.direction === "receive" ? "استلام · গ্রহণ" : "تسليم · হস্তান্তর"} · العدّاد {r.odometer}<span className="g-badge info"><i />مُرسل · <span className="bn">জমা দেওয়া</span></span></div>
+            <div className="t">{r.plate || "—"} · {r.direction === "receive" ? "استلام · গ্রহণ" : "تسليم · হস্তান্তর"} · العدّاد {r.odometer}{(() => { const k = handoverState(r); return <span className={"g-badge " + H_STATES[k].tone}><i />{H_STATES[k].ar} · <span className="bn">{H_STATES[k].bn}</span></span>; })()}</div>
             <div className="m">{new Date(r.created_at).toLocaleString("ar")}</div>
             <div className="bp-mks"><Mark v={rc.box} t="📦 صندوق" /><Mark v={rc.bike_key} t="🔑 مفتاح الدراجة" /><Mark v={rc.box_key} t="🗝️ مفتاح الصندوق" /><span className="bp-open">عرض التقرير ‹ <span className="bn">রিপোর্ট দেখুন</span></span></div>
           </div>; })}
