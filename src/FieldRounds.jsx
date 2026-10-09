@@ -1,5 +1,6 @@
 import{useState,useEffect,useMemo}from"react";
 import{supabase,ensureFreshToken,compressImage,uploadAuthed}from"./supabase";
+import{signedUrl}from"./storageUrl";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import{AXES,ITEMS,bikerItems,mgmtItems,compliance,complianceByAxis,effect,RESP_AR}from"./fieldChecklist";
@@ -180,7 +181,7 @@ export default function FieldRounds({opId,onGo}){
       ]);
       extras.history=hist||[];
       extras.supplyRequest=(sreq&&sreq[0])||null;
-      if(emp?.applicant_id){const{data:ap}=await supabase.from("applicants").select("personal_photo_url").eq("id",emp.applicant_id).maybeSingle();if(ap?.personal_photo_url)extras.bikerPhoto=ap.personal_photo_url;}
+      if(emp?.applicant_id){const{data:ap}=await supabase.from("applicants").select("personal_photo_url").eq("id",emp.applicant_id).maybeSingle();if(ap?.personal_photo_url){const u=await signedUrl(ap.personal_photo_url);if(u)extras.bikerPhoto=u;}}
       if(emp?.team_id){const{data:tm}=await supabase.from("teams").select("name").eq("id",emp.team_id).maybeSingle();if(tm?.name)extras.team=tm.name;}
     }catch(_){}
     const ok=await openReport(r,r.ai_analysis,"دلو ورغوة",extras);
