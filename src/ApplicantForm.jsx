@@ -32,7 +32,9 @@ export default function ApplicantForm({onBack}){
     setErrors(e);return!Object.keys(e).length;};
   const next=()=>{if(validate())go(Math.min(step+1,6));};
   const back=()=>{if(step===1&&onBack)onBack();else go(Math.max(step-1,1));};
-  const upload=async(file,bucket,path)=>{try{await supabase.storage.from(bucket).upload(path,file,{upsert:true});const{data}=supabase.storage.from(bucket).getPublicUrl(path);return data.publicUrl;}catch(e){return null;}};
+  // رفع فقط (بلا upsert): الحاويات خاصة ولا يملك الزائر صلاحية قراءة. getPublicUrl يبني نص الرابط محلياً بلا طلب،
+  // ويُحفظ كمرجع للملف؛ العرض في لوحة الإدارة يحوّله إلى رابط موقّع (src/storageUrl.js).
+  const upload=async(file,bucket,path)=>{try{const{error}=await supabase.storage.from(bucket).upload(path,file,{upsert:false,contentType:file.type||undefined});if(error)return null;return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;}catch(e){return null;}};
   const submit=async()=>{if(!validate())return;setSubmitting(true);
     try{
       const uid=crypto.randomUUID();setProg(15);

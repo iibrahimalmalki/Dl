@@ -1,5 +1,6 @@
 import{useState,useEffect,useMemo,useRef,useCallback}from"react";
 import{supabase}from"./supabase";
+import{signedUrls}from"./storageUrl";
 import Icon from"./Icon";
 import{useToast,Modal,Badge,EmptyState}from"./ui";
 import{bikerScore,rankBikers,trend,teamSummary,monthDelta,nextHints,bikerBrief,LEVEL_AR}from"./scorecard";
@@ -64,7 +65,7 @@ export default function Performance({opId,onNav}){
     const settle=sids.length?await safe(supabase.from("settlement_lines_v").select("period,sweater_id,employee_id,biker_name,orders,rating,tier,unit_price,base_amount,incentive,deduction,net,settlement_status").eq("period",period).in("sweater_id",sids)):{data:[]};
     let lines=[];if(runs.data&&runs.data[0]){const r=await safe(supabase.from("payroll_lines").select("*").eq("run_id",runs.data[0].id));lines=r.data||[];}
     const photos={};const appIds=(emps.data||[]).map(e=>e.applicant_id).filter(Boolean);
-    if(appIds.length){const a=await safe(supabase.from("applicants").select("id,personal_photo_url").in("id",appIds));(a.data||[]).forEach(x=>{if(x.personal_photo_url)photos[x.id]=x.personal_photo_url;});}
+    if(appIds.length){const a=await safe(supabase.from("applicants").select("id,personal_photo_url").in("id",appIds));const sg=await signedUrls((a.data||[]).map(x=>x.personal_photo_url));(a.data||[]).forEach(x=>{const u=x.personal_photo_url&&sg[x.personal_photo_url];if(u)photos[x.id]=u;});}
     setD({period,prevP,months,emps:emps.data||[],teams:teams.data||[],ops:ops.data||[],rounds:rounds.data||[],viol:viol.data||[],tickets:tickets.data||[],lines,settle:settle.data||[],photos,
       missing:[["ops_tickets",tickets.error],["settlement_lines_v",settle.error],["applicants",null]].filter(x=>x[1]).map(x=>x[0])});
     setLoading(false);
