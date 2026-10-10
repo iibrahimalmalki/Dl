@@ -3,6 +3,7 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import ActivityLog from"./ActivityLog";
+import CustodyDeclarations from"./CustodyDeclarations";
 const CU_FL={name:"العهدة",status:"الحالة",start_date:"البداية",end_date:"النهاية",biker_name:"البايكر",sweater_id:"رقم البايكر",life_months:"العمر (شهر)",category:"الفئة"};
 const CU_DV={active:"نشطة",due:"مستحقة",replaced:"مُستبدلة",returned:"مُرجعة",planned:"مخطّطة"};
 
@@ -35,7 +36,7 @@ const addMonths=(iso,m)=>{const d=new Date(iso);d.setMonth(d.getMonth()+Math.rou
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
 const today=()=>new Date().toISOString().slice(0,10);
 
-export default function Custody({opId,owner}){
+export default function Custody({opId,owner,onGo}){
   const[rows,setRows]=useState([]);const[emps,setEmps]=useState([]);const[loading,setLoading]=useState(true);
   const toast=useToast();const[msg,setMsgRaw]=useState(null);
   // رسائل النجاح → Toast؛ الأخطاء تبقى في الصفحة
@@ -128,6 +129,7 @@ export default function Custody({opId,owner}){
       <button className="cu-btn ghost" onClick={openExtract}><Icon n="rounds" s={15}/> استخراج من جولة</button>
     </div>
     {msg&&<div className={"cu-msg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
+    <CustodyDeclarations opId={opId} onGo={onGo}/>
 
     {showAdd&&<div className="cu-form">
       <div className="cu-grid">

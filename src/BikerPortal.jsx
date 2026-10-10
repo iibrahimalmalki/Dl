@@ -16,6 +16,7 @@ import { resolveTabs } from "./bikerTabs";
 import { loadTabRules } from "./bikerTabsStore";
 import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, receivedRecord, itemsOk, HANDOVER_STEPS, stepError, firstStepError, stepMove, stepSkipped, boxNeeded, odoNum, MAX_DAMAGES, DAMAGE_PARTS, DAMAGE_TYPES, emptyDamage, damagePart, damageType, damagePhotosFlat } from "./handover";
 import { checkPhoto } from "./photoQuality";
+import { declarationError, declarationItem, isBad, replacementsOf } from "./custodyDeclare";
 import { STATES as H_STATES, handoverState, fixInfo, latestRow } from "./handoverStatus";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
@@ -252,6 +253,7 @@ const ASSET_ITEMS = [
 const CONDITIONS = [
   { v: "good", ar: "جيدة", bn: "ভালো" },
   { v: "fair", ar: "متوسطة", bn: "মাঝারি" },
+  { v: "poor", ar: "سيئة", bn: "খারাপ" },
   { v: "damaged", ar: "تالفة", bn: "ক্ষতিগ্রস্ত" },
 ];
 
@@ -1084,7 +1086,7 @@ function Fuel({ me, myBike }) {
 const condAr = (v) => (CONDITIONS.find(c => c.v === v) || {}).ar || v;
 function Assets({ me }) {
   const [rows, setRows] = useState(() => Object.fromEntries(
-    ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null }])
+    ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null, note: "" }])
   ));
   const [notes, setNotes] = useState("");
   const [pledge, setPledge] = useState(false);
@@ -1102,13 +1104,16 @@ function Assets({ me }) {
   useEffect(() => { loadRecent(); }, []);
 
   function setItem(key, patch) { setRows(s => ({ ...s, [key]: { ...s[key], ...patch } })); }
-  const reset = () => setRows(Object.fromEntries(ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null }])));
+  const reset = () => setRows(Object.fromEntries(ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null, note: "" }])));
 
   const focusField = id => setTimeout(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); try { el.focus({ preventScroll: true }); } catch (e) { /* */ } } }, 30);
   async function submit() {
     setErr(null); setFe(null);
     const chosen = ASSET_ITEMS.filter(it => rows[it.key].present);
     if (chosen.length === 0) { setFe({ field: "as_list", ar: "حدّد العناصر التي استلمتها أولاً.", bn: "অন্তত একটি সরঞ্জাম নির্বাচন করুন।" }); focusField("as_list"); return; }
+    // صورة إلزامية لكل صنف، وملاحظة إلزامية للحالة السيئة/التالفة — التوجيه إلى أول صنف ناقص
+    const de = declarationError(chosen, rows);
+    if (de) { setFe({ field: "as_item", key: de.key, kind: de.field, ar: de.ar, bn: de.bn }); focusField((de.field === "note" ? "asnt_" : "asi_") + de.key); return; }
     if (!pledge) { setFe({ field: "as_pledge", ar: "وافق على التعهّد قبل الحفظ.", bn: "সংরক্ষণের আগে অঙ্গীকারে সম্মতি দিন।" }); focusField("as_pledge"); return; }
     setBusy(true);
     try {
@@ -1116,16 +1121,20 @@ function Assets({ me }) {
       const items = [];
       for (const it of chosen) {
         const r = rows[it.key];
-        let photoUrl = null;
-        if (r.photo) { try { photoUrl = await uploadPhoto(r.photo, "asset-" + it.key, bid); } catch (e) {} }
-        items.push({ key: it.key, name_ar: it.ar, name_bn: it.bn, qty: Number(r.qty) || 1, condition: r.condition, photo: photoUrl });
+        // الصورة إلزامية: فشل الرفع يوقف الحفظ (لا يُحفظ صنف بلا صورة)
+        const photoUrl = await uploadPhoto(r.photo, "asset-" + it.key, bid);
+        items.push(declarationItem(it, r, photoUrl));
       }
-      const { error } = await supabase.from("biker_assets").insert({
+      const { data: saved, error } = await supabase.from("biker_assets").insert({
         operator_id: me.operator_id, biker_employee_id: bid, biker_name: me.name,
         items, pledge_accepted: true, notes: notes || null, status: "declared", created_by: me.uid,
-      });
+      }).select("items").single();
       if (error) throw error;
-      toast.ok("تم تسجيل العهدة ✓", "সংরক্ষিত", 3000);
+      const bad = items.filter(x => isBad(x.condition)).length;
+      const refs = [...new Set(replacementsOf(saved && saved.items).map(x => x.ref).filter(Boolean))];
+      if (refs.length) toast.ok(`تم تسجيل العهدة ✓ — رُفع طلب استبدال (${refs.join("، ")}) لـ ${bad} صنف`, `সংরক্ষিত — ${bad}টি সরঞ্জামের জন্য বদলের অনুরোধ পাঠানো হয়েছে`, 6000);
+      else if (bad) toast.ok(`تم تسجيل العهدة ✓ — ${bad} صنف يحتاج استبدالاً، وصل للإدارة`, `সংরক্ষিত — ${bad}টি সরঞ্জাম বদলানো দরকার, অফিসকে জানানো হয়েছে`, 6000);
+      else toast.ok("تم تسجيل العهدة ✓", "সংরক্ষিত", 3000);
       reset(); setNotes(""); setPledge(false); loadRecent();
     } catch (e) { setErr(humanError(e)); }
     setBusy(false);
@@ -1141,7 +1150,7 @@ function Assets({ me }) {
           const r = rows[it.key];
           const ref = it.img ? TOOLREFS[it.img] : null;
           return (
-            <div className={"bp-aitem" + (r.present ? " on" : "")} key={it.key}>
+            <div className={"bp-aitem" + (r.present ? " on" : "") + (fe && fe.field === "as_item" && fe.key === it.key ? " k-inv" : "")} key={it.key} id={"asi_" + it.key} tabIndex={-1}>
               <label className="bp-arow" htmlFor={"as_" + it.key}>
                 {ref ? <img className="bp-aref" src={ref} alt="" /> : <div className="bp-aref ph">🧰</div>}
                 <input id={"as_" + it.key} type="checkbox" checked={r.present} onChange={e => { setItem(it.key, { present: e.target.checked }); setFe(null); }} />
@@ -1157,18 +1166,25 @@ function Assets({ me }) {
                     </div>
                     <div>
                       <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الحالة <span className="bn">/ অবস্থা</span></label>
-                      <select className="g-select bp-sel" value={r.condition} onChange={e => setItem(it.key, { condition: e.target.value })} style={{ padding: "9px 11px" }}>
+                      <select className="g-select bp-sel" value={r.condition} onChange={e => { setItem(it.key, { condition: e.target.value }); setFe(null); }} style={{ padding: "9px 11px" }}>
                         {CONDITIONS.map(c => <option key={c.v} value={c.v}>{c.ar} / {c.bn}</option>)}
                       </select>
                     </div>
                   </div>
-                  <label className="bp-lbl" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>صورة الصنف (اختياري) <span className="bn">/ ছবি (ঐচ্ছিক)</span></label>
+                  <label className="bp-lbl" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>صورة الصنف (إلزامي) · <span className="bn">ছবি (বাধ্যতামূলক)</span></label>
                   <label className="bp-acap" htmlFor={"asph_" + it.key}>
                     {r.photo ? <img className="bp-athumb" src={URL.createObjectURL(r.photo)} alt="" /> : <>📷 تصوير الصنف · ছবি তুলুন</>}
                     {r.photo && <span className="bp-done">✓ تم · হয়েছে</span>}
                     <input id={"asph_" + it.key} type="file" accept="image/*" capture="environment"
-                      onChange={e => setItem(it.key, { photo: (e.target.files || [])[0] || null })} />
+                      onChange={e => { setItem(it.key, { photo: (e.target.files || [])[0] || null }); setFe(null); }} />
                   </label>
+                  <label className="bp-lbl" htmlFor={"asnt_" + it.key} style={{ margin: "8px 0 4px", fontSize: 11.5 }}>
+                    وش التالف بالضبط؟ · <span className="bn">ঠিক কী নষ্ট?</span>{isBad(r.condition) ? <b style={{ color: "var(--bad-ink)" }}> *</b> : <span style={{ fontWeight: 500 }}> (اختياري · ঐচ্ছিক)</span>}
+                  </label>
+                  <textarea id={"asnt_" + it.key} className={"g-textarea bp-ta" + (fe && fe.field === "as_item" && fe.key === it.key && fe.kind === "note" ? " k-inv" : "")} rows={2}
+                    value={r.note} onChange={e => { setItem(it.key, { note: e.target.value }); setFe(null); }}
+                    placeholder="الملصق فقط / رأس البخاخ مكسور / العلبة مشقوقة" style={{ minHeight: 56 }} />
+                  {fe && fe.field === "as_item" && fe.key === it.key && <FieldErr t={fe} />}
                 </div>
               )}
             </div>
@@ -1204,7 +1220,8 @@ function Assets({ me }) {
             return (
               <div className="bp-item" key={r.id}>
                 <div className="t">{its.length} عنصر · {its.length} টি সরঞ্জাম<StatusBadge s={r.status} /></div>
-                <div className="m">{its.map(x => `${x.name_ar}${x.qty > 1 ? "×" + x.qty : ""} (${condAr(x.condition)})`).join("، ")}</div>
+                <div className="m">{its.map(x => `${x.name_ar}${x.qty > 1 ? "×" + x.qty : ""} (${condAr(x.condition)}${x.note ? " — " + x.note : ""})`).join("، ")}</div>
+                {replacementsOf(its).length > 0 && <div className="m" style={{ color: "var(--bad-ink)", fontWeight: 700 }}>🔁 استبدال · বদল: {replacementsOf(its).map(x => x.name + (x.ref ? " (" + x.ref + ")" : "")).join("، ")}</div>}
                 <div className="m">{new Date(r.created_at).toLocaleString("ar")}</div>
               </div>
             );
