@@ -4,6 +4,7 @@ import Icon from"./Icon";
 import{useToast}from"./ui";
 import{buildSupplyRequestMsg,buildEscalationMsg,buildConsolidatedMsg,classifyOpenRequests,elapsedBoth}from"./fieldReport";
 import ActivityLog from"./ActivityLog";
+import{signedUrls}from"./storageUrl";
 const SR_FL={status:"الحالة",requesting_dept:"الجهة الطالبة",biker_name:"البايكر",sweater_id:"رقم البايكر",ref:"المرجع",sla_hours:"مهلة (ساعة)"};
 const SR_DV={open:"مفتوح",escalated:"مُصعّد",completed:"مكتمل",cancelled:"ملغى"};
 
@@ -26,6 +27,8 @@ export default function SupplyRequests({opId,owner}){
   const[now,setNow]=useState(()=>Date.now());
   const[share,setShare]=useState(null);const[copied,setCopied]=useState(false);
   const focusRef=useRef(typeof window!=="undefined"?window.__lastSupplyRef:null);
+  // صور الأصناف (مثلاً طلب الاستبدال من إقرار العهدة): رابط موقّع إن أمكن، وإلا الرابط المحفوظ
+  const[photoUrls,setPhotoUrls]=useState({});const[zoom,setZoom]=useState(null);
 
   useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(t);},[]);
   useEffect(()=>{(async()=>{
@@ -33,6 +36,8 @@ export default function SupplyRequests({opId,owner}){
     let q=supabase.from("supply_requests").select("*").order("created_at",{ascending:false});
     if(opId&&opId!=="all")q=q.eq("operator_id",opId);
     const{data}=await q;setRows(data||[]);setLoading(false);
+    const ph=(data||[]).flatMap(r=>(Array.isArray(r.items)?r.items:[]).map(it=>it&&it.photo).filter(Boolean));
+    if(ph.length)signedUrls(ph).then(setPhotoUrls).catch(()=>{});
     if(typeof window!=="undefined")window.__lastSupplyRef=null;
   })();},[opId]);
 
@@ -131,7 +136,7 @@ export default function SupplyRequests({opId,owner}){
         <div className="sq-items">
           {(r.items||[]).map((it,i)=>(
             <div className="sq-item" key={i}>
-              <span className="sq-in">#{it.n}</span>
+              {it.photo?<button className="sq-iph" onClick={()=>setZoom(photoUrls[it.photo]||it.photo)} aria-label={"صورة "+(it.ar||"")}><img src={photoUrls[it.photo]||it.photo} alt="" loading="lazy"/></button>:<span className="sq-in">#{it.n}</span>}
               <div className="sq-itxt"><div className="sq-iar">{it.ar}{it.parts_ar?<span className="sq-part"> 🔧 {it.parts_ar}</span>:null}</div><div className="sq-icat">{it.type} · {it.category} — <b>{it.status_ar}</b>{it.note?` · ${it.note}`:""}</div></div>
             </div>))}
         </div>
@@ -160,6 +165,7 @@ export default function SupplyRequests({opId,owner}){
         </div>
       </div>
     </div>}
+    {zoom&&<div className="sq-zoom" onClick={()=>setZoom(null)}><img src={zoom} alt=""/></div>}
   </div>);
 }
 function fmtRemain(ms){if(ms<=0)return"انتهت";const h=Math.floor(ms/3600e3),m=Math.floor(ms%3600e3/6e4);return h>0?`${h} ساعة و${m} دقيقة`:`${m} دقيقة`;}
@@ -197,6 +203,10 @@ const CSS=`
 .sq-item{display:flex;gap:8px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
 .sq-in{font-size:11px;font-weight:800;color:var(--mut-2);flex:none}
 .sq-iar{font-size:12px;font-weight:700;color:var(--ink)}
+.sq-iph{flex:none;width:48px;height:48px;padding:0;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--glass);cursor:zoom-in}
+.sq-iph img{width:100%;height:100%;object-fit:cover;display:block}
+.sq-zoom{position:fixed;inset:0;background:rgba(15,23,42,.75);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;cursor:zoom-out}
+.sq-zoom img{max-width:100%;max-height:100%;border-radius:12px}
 .sq-part{font-size:11px;color:var(--warn-ink);font-weight:800}
 .sq-icat{font-size:10.5px;color:var(--mut);margin-top:1px}
 .sq-cnote{margin-top:9px;font-size:11.5px;color:var(--ok-ink);background:var(--ok-bg);border-radius:8px;padding:7px 10px;font-weight:700}
