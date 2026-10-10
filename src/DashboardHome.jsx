@@ -7,6 +7,7 @@ import DashHero from"./DashHero";
 import Assistant from"./Assistant";
 import ChartTip from"./ChartTip";
 import{usePeriod,periodRange,isMonthly}from"./period";
+import{settledNet}from"./settlementStatus";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
 const MN=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
@@ -95,7 +96,7 @@ export default function DashboardHome({onNav,theme="light"}){
     const bikerOf=o=>!fBiker||o.biker_name===fBiker;
     const washesOf=list=>d.ops.filter(o=>list.indexOf(o.period)>=0&&bikerOf(o)).reduce((a,o)=>a+Number(o.net_washes||0),0);
     const ratingsOf=list=>{const r=d.ops.filter(o=>list.indexOf(o.period)>=0&&bikerOf(o)).map(o=>Number(o.rating)).filter(x=>x>0);return r.length?r.reduce((a,b)=>a+b,0)/r.length:0;};
-    const revByP=p=>{const r=(d.setts||[]).find(x=>x.period===p&&x.status==="confirmed"&&x.net_total!=null);if(r&&!fBiker)return Number(r.net_total);return d.ops.filter(o=>o.period===p&&bikerOf(o)).reduce((a,o)=>a+payoutForBiker(Number(o.net_washes||0),p).total,0);};
+    const revByP=p=>{const sn=settledNet(d.setts,p);if(sn!=null&&!fBiker)return sn;return d.ops.filter(o=>o.period===p&&bikerOf(o)).reduce((a,o)=>a+payoutForBiker(Number(o.net_washes||0),p).total,0);};
     const revOf=list=>list.reduce((a,p)=>a+revByP(p),0);
     const payrollOf=list=>d.pay.filter(p=>list.indexOf(p.period)>=0).reduce((a,p)=>a+Number(p.total||0),0);
     const apprOf=list=>(d.tix||[]).filter(t=>list.indexOf(t.period)>=0&&t.decision==="approved").length;

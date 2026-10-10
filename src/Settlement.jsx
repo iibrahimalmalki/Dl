@@ -3,6 +3,7 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import{settlementLine,MIN_GUARANTEE_ORDERS,SSP_CONTRACT,tiersActive}from"./sweaterContract";
+import{stageOf,stageLabel,isLocked}from"./settlementStatus";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" ﷼";
 const int=n=>Number(n||0).toLocaleString("en-US");
@@ -156,7 +157,7 @@ export default function Settlement({opId,me,owner}){
     const{data:h}=await supabase.from("sweater_settlements").select("*").eq("period",p).limit(1);
     if(h&&h[0]){
       const{data:ls}=await supabase.from("sweater_settlement_lines").select("*").eq("settlement_id",h[0].id);
-      setHead({id:h[0].id,invoice_amount:h[0].invoice_amount??"",invoice_ref:h[0].invoice_ref||"",notes:h[0].notes||"",status:h[0].status||"draft",
+      setHead({id:h[0].id,invoice_amount:h[0].invoice_amount??"",invoice_ref:h[0].invoice_ref||"",notes:h[0].notes||"",status:h[0].status||"draft",net_total:h[0].net_total??"",
         paid:!!h[0].paid,paid_amount:h[0].paid_amount??"",paid_at:h[0].paid_at?String(h[0].paid_at).slice(0,10):"",payment_ref:h[0].payment_ref||"",payment_method:h[0].payment_method||"",payment_receipt_url:h[0].payment_receipt_url||"",receipt_voucher_no:h[0].receipt_voucher_no||""});
       setLines((ls||[]).map(l=>({employee_id:l.employee_id,biker_name:l.biker_name,orders:l.orders??0,rating:l.rating??"",complaints_pct:l.complaints_pct??"",tickets_pct:l.tickets_pct??""})));
     }else{setHead({invoice_amount:"",invoice_ref:"",notes:"",status:"draft",paid:false,paid_amount:"",paid_at:"",payment_ref:"",payment_method:"",payment_receipt_url:"",receipt_voucher_no:""});setLines([]);}
@@ -177,10 +178,14 @@ export default function Settlement({opId,me,owner}){
 
   const calc=useMemo(()=>lines.map(l=>({l,c:settlementLine({orders:l.orders,rating:l.rating,complaintsPct:l.complaints_pct,ticketsPct:l.tickets_pct,period})})),[lines,period]);
   const tot=useMemo(()=>calc.reduce((a,{c})=>({base:a.base+c.base,incentive:a.incentive+c.incentive,deduction:a.deduction+c.deduction,net:a.net+c.net}),{base:0,incentive:0,deduction:0,net:0}),[calc]);
+  // مُرسلة/مدفوعة ⇒ الصافي هو المحفوظ (الفاتورة الرسمية) ولا يُعاد احتسابه من السطور ولا يُحفظ فوقه
+  const locked=!!head.id&&isLocked(head);
+  const net=locked&&head.net_total!==""?Number(head.net_total):tot.net;
   const invoice=Number(head.invoice_amount||0);
-  const variance=+(tot.net-invoice).toFixed(2);
+  const variance=+(net-invoice).toFixed(2);
 
   const save=async(confirm)=>{
+    if(locked){note(false,`التسوية «${stageLabel(head)}» — المبالغ مقفلة ولا تُحفظ من هنا`);return;}
     setBusy(true);note(false,"");
     try{
       const hrow={operator_id:opv,period,status:confirm?"confirmed":"draft",invoice_amount:head.invoice_amount===""?null:Number(head.invoice_amount),invoice_ref:head.invoice_ref||null,
@@ -225,7 +230,7 @@ export default function Settlement({opId,me,owner}){
   };
   const openInvoice=()=>{
     const netOrders=calc.reduce((a,{l})=>a+Number(l.orders||0),0);
-    const netTotal=tot.net||Number(head.invoice_amount||0);
+    const netTotal=net||Number(head.invoice_amount||0);
     if(!netTotal){note(false,"لا توجد مبالغ لإصدار الفاتورة — ولّد السطور أو أدخل قيمة الفاتورة");return;}
     const w=window.open("","_blank");
     if(!w){note(false,"مانع النوافذ المنبثقة يمنع فتح الفاتورة — اسمح به ثم أعد المحاولة");return;}
@@ -239,10 +244,10 @@ export default function Settlement({opId,me,owner}){
 
     <div className="se-bar">
       <div className="se-per"><Icon n="calendar" s={15}/><input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/><span>{periodAr(period)}</span>
-        {head.status==="confirmed"&&<span className="se-conf"><Icon n="check" s={12}/> معتمدة</span>}</div>
+        {head.id&&<span className={"se-conf st-"+stageOf(head)}>{stageOf(head)==="confirmed"||stageOf(head)==="paid"?<Icon n="check" s={12}/>:null} {stageLabel(head)}</span>}</div>
       <div className="se-acts">
-        <button className="se-b ghost" onClick={genFromOps}><Icon n="refresh" s={14}/> توليد من العمليات</button>
-        <button className="se-b ghost" onClick={addLine}><Icon n="plus" s={14}/> إضافة بايكر</button>
+        <button className="se-b ghost" disabled={locked} onClick={genFromOps}><Icon n="refresh" s={14}/> توليد من العمليات</button>
+        <button className="se-b ghost" disabled={locked} onClick={addLine}><Icon n="plus" s={14}/> إضافة بايكر</button>
       </div>
     </div>
 
@@ -250,7 +255,7 @@ export default function Settlement({opId,me,owner}){
       <Kpi l="الأساس (الملحق)" n={money(tot.base)} c="var(--info-ink)"/>
       <Kpi l="الحوافز" n={money(tot.incentive)} c="var(--ok-ink)"/>
       <Kpi l="الخصومات" n={money(tot.deduction)} c="var(--bad-ink)"/>
-      <Kpi l="الصافي المستحق" n={money(tot.net)} c="var(--p)" big/>
+      <Kpi l={locked?"الصافي (الفاتورة)":"الصافي المستحق"} n={money(net)} c="var(--p)" big/>
     </div>
 
     {loading?<div className="g-skel" style={{height:160}}/>:
@@ -293,10 +298,11 @@ export default function Settlement({opId,me,owner}){
       </div>
       <textarea className="se-notes" placeholder="ملاحظات التسوية…" value={head.notes} onChange={e=>setHead({...head,notes:e.target.value})}/>
       <div className="se-save">
-        <button className="se-b brand" disabled={busy} onClick={()=>save(false)}><Icon n="save" s={14}/> حفظ مسودّة</button>
-        <button className="se-b green" disabled={busy||!lines.length} onClick={()=>save(true)}><Icon n="check" s={14}/> اعتماد التسوية</button>
-        <button className="se-b purple" disabled={!(tot.net||Number(head.invoice_amount))} onClick={openInvoice}><Icon n="print" s={14}/> إصدار فاتورة</button>
+        <button className="se-b brand" disabled={busy||locked} onClick={()=>save(false)}><Icon n="save" s={14}/> حفظ مسودّة</button>
+        <button className="se-b green" disabled={busy||locked||!lines.length} onClick={()=>save(true)}><Icon n="check" s={14}/> اعتماد التسوية</button>
+        <button className="se-b purple" disabled={!(net||Number(head.invoice_amount))} onClick={openInvoice}><Icon n="print" s={14}/> إصدار فاتورة</button>
       </div>
+      {locked&&<p className="se-lock"><Icon n="lock" s={13}/> التسوية «{stageLabel(head)}» — الصافي {money(net)} من الفاتورة الرسمية؛ الحفظ والاعتماد معطّلان حتى لا يُعاد الاحتساب من السطور. بيانات الدفعة أدناه تبقى قابلة للتعديل.</p>}
       <p className="se-disc">الاحتساب وفق ملحق التسعير (الشرائح) + حافز البند التاسع (+{money(SSP_CONTRACT.incentive)}/طلب عند تقييم ≥{SSP_CONTRACT.incentive_conditions.min_rating} وشكاوى ≤{SSP_CONTRACT.incentive_conditions.max_complaints_pct}%) − خصم تذاكر عند تجاوز {SSP_CONTRACT.incentive_conditions.max_complaints_pct}%. رقم استرشادي يُطابق بالفاتورة الرسمية.</p>
     </div>
 
@@ -313,9 +319,9 @@ export default function Settlement({opId,me,owner}){
         <label className="se-pay-wide"><span>رابط الإيصال البنكي (اختياري)</span><input value={head.payment_receipt_url} onChange={e=>setHead({...head,payment_receipt_url:e.target.value})} placeholder="https://…"/></label>
         <label><span>رقم السند</span><input value={head.receipt_voucher_no} onChange={e=>setHead({...head,receipt_voucher_no:e.target.value})} placeholder={"DW-RV-"+period+"-01"}/></label>
       </div>
-      {Number(head.paid_amount)>0&&<div className="se-pay-var" style={{background:Math.abs(Number(head.paid_amount)-tot.net)<=1?"var(--ok-bg)":"var(--p-50)"}}>
+      {Number(head.paid_amount)>0&&<div className="se-pay-var" style={{background:Math.abs(Number(head.paid_amount)-net)<=1?"var(--ok-bg)":"var(--p-50)"}}>
         <span>الفرق (المستلَم − الصافي المحتسب)</span>
-        <b style={{color:Math.abs(Number(head.paid_amount)-tot.net)<=1?"var(--ok-ink)":"var(--p-700)"}}>{money(Number(head.paid_amount)-tot.net)}</b>
+        <b style={{color:Math.abs(Number(head.paid_amount)-net)<=1?"var(--ok-ink)":"var(--p-700)"}}>{money(Number(head.paid_amount)-net)}</b>
         <em>الفرق البسيط عادةً بقشيش تمريري يُصرف للبايكرز</em>
       </div>}
       <div className="se-pay-acts">
@@ -341,6 +347,9 @@ const CSS=`
 .se-per input{border:none;font-family:inherit;font-size:13px;font-weight:700;outline:none}
 .se-per span{color:var(--mut);font-size:12.5px}
 .se-conf{display:flex;align-items:center;gap:4px;background:var(--ok-bg);color:var(--ok-ink);font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px}
+.se-conf.st-estimated,.se-conf.st-draft{background:var(--p-50);color:var(--p-700)}
+.se-conf.st-submitted{background:var(--info-bg);color:var(--info-ink)}
+.se-lock{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--info-ink);background:var(--info-bg);border-radius:10px;padding:8px 11px;margin:8px 0 0;line-height:1.6}
 .se-acts{display:flex;gap:8px;flex-wrap:wrap}
 .se-b{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:11px;border:1px solid var(--line);background:var(--glass-2);font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;color:var(--ink)}
 .se-b.brand{background:var(--brand);color:#fff;border-color:var(--brand)}
