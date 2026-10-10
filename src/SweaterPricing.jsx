@@ -15,11 +15,11 @@ export default function SweaterPricing(){
     <style>{CSS}</style>
 
     <div style={{background:"var(--p-50)",border:"1px solid var(--warn)",borderRadius:12,padding:"11px 14px",marginBottom:14,fontSize:12.5,color:"var(--warn-ink)",fontWeight:600,display:"flex",gap:8,alignItems:"center"}}>
-      <Icon n="alert" s={15}/> نظام الشرائح والحدّ الأدنى المضمون يُطبَّق اعتباراً من شهر الخدمة <b>أغسطس 2026</b> (ملحق التسعير الموقّع 30/07/2026). أمّا الأشهر السابقة (يناير–يوليو) فبسعر ثابت <b>20﷼/طلب</b> دون شرائح. هذه الحاسبة تعرض نظام الشرائح الجديد.
+      <Icon n="alert" s={15}/> نظام الشرائح يُطبَّق اعتباراً من شهر الخدمة <b>أغسطس 2026</b> (ملحق التسعير الموقّع 30/07/2026). أمّا الأشهر السابقة (يناير–يوليو) فبسعر ثابت <b>20﷼/طلب</b> دون شرائح. هذه الحاسبة تعرض نظام الشرائح الجديد.
     </div>
 
     <div className="sp-kpis">
-      <div className="sp-kpi"><span className="sp-kl">الحد الأدنى المضمون / بايكر</span><b>{int(MIN_GUARANTEE_ORDERS)} طلب</b><small>Golden Guarantee</small></div>
+      <div className="sp-kpi"><span className="sp-kl">الحد الأدنى المضمون / بايكر</span><b>{int(MIN_GUARANTEE_ORDERS)} طلب</b><small>غير مؤكَّد — لا يُحتسب</small></div>
       <div className="sp-kpi"><span className="sp-kl">سعر الطلب (العقد)</span><b>{money(SSP_CONTRACT.per_order)}</b><small>+{money(SSP_CONTRACT.incentive)} حافز = {money(SSP_CONTRACT.incentive_total)}</small></div>
       <div className="sp-kpi"><span className="sp-kl">عدد البايكرز</span><b>{SSP_CONTRACT.bikers}</b><small>حسب العقد</small></div>
       <div className="sp-kpi"><span className="sp-kl">سريان الملحق</span><b>{PRICING_APPENDIX.effective}</b><small>نموذج الغسلات الشهرية</small></div>
@@ -36,12 +36,12 @@ export default function SweaterPricing(){
       <div className="sp-out">
         <div className="sp-o"><span>الشريحة المطبَّقة</span><b>{typeof curTier.tier==="number"?"الشريحة "+curTier.tier:curTier.tier}</b></div>
         <div className="sp-o"><span>سعر الطلب في الشريحة</span><b>{money(per.unit)} <small>({money(per.unitVat)} شامل)</small></b></div>
-        <div className="sp-o"><span>الطلبات المحتسَبة / بايكر</span><b>{int(per.billableOrders)} {per.billableOrders>per.orders&&<em className="sp-min">مضمون</em>}</b></div>
+        <div className="sp-o"><span>الطلبات المدفوعة / بايكر</span><b>{int(per.billableOrders)} {per.minGap>0&&<em className="sp-min">دون {int(MIN_GUARANTEE_ORDERS)}</em>}</b></div>
         <div className="sp-o hi"><span>مقابل البايكر / شهر</span><b>{money(per.total)}</b></div>
         <div className="sp-o hi big"><span>إجمالي {bikers} بايكرز / شهر</span><b>{money(per.total*bikers)}</b></div>
         <div className="sp-o"><span>الإجمالي شامل الضريبة</span><b>{money(per.totalVat*bikers)}</b></div>
       </div>
-      <p className="sp-note">تقدير استرشادي وفق ملحق التسعير — يخضع لتحقّق مؤشرات الأداء ومطابقة كشف سويتر الشهري. الحد الأدنى المضمون يُحتسب عند استيفاء شروط العقد.</p>
+      <p className="sp-note">تقدير استرشادي وفق ملحق التسعير — يخضع لتحقّق مؤشرات الأداء ومطابقة كشف سويتر الشهري. الشريحة تُحدَّد من الإجمالي والدفع على الصافي (تأكيد سويتر 07/10/2026)؛ الحاسبة تفترض الإجمالي = الصافي. الحد الأدنى المضمون غير مؤكَّد ولا يُحتسب.</p>
     </div>
 
     <div className="sp-tblwrap">

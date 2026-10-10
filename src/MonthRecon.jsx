@@ -19,7 +19,7 @@ const safeName=n=>String(n||"breakdown.pdf").replace(/[^\w.\-]+/g,"_").slice(-12
 const f2=v=>v==null?"—":Number(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fi=v=>v==null?"—":Number(v).toLocaleString("en-US");
 const sg=(v,fmt=f2)=>(v>0?"+":v<0?"−":"")+fmt(Math.abs(v));
-const tierAr=t=>t==null?"—":typeof t==="number"?`الشريحة ${t}`:t==="Golden Guarantee"?"الحد الأدنى المضمون":String(t);
+const tierAr=t=>t==null?"—":typeof t==="number"?`الشريحة ${t}`:t==="Golden Guarantee"?"دون الشريحة 1 (20﷼)":String(t);
 export const DECISIONS={matched:"مطابق",accepted:"مقبول بملاحظة",claim:"مطالبة",inquiry:"استفسار لسويتر"};
 const STATUS={pending:["warn","بانتظار أرقام الكشف"],matched:["ok","مطابق"],diff:["bad","فيه فروق"]};
 const COLS_MISSING=e=>e&&(e.code==="42703"||e.code==="PGRST204"||/recon/.test(String(e.message||""))&&/column/i.test(String(e.message||"")));
