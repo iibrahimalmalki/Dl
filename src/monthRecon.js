@@ -104,7 +104,7 @@ export function alertsOf(res,period){
     if(tiersActive(period)&&r.inPlatform&&r.netBill<MIN_GUARANTEE_ORDERS){const orders=MIN_GUARANTEE_ORDERS-r.netBill,amount=r2(orders*r.unit);
       out.push({id:`min:${r.sweater_id}`,sweater_id:r.sweater_id,biker_name:r.biker_name,kind:"min_guarantee",amount,orders,
         unit:r.unit,netBill:r.netBill,unconfirmed:true,
-        ar:`البايكر ${who}: الصافي المطبّق ${r.netBill} غسلة، أقل من الحد الأدنى ${MIN_GUARANTEE_ORDERS} (غير مؤكَّد — هل الضمان مشروط بالحضور؟) — الفارق ${orders} غسلة × ${fm(r.unit)} ﷼ = ${fm(amount)} ﷼.`,
+        ar:`البايكر ${who}: الصافي المطبّق ${r.netBill} غسلة، أقل من الحد الأدنى ${MIN_GUARANTEE_ORDERS} (مشروط وفق «ثانياً» من الملحق: هل كان نقص الطلبات من سويتر أم من الحضور؟) — الفارق ${orders} غسلة × ${fm(r.unit)} ﷼ = ${fm(amount)} ﷼.`,
         en:`${who}: applied net ${r.netBill} washes, below the guaranteed minimum of ${MIN_GUARANTEE_ORDERS} — shortfall ${orders} washes × SAR ${fm(r.unit)} = SAR ${fm(amount)}.`});}
   });
   return out;

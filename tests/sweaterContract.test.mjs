@@ -51,5 +51,5 @@ const noFw=M.reconcileMonth({period:P,violations:[],tickets:[],bikers:res.rows.m
   adjustments:[...adj('add','1624',4),...adj('maintenance','1624',1),...adj('add','1648',1),...adj('add','1700',10),...adj('deduct','1700',7),...adj('maintenance','1700',4)],sweater:{}});
 ok('بدون الغسلات المجانية الصافي 524 ⇒ فرق الـ 8 غسلات = تعويضات Free Wash',noFw.totals.netCalc===524);
 const mins=M.alertsOf(res,P).filter(a=>a.kind==='min_guarantee');
-ok('تنبيه الحد الأدنى لـ Midul سؤال «غير مؤكَّد»',mins.length===1&&mins[0].sweater_id==='1648'&&mins[0].unconfirmed===true&&/غير مؤكَّد/.test(mins[0].ar));
+ok('تنبيه الحد الأدنى لـ Midul سؤال «مشروط»',mins.length===1&&mins[0].sweater_id==='1648'&&mins[0].unconfirmed===true&&/مشروط/.test(mins[0].ar));
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
