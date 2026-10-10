@@ -16,7 +16,9 @@ import { resolveTabs } from "./bikerTabs";
 import { loadTabRules } from "./bikerTabsStore";
 import { CHECKLIST, RECEIVED_ITEMS, BOX_PHOTOS, emptyReceived, receivedRecord, itemsOk, HANDOVER_STEPS, stepError, firstStepError, stepMove, stepSkipped, boxNeeded, odoNum, MAX_DAMAGES, DAMAGE_PARTS, DAMAGE_TYPES, emptyDamage, damagePart, damageType, damagePhotosFlat } from "./handover";
 import { checkPhoto } from "./photoQuality";
-import { declarationError, declarationItem, isBad, replacementsOf } from "./custodyDeclare";
+import { declarationError, declarationItem, isBad } from "./custodyDeclare";
+import { baselineState, myPieces, pieceState, remainingDays, updateError } from "./custodyLifecycle";
+import { catalogOfAsset } from "./custodyCatalog";
 import { STATES as H_STATES, handoverState, fixInfo, latestRow } from "./handoverStatus";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
@@ -146,6 +148,10 @@ const CSS = `
 .bp-acap input{display:none}
 .bp-athumb{width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--line-2)}
 .bp-done{color:var(--ok-ink)}
+.bp-asrej{background:var(--bad-bg);color:var(--bad-ink);border-radius:11px;padding:10px 12px;margin:6px 0 10px;font-size:12.5px;line-height:1.7;overflow-wrap:anywhere}
+.bp-aspend{background:var(--info-bg);color:var(--info-ink);border-radius:10px;padding:8px 11px;font-size:12px;line-height:1.7;margin-top:4px}
+.bp-piece .t .bn{color:var(--mut);font-size:11px}.bp-piece.due{border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.bp-pupd{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);min-width:0}.bp-pupd .bp-acap{max-width:100%}
 .bp-pf-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
 .bp-pf-grid div{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:9px 4px;text-align:center}
 .bp-pf-grid b{display:block;font-size:19px;font-weight:900;color:var(--ink)}.bp-pf-grid b.o{color:var(--p-ink)}
@@ -1084,7 +1090,8 @@ function Fuel({ me, myBike }) {
 
 /* ================= العهدة (الأدوات والمواد) ================= */
 const condAr = (v) => (CONDITIONS.find(c => c.v === v) || {}).ar || v;
-function Assets({ me }) {
+const condBn = (v) => (CONDITIONS.find(c => c.v === v) || {}).bn || "";
+function BaselineForm({ me, rejection, onSaved }) {
   const [rows, setRows] = useState(() => Object.fromEntries(
     ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null, note: "" }])
   ));
@@ -1094,14 +1101,6 @@ function Assets({ me }) {
   const toast = useToast();
   const online = useOnline();
   const [fe, setFe] = useState(null), [err, setErr] = useState(null);
-  const [recent, setRecent] = useState(null);
-
-  async function loadRecent() {
-    const { data } = await supabase.from("biker_assets")
-      .select("id,items,notes,status,created_at").order("created_at", { ascending: false }).limit(6);
-    setRecent(data || []);
-  }
-  useEffect(() => { loadRecent(); }, []);
 
   function setItem(key, patch) { setRows(s => ({ ...s, [key]: { ...s[key], ...patch } })); }
   const reset = () => setRows(Object.fromEntries(ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null, note: "" }])));
@@ -1125,24 +1124,23 @@ function Assets({ me }) {
         const photoUrl = await uploadPhoto(r.photo, "asset-" + it.key, bid);
         items.push(declarationItem(it, r, photoUrl));
       }
-      const { data: saved, error } = await supabase.from("biker_assets").insert({
-        operator_id: me.operator_id, biker_employee_id: bid, biker_name: me.name,
+      // التسجيل الأول ينتظر الاعتماد؛ طلب الاستبدال يُرفع عند الاعتماد لا عند الحفظ (custody_review)
+      const { error } = await supabase.from("biker_assets").insert({
+        operator_id: me.operator_id, biker_employee_id: bid, biker_name: me.name, kind: "baseline",
         items, pledge_accepted: true, notes: notes || null, status: "declared", created_by: me.uid,
-      }).select("items").single();
+      });
       if (error) throw error;
-      const bad = items.filter(x => isBad(x.condition)).length;
-      const refs = [...new Set(replacementsOf(saved && saved.items).map(x => x.ref).filter(Boolean))];
-      if (refs.length) toast.ok(`تم تسجيل العهدة ✓ — رُفع طلب استبدال (${refs.join("، ")}) لـ ${bad} صنف`, `সংরক্ষিত — ${bad}টি সরঞ্জামের জন্য বদলের অনুরোধ পাঠানো হয়েছে`, 6000);
-      else if (bad) toast.ok(`تم تسجيل العهدة ✓ — ${bad} صنف يحتاج استبدالاً، وصل للإدارة`, `সংরক্ষিত — ${bad}টি সরঞ্জাম বদলানো দরকার, অফিসকে জানানো হয়েছে`, 6000);
-      else toast.ok("تم تسجيل العهدة ✓", "সংরক্ষিত", 3000);
-      reset(); setNotes(""); setPledge(false); loadRecent();
+      toast.ok("أُرسل تسجيل العهدة للاعتماد ✓", "অনুমোদনের জন্য পাঠানো হয়েছে", 4000);
+      reset(); setNotes(""); setPledge(false); onSaved();
     } catch (e) { setErr(humanError(e)); }
     setBusy(false);
   }
 
   return (
     <><div className="bp-card g-card bp-free"><div className="bp-sec">
-      <h2 className="bp-wiz-h" style={{ marginTop: 0 }}>إقرار العهدة — الأدوات والمواد<span className="bn">সরঞ্জাম ও উপকরণের ঘোষণা</span></h2>
+      <h2 className="bp-wiz-h" style={{ marginTop: 0 }}>تسجيل العهدة أول مرة — الأدوات والمواد<span className="bn">প্রথমবার সরঞ্জাম নিবন্ধন</span></h2>
+      {rejection !== null && rejection !== undefined && <div className="bp-asrej"><b>رُفض تسجيلك السابق · <span className="bn">আগের নিবন্ধন প্রত্যাখ্যাত</span></b>
+        <div>السبب · <span className="bn">কারণ</span>: {rejection || "—"}</div><div>صحّح وأعد الإرسال · <span className="bn">ঠিক করে আবার পাঠান</span></div></div>}
       <div className="bp-note" style={{ marginBottom: 4 }}>حدّد ما استلمته، والكمية، وحالته، وصوّر الصنف. · আপনি যা পেয়েছেন তা নির্বাচন করুন, পরিমাণ ও অবস্থা দিন এবং ছবি তুলুন।</div>
 
       <div className={"bp-chklist" + (fe && fe.field === "as_list" ? " k-inv" : "")} id="as_list" tabIndex={-1}>
@@ -1210,23 +1208,110 @@ function Assets({ me }) {
         <Btn kind="primary" block big busy={busy} disabled={!online} onClick={submit} bn={busy ? "সংরক্ষণ হচ্ছে…" : "ঘোষণা সংরক্ষণ"}>{busy ? "جارٍ الحفظ…" : "حفظ إقرار العهدة"}</Btn>
         {!online && <OfflineHint />}
       </StickyBar>
-    </div></div>
-    <div className="bp-card g-card"><div className="bp-sec">
-      <label className="bp-lbl" style={{ marginTop: 0 }}>آخر إقراراتك <span className="bn">/ সর্বশেষ ঘোষণা</span></label>
-      <div className="bp-list">
-        {recent === null ? <Skel rows={2} card={false} /> : recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
-          recent.map(r => {
-            const its = Array.isArray(r.items) ? r.items : [];
-            return (
-              <div className="bp-item" key={r.id}>
-                <div className="t">{its.length} عنصر · {its.length} টি সরঞ্জাম<StatusBadge s={r.status} /></div>
-                <div className="m">{its.map(x => `${x.name_ar}${x.qty > 1 ? "×" + x.qty : ""} (${condAr(x.condition)}${x.note ? " — " + x.note : ""})`).join("، ")}</div>
-                {replacementsOf(its).length > 0 && <div className="m" style={{ color: "var(--bad-ink)", fontWeight: 700 }}>🔁 استبدال · বদল: {replacementsOf(its).map(x => x.name + (x.ref ? " (" + x.ref + ")" : "")).join("، ")}</div>}
-                <div className="m">{new Date(r.created_at).toLocaleString("ar")}</div>
-              </div>
-            );
-          })}
-      </div>
     </div></div></>
   );
+}
+/* تبويب «العهدة»: تسجيل أول مرة (بانتظار الاعتماد) ثم «عهدتي الحالية» وتحديث حالة كل قطعة باعتماد — docs/sql/custody_lifecycle.sql */
+function Assets({ me }) {
+  const bid = me.biker_employee_id;
+  const [decls, setDecls] = useState(null), [pieces, setPieces] = useState(null), [loadErr, setLoadErr] = useState(null);
+  async function load() {
+    setLoadErr(null);
+    const [a, b] = await Promise.all([
+      supabase.from("biker_assets").select("id,kind,asset_id,items,notes,status,reject_reason,reviewed_at,request_id,created_at")
+        .eq("biker_employee_id", bid).order("created_at", { ascending: false }).limit(300),
+      // RLS (ca_biker_sel) يقصرها على قطع البايكر؛ sweater_id = رقمه في كل السجلات
+      supabase.from("custody_assets").select("id,item_type,category,name,name_en,start_date,end_date,life_months,status,reorder_request_id,source,created_at")
+        .eq("sweater_id", bid).order("name"),
+    ]);
+    if (a.error || b.error) { setLoadErr(a.error || b.error); setDecls(d => d || []); setPieces(p => p || []); return; }
+    setDecls(a.data || []); setPieces(b.data || []);
+  }
+  useEffect(() => { load(); }, []);
+  if (decls === null) return <div className="bp-card g-card"><div className="bp-sec"><Skel rows={3} card={false} /></div></div>;
+  if (loadErr) return <div className="bp-card g-card"><div className="bp-sec"><ErrorNote e={humanError(loadErr)} who={bid} onRetry={load} onLogin={() => supabase.auth.signOut()} /></div></div>;
+  const bs = baselineState(decls);
+  if (bs.state === "none" || bs.state === "rejected") return <BaselineForm me={me} rejection={bs.state === "rejected" ? (bs.row.reject_reason || "") : null} onSaved={load} />;
+  if (bs.state === "pending") {
+    const its = Array.isArray(bs.row.items) ? bs.row.items : [];
+    return (<div className="bp-card g-card"><div className="bp-sec">
+      <h2 className="bp-wiz-h" style={{ marginTop: 0 }}>تسجيل العهدة بانتظار الاعتماد<span className="bn">নিবন্ধন অনুমোদনের অপেক্ষায়</span></h2>
+      <div className="bp-aspend">⏳ أُرسل {new Date(bs.row.created_at).toLocaleDateString("ar")} · {its.length} صنف — يراجعه المسؤول ويصلك إشعار. · <span className="bn">পাঠানো হয়েছে — অনুমোদন হলে জানানো হবে।</span></div>
+      <div className="bp-list" style={{ marginTop: 10 }}>{its.map((x, i) => <div className="bp-item" key={i}><div className="t">{x.name_ar || x.key}{x.qty > 1 ? " ×" + x.qty : ""}</div><div className="m">{condAr(x.condition)}{x.note ? " — " + x.note : ""}</div></div>)}</div>
+    </div></div>);
+  }
+  return <MyCustody me={me} pieces={myPieces(pieces)} decls={decls} onSaved={load} />;
+}
+
+function MyCustody({ me, pieces, decls, onSaved }) {
+  const [open, setOpen] = useState(null);
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+  return (<div className="bp-card g-card"><div className="bp-sec">
+    <h2 className="bp-wiz-h" style={{ marginTop: 0 }}>عهدتي الحالية<span className="bn">আমার বর্তমান সরঞ্জাম</span></h2>
+    <div className="bp-note" style={{ marginBottom: 8 }}>إذا تغيّرت حالة قطعة صوّرها وحدّث حالتها. · কোনো সরঞ্জামের অবস্থা বদলালে ছবি তুলে আপডেট করুন।</div>
+    {pieces.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا قطع مسجّلة بعد · <span className="bn">এখনও কোনো সরঞ্জাম নেই</span></b></div> :
+      <div className="bp-list">{pieces.map(p => {
+        const st = pieceState(p, decls), left = remainingDays(p, today);
+        return (<div className={"bp-item bp-piece" + (p.status === "due" ? " due" : "")} key={p.id}>
+          <div className="t">{p.name}<span className="bn" style={{ fontWeight: 600 }}>{p.name_en || ""}</span></div>
+          <div className="m">الحالة · <span className="bn">অবস্থা</span>: <b>{st.condition ? condAr(st.condition) + " / " + condBn(st.condition) : "—"}</b>
+            {left !== null && <> · {left >= 0 ? `متبقٍ ${left} يوم · ${left} দিন বাকি` : `انتهى عمرها منذ ${-left} يوم · মেয়াদ শেষ`}</>}</div>
+          {p.status === "due" && <div className="m" style={{ color: "var(--bad-ink)", fontWeight: 700 }}>🔁 بانتظار الاستبدال · বদলের অপেক্ষায়</div>}
+          {st.pending && <div className="m bp-aspend">⏳ تحديث بانتظار الاعتماد · আপডেট অনুমোদনের অপেক্ষায়</div>}
+          {st.lastRejection !== null && !st.pending && <div className="m" style={{ color: "var(--bad-ink)" }}>رُفض آخر تحديث · <span className="bn">শেষ আপডেট প্রত্যাখ্যাত</span>: {st.lastRejection || "—"}</div>}
+          {st.canUpdate && open !== p.id && <div style={{ marginTop: 8 }}><Btn kind="secondary" onClick={() => setOpen(p.id)} bn="অবস্থা আপডেট">تحديث الحالة</Btn></div>}
+          {open === p.id && <PieceUpdate me={me} piece={p} onClose={() => setOpen(null)} onSaved={() => { setOpen(null); onSaved(); }} />}
+        </div>);
+      })}</div>}
+  </div></div>);
+}
+
+function PieceUpdate({ me, piece, onClose, onSaved }) {
+  const [f, setF] = useState({ condition: "", photo: null, note: "" });
+  const [fe, setFe] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false);
+  const toast = useToast(); const online = useOnline();
+  const id = k => `pu_${k}_${piece.id}`;
+  const set = patch => { setF(s => ({ ...s, ...patch })); setFe(null); };
+  async function submit() {
+    setErr(null);
+    const e = updateError(f); if (e) { setFe(e); return; }
+    setBusy(true);
+    try {
+      const c = catalogOfAsset(piece);
+      const photoUrl = await uploadPhoto(f.photo, "asset-update", me.biker_employee_id);
+      const item = declarationItem({ key: c ? c.key : piece.name, ar: piece.name, bn: piece.name_en || "" }, { qty: 1, condition: f.condition, note: f.note }, photoUrl);
+      const { error } = await supabase.from("biker_assets").insert({
+        operator_id: me.operator_id, biker_employee_id: me.biker_employee_id, biker_name: me.name, kind: "update", asset_id: piece.id,
+        items: [item], pledge_accepted: true, status: "declared", created_by: me.uid,
+      });
+      if (error) throw error;
+      toast.ok("أُرسل التحديث للاعتماد ✓", "অনুমোদনের জন্য পাঠানো হয়েছে", 4000);
+      onSaved();
+    } catch (x) { setErr(humanError(x)); }
+    setBusy(false);
+  }
+  return (<div className="bp-pupd">
+    <label className="bp-lbl" htmlFor={id("c")} style={{ margin: "0 0 4px", fontSize: 11.5 }}>الحالة الآن · <span className="bn">এখনকার অবস্থা</span></label>
+    <select id={id("c")} className={"g-select bp-sel" + (fe && fe.field === "condition" ? " k-inv" : "")} value={f.condition} onChange={e => set({ condition: e.target.value })} style={{ padding: "9px 11px" }}>
+      <option value="">— اختر · নির্বাচন করুন —</option>
+      {CONDITIONS.map(c => <option key={c.v} value={c.v}>{c.ar} / {c.bn}</option>)}
+    </select>
+    <label className="bp-lbl" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>صورة القطعة (إلزامي) · <span className="bn">ছবি (বাধ্যতামূলক)</span></label>
+    <label className={"bp-acap" + (fe && fe.field === "photo" ? " k-inv" : "")} htmlFor={id("p")}>
+      {f.photo ? <img className="bp-athumb" src={URL.createObjectURL(f.photo)} alt="" /> : <>📷 تصوير القطعة · ছবি তুলুন</>}
+      {f.photo && <span className="bp-done">✓ تم · হয়েছে</span>}
+      <input id={id("p")} type="file" accept="image/*" capture="environment" onChange={e => set({ photo: (e.target.files || [])[0] || null })} />
+    </label>
+    <label className="bp-lbl" htmlFor={id("n")} style={{ margin: "8px 0 4px", fontSize: 11.5 }}>
+      وش التالف بالضبط؟ · <span className="bn">ঠিক কী নষ্ট?</span>{isBad(f.condition) ? <b style={{ color: "var(--bad-ink)" }}> *</b> : <span style={{ fontWeight: 500 }}> (اختياري · ঐচ্ছিক)</span>}
+    </label>
+    <textarea id={id("n")} className={"g-textarea bp-ta" + (fe && fe.field === "note" ? " k-inv" : "")} rows={2} value={f.note} onChange={e => set({ note: e.target.value })} style={{ minHeight: 56 }} />
+    {fe && <FieldErr t={fe} />}
+    {err && <div style={{ marginTop: 10 }}><ErrorNote e={err} who={me.biker_employee_id} busy={busy} onRetry={submit} onLogin={() => supabase.auth.signOut()} /></div>}
+    <div className="bp-row" style={{ gap: 8, marginTop: 10 }}>
+      <Btn kind="primary" busy={busy} disabled={!online} onClick={submit} bn="পাঠান">{busy ? "جارٍ الإرسال…" : "إرسال للاعتماد"}</Btn>
+      <Btn kind="secondary" onClick={onClose} bn="বাতিল">إلغاء</Btn>
+    </div>
+    {!online && <OfflineHint />}
+  </div>);
 }
