@@ -4,33 +4,13 @@ import Icon from"./Icon";
 import{useToast}from"./ui";
 import ActivityLog from"./ActivityLog";
 import CustodyDeclarations from"./CustodyDeclarations";
+import{timeline,replacementRow}from"./custodyLifecycle";
 const CU_FL={name:"العهدة",status:"الحالة",start_date:"البداية",end_date:"النهاية",biker_name:"البايكر",sweater_id:"رقم البايكر",life_months:"العمر (شهر)",category:"الفئة"};
 const CU_DV={active:"نشطة",due:"مستحقة",replaced:"مُستبدلة",returned:"مُرجعة",planned:"مخطّطة"};
 
-// كتالوج عُهد سويتر (Biker Tools) — العمر الافتراضي بالأشهر ومهلة التخطيط بالأيام
-// mode: buy (دراجة → تخطيط شراء) · replace (أصل معمّر → استبدال) · reorder (مستهلك → طلب سويتر)
-export const CATALOG=[
-  {key:"moto",name:"الدراجة النارية",en:"Motorcycle",type:"motorcycle",category:"مركبة",life:36,lead:90,mode:"buy"},
-  {key:"uniform",name:"الزي الرسمي",en:"Official Uniform",type:"uniform",category:"زي",life:12,lead:45,mode:"replace"},
-  {key:"helmet",name:"الخوذة",en:"Helmet",type:"safety",category:"معدات حماية",life:24,lead:60,mode:"replace"},
-  {key:"chest",name:"الصدرية (واقي الصدر)",en:"Safety Chest",type:"safety",category:"معدات حماية",life:24,lead:60,mode:"replace"},
-  {key:"handsleg",name:"واقي اليدين والأرجل",en:"Safety Hands & Legs",type:"safety",category:"معدات حماية",life:24,lead:60,mode:"replace"},
-  {key:"shoes",name:"حذاء السلامة",en:"Safety Shoes",type:"safety",category:"معدات حماية",life:12,lead:45,mode:"replace"},
-  {key:"vacuum",name:"المكنسة",en:"Vacuum Cleaner",type:"tool",category:"أدوات",life:18,lead:45,mode:"replace"},
-  {key:"watergun",name:"مسدس الماء",en:"Water Gun",type:"tool",category:"أدوات",life:12,lead:30,mode:"replace"},
-  {key:"watermotor",name:"موتور الماء",en:"Water Motor",type:"tool",category:"أدوات",life:18,lead:45,mode:"replace"},
-  {key:"headlight",name:"كشّاف الرأس",en:"Headlight",type:"tool",category:"أدوات",life:12,lead:30,mode:"replace"},
-  {key:"servicebox",name:"صندوق الخدمة",en:"Service Box",type:"tool",category:"أدوات",life:24,lead:45,mode:"replace"},
-  {key:"brushes",name:"الفرش (إطارات/مكيّف/أرضية/صغيرة)",en:"Brushes set",type:"tool",category:"أدوات",life:6,lead:14,mode:"replace"},
-  {key:"dash",name:"ملمّع الدَّشبورد",en:"Dashboard Polish",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
-  {key:"tyrepol",name:"ملمّع الإطارات",en:"Tyre Polish",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
-  {key:"stain",name:"مزيل البقع",en:"Stain Remover",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
-  {key:"lasttouch",name:"اللمسة الأخيرة",en:"Last Touch",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
-  {key:"glass",name:"منظّف الزجاج",en:"Glass Cleaner",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
-  {key:"soap",name:"صابون/شامبو",en:"Soap/Shampoo",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
-  {key:"sponge",name:"إسفنجات (بودي/إطارات)",en:"Sponges",type:"sponge",category:"مستهلكات",life:2,lead:7,mode:"reorder"},
-  {key:"towels",name:"مناشف ميكروفايبر (4 ألوان)",en:"Microfiber towels",type:"towel",category:"مستهلكات",life:2,lead:7,mode:"reorder"},
-];
+// الكتالوج وخريطة أصناف بوابة البايكر في ملف مستقل (تستعمله البوابة أيضاً)
+import{CATALOG}from"./custodyCatalog";
+export{CATALOG};
 const MODE_OF=t=>t==="motorcycle"?"buy":["cleaning","sponge","towel","consumable"].includes(t)?"reorder":"replace";
 const addMonths=(iso,m)=>{const d=new Date(iso);d.setMonth(d.getMonth()+Math.round(m));return d.toISOString().slice(0,10);};
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
@@ -43,16 +23,19 @@ export default function Custody({opId,owner,onGo}){
   const setMsg=m=>{if(m&&m.ok){toast.ok(m.t,undefined,m.t.length>60?7000:undefined);setMsgRaw(null);}else setMsgRaw(m);};const[tab,setTab]=useState("all");
   const[showAdd,setShowAdd]=useState(false);const[showExtract,setShowExtract]=useState(false);
   const[rounds,setRounds]=useState([]);const[exRound,setExRound]=useState("");
+  const[decls,setDecls]=useState([]);const[tlOpen,setTlOpen]=useState(null);const[rev,setRev]=useState(0);
   const[f,setF]=useState({sweater_id:"",catKey:"moto",name:"",start_date:today(),life_months:36,lead_days:90,cost:""});
 
   useEffect(()=>{(async()=>{
     setLoading(true);
-    const[{data:e},ca]=await Promise.all([
+    const[{data:e},ca,ba]=await Promise.all([
       supabase.from("employees").select("id,full_name,employee_id").not("employee_id","is",null).order("employee_id"),
       (()=>{let q=supabase.from("custody_assets").select("*").order("end_date",{ascending:true});if(opId&&opId!=="all")q=q.or("operator_id.eq."+opId+",operator_id.is.null");return q;})(),
+      // تصريحات البوابة (تسجيل أول/تحديث حالة) لسجل كل قطعة
+      supabase.from("biker_assets").select("id,kind,asset_id,items,status,reject_reason,reviewed_at,request_id,created_at").order("created_at",{ascending:false}).limit(500),
     ]);
-    setEmps(e||[]);setRows(ca.data||[]);setLoading(false);
-  })();},[opId]);
+    setEmps(e||[]);setRows(ca.data||[]);setDecls(ba.data||[]);setLoading(false);
+  })();},[opId,rev]);
 
   const empBySid=useMemo(()=>{const m={};emps.forEach(x=>{if(x.employee_id)m[String(x.employee_id).trim()]=x;});return m;},[emps]);
   const dep=r=>{const life=(r.life_months||12)*30;const age=Math.max(0,daysBetween(r.start_date,today()));const end=r.end_date||addMonths(r.start_date,r.life_months||12);const rem=daysBetween(today(),end);const used=Math.min(100,Math.max(0,Math.round(age/life*100)));const due=r.status!=="replaced"&&r.status!=="returned"&&rem<=(r.lead_days||60);return{age,rem,used,end,due};};
@@ -117,7 +100,16 @@ export default function Custody({opId,owner,onGo}){
     if(data)setRows(p=>p.map(x=>x.id===r.id?data:x));
     setMsg({ok:true,t:r.item_type==="motorcycle"?"وُسمت الدراجة ضمن خطة الشراء":"وُسمت العُهدة للاستبدال"});
   };
-  const markReplaced=async(r)=>{const{data}=await supabase.from("custody_assets").update({status:"replaced"}).eq("id",r.id).select().single();if(data)setRows(p=>p.map(x=>x.id===r.id?data:x));};
+  // الاستبدال الفعلي: القديمة «مُستبدلة»، وقطعة جديدة من نفس الصنف تبدأ اليوم بعمر كامل
+  const markReplaced=async(r)=>{
+    if(!confirm(`تأكيد استبدال «${r.name}» لـ ${r.biker_name||"—"}؟ تبدأ قطعة جديدة اليوم بعمر كامل.`))return;
+    const t=today();
+    const{data:old,error}=await supabase.from("custody_assets").update({status:"replaced",notes:(r.notes?r.notes+" · ":"")+`استُبدلت ${t}`}).eq("id",r.id).select().single();
+    if(error||!old){setMsg({ok:false,t:"تعذّر الاستبدال: "+((error&&error.message)||"لا صلاحية")});return;}
+    const{data:nw,error:e2}=await supabase.from("custody_assets").insert(replacementRow(r,t)).select().single();
+    setRows(p=>[...p.map(x=>x.id===r.id?old:x),...(nw?[nw]:[])]);
+    setMsg(e2?{ok:false,t:"استُبدلت القديمة لكن تعذّر إنشاء البديلة: "+e2.message}:{ok:true,t:`استُبدلت ✓ — بدأت «${r.name}» جديدة اليوم حتى ${nw.end_date}`});
+  };
   const del=async(r)=>{if(!confirm("حذف العُهدة؟"))return;const{error}=await supabase.from("custody_assets").delete().eq("id",r.id);if(!error)setRows(p=>p.filter(x=>x.id!==r.id));};
 
   if(loading)return<div className="g-skel" style={{height:280}}/>;
@@ -129,7 +121,7 @@ export default function Custody({opId,owner,onGo}){
       <button className="cu-btn ghost" onClick={openExtract}><Icon n="rounds" s={15}/> استخراج من جولة</button>
     </div>
     {msg&&<div className={"cu-msg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
-    <CustodyDeclarations opId={opId} onGo={onGo}/>
+    <CustodyDeclarations opId={opId} onGo={onGo} onChanged={()=>setRev(v=>v+1)}/>
 
     {showAdd&&<div className="cu-form">
       <div className="cu-grid">
@@ -181,10 +173,12 @@ export default function Custody({opId,owner,onGo}){
           {r.status!=="replaced"&&d.due&&mode==="buy"&&<button className="cu-b buy" onClick={()=>planReplace(r)}><Icon n="bike" s={13}/> خطّط لشراء دراجة</button>}
           {r.status!=="replaced"&&d.due&&mode==="replace"&&<button className="cu-b plan" onClick={()=>planReplace(r)}><Icon n="alert" s={13}/> خطّط للاستبدال</button>}
           {r.status!=="replaced"&&<button className="cu-b done" onClick={()=>markReplaced(r)}><Icon n="check" s={13}/> استُبدلت</button>}
+          <button className="cu-b" onClick={()=>setTlOpen(tlOpen===r.id?null:r.id)} aria-expanded={tlOpen===r.id}><Icon n="clock" s={13}/> سجل القطعة</button>
           <ActivityLog table="custody_assets" rowId={r.id} labels={CU_FL} valueMap={CU_DV} entityName="العهدة"/>
           <div style={{flex:1}}/>
           {owner&&<button className="cu-b del" onClick={()=>del(r)}><Icon n="trash" s={12}/></button>}
         </div>
+        {tlOpen===r.id&&<ol className="cu-tl">{timeline(r,decls).map((ev,i)=><li key={i} className={"cu-tl-"+ev.type}><span className="cu-tl-at">{String(ev.at||"").slice(0,10)||"—"}</span><span>{ev.ar}</span>{ev.photo&&<a href={ev.photo} target="_blank" rel="noreferrer">صورة</a>}</li>)}</ol>}
       </div>);})}
   </div>);
 }
@@ -192,6 +186,9 @@ function K({ic,c,bg,t,v}){return(<div className="cu-kpi"><span className="cu-ki"
 
 const CSS=`
 .cu{--b:var(--p)}
+.cu-tl{list-style:none;margin:8px 0 0;padding:8px 10px;border-top:1px dashed var(--line);display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink-2)}
+.cu-tl li{display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;overflow-wrap:anywhere}.cu-tl-at{color:var(--mut);font-size:11px;font-variant-numeric:tabular-nums}
+.cu-tl a{color:var(--b);font-weight:800;font-size:11px}.cu-tl-rejected{color:var(--bad-ink)}.cu-tl-approved{color:var(--ok-ink)}.cu-tl-replaced{font-weight:800}
 .cu-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .cu-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:11px;border:none;background:var(--ink);color:var(--bg);font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
 .cu-btn.ghost{background:var(--glass-2);border:1px solid var(--line-2);color:var(--ink-2)}
