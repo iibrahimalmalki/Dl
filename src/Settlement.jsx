@@ -4,11 +4,20 @@ import Icon from"./Icon";
 import{useToast}from"./ui";
 import{settlementLine,MIN_GUARANTEE_ORDERS,SSP_CONTRACT,tiersActive}from"./sweaterContract";
 import{stageOf,stageLabel,isLocked}from"./settlementStatus";
+import{reconcileMonth}from"./monthRecon";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" ﷼";
 const int=n=>Number(n||0).toLocaleString("en-US");
 const curMonth=()=>new Date().toISOString().slice(0,7);
 const periodAr=p=>{if(!p)return"—";const[y,m]=String(p).split("-");const M=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];return`${M[(+m||1)-1]} ${y}`;};
+// إجمالي وصافي كل بايكر من العمليات بمعادلة كشف سويتر (أونلاين + إضافات = الإجمالي؛ − خصم − صيانة − غسلات مجانية = الصافي)
+async function opsTotals(period){
+  const q=(t,c)=>supabase.from(t).select(c).eq("period",period);
+  const[bm,adj,tk]=await Promise.all([q("ops_biker_month","employee_id,sweater_id,biker_name,net_washes,rating,complaint_pct"),q("sweater_adjustments","kind,sweater_id"),q("ops_tickets","sweater_id,compensation")]);
+  const ops=bm.data||[];
+  const res=reconcileMonth({bikers:ops,adjustments:adj.data||[],tickets:tk.data||[],violations:[],sweater:{},period});
+  return ops.map(o=>{const r=res.rows.find(x=>x.sweater_id===String(o.sweater_id||"").trim())||{};return{...o,total:r.totalWashes??Number(o.net_washes||0),net:r.netCalc??Number(o.net_washes||0)};});
+}
 const fmtDate=d=>{if(!d)return"—";try{return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric"});}catch{return d;}};
 
 // بيانات المؤسسة الرسمية (من عقد الشراكة)
@@ -159,24 +168,26 @@ export default function Settlement({opId,me,owner}){
       const{data:ls}=await supabase.from("sweater_settlement_lines").select("*").eq("settlement_id",h[0].id);
       setHead({id:h[0].id,invoice_amount:h[0].invoice_amount??"",invoice_ref:h[0].invoice_ref||"",notes:h[0].notes||"",status:h[0].status||"draft",net_total:h[0].net_total??"",
         paid:!!h[0].paid,paid_amount:h[0].paid_amount??"",paid_at:h[0].paid_at?String(h[0].paid_at).slice(0,10):"",payment_ref:h[0].payment_ref||"",payment_method:h[0].payment_method||"",payment_receipt_url:h[0].payment_receipt_url||"",receipt_voucher_no:h[0].receipt_voucher_no||""});
-      setLines((ls||[]).map(l=>({employee_id:l.employee_id,biker_name:l.biker_name,orders:l.orders??0,rating:l.rating??"",complaints_pct:l.complaints_pct??"",tickets_pct:l.tickets_pct??""})));
+      // الإجمالي غير محفوظ في السطور ⇒ يُعاد من العمليات (غير متوفر ⇒ = الصافي)
+      const tots=await opsTotals(p).catch(()=>[]);
+      setLines((ls||[]).map(l=>{const t=tots.find(x=>x.employee_id&&x.employee_id===l.employee_id);return{employee_id:l.employee_id,biker_name:l.biker_name,orders:l.orders??0,total:t?t.total:(l.orders??0),rating:l.rating??"",complaints_pct:l.complaints_pct??"",tickets_pct:l.tickets_pct??""};}));
     }else{setHead({invoice_amount:"",invoice_ref:"",notes:"",status:"draft",paid:false,paid_amount:"",paid_at:"",payment_ref:"",payment_method:"",payment_receipt_url:"",receipt_voucher_no:""});setLines([]);}
     setLoading(false);
   };
   useEffect(()=>{loadPeriod(period);/*eslint-disable-next-line*/},[period]);
 
   const genFromOps=async()=>{
-    const{data}=await supabase.from("ops_biker_month").select("employee_id,biker_name,net_washes,rating,complaint_pct").eq("period",period);
+    const data=await opsTotals(period).catch(()=>[]);
     if(!data||!data.length){note(false,"لا بيانات عمليات لهذه الفترة — أضِف البايكرز يدوياً");return;}
-    setLines(data.map(o=>({employee_id:o.employee_id,biker_name:o.biker_name,orders:Number(o.net_washes||0),rating:o.rating??"",complaints_pct:o.complaint_pct??"",tickets_pct:""})));
+    setLines(data.map(o=>({employee_id:o.employee_id,biker_name:o.biker_name,orders:o.net,total:o.total,rating:o.rating??"",complaints_pct:o.complaint_pct??"",tickets_pct:""})));
     note(true,`تم توليد ${data.length} سطراً من العمليات`);
   };
-  const addLine=()=>setLines([...lines,{employee_id:"",biker_name:"",orders:MIN_GUARANTEE_ORDERS,rating:"",complaints_pct:"",tickets_pct:""}]);
+  const addLine=()=>setLines([...lines,{employee_id:"",biker_name:"",orders:0,total:"",rating:"",complaints_pct:"",tickets_pct:""}]);
   const setLine=(i,k,v)=>setLines(lines.map((l,j)=>j===i?{...l,[k]:v}:l));
   const setLineEmp=(i,id)=>{const e=emps.find(x=>x.id===id);setLines(lines.map((l,j)=>j===i?{...l,employee_id:id,biker_name:e?e.full_name+(e.employee_id?" ("+e.employee_id+")":""):l.biker_name}:l));};
   const rmLine=i=>setLines(lines.filter((_,j)=>j!==i));
 
-  const calc=useMemo(()=>lines.map(l=>({l,c:settlementLine({orders:l.orders,rating:l.rating,complaintsPct:l.complaints_pct,ticketsPct:l.tickets_pct,period})})),[lines,period]);
+  const calc=useMemo(()=>lines.map(l=>({l,c:settlementLine({orders:l.orders,total:l.total,rating:l.rating,complaintsPct:l.complaints_pct,ticketsPct:l.tickets_pct,period})})),[lines,period]);
   const tot=useMemo(()=>calc.reduce((a,{c})=>({base:a.base+c.base,incentive:a.incentive+c.incentive,deduction:a.deduction+c.deduction,net:a.net+c.net}),{base:0,incentive:0,deduction:0,net:0}),[calc]);
   // مُرسلة/مدفوعة ⇒ الصافي هو المحفوظ (الفاتورة الرسمية) ولا يُعاد احتسابه من السطور ولا يُحفظ فوقه
   const locked=!!head.id&&isLocked(head);
@@ -260,15 +271,16 @@ export default function Settlement({opId,me,owner}){
 
     {loading?<div className="g-skel" style={{height:160}}/>:
     <div className="se-panel">
-      <div className="se-ph"><b>سطور التسوية — {periodAr(period)}</b><span className="se-hint">{lines.length} بايكر · {tiersActive(period)?`نظام الشرائح · حدّ أدنى ${int(MIN_GUARANTEE_ORDERS)} طلب`:"سعر ثابت 20﷼/طلب (قبل أغسطس 2026)"}</span></div>
+      <div className="se-ph"><b>سطور التسوية — {periodAr(period)}</b><span className="se-hint">{lines.length} بايكر · {tiersActive(period)?`الشريحة من الإجمالي والدفع على الصافي · الحد الأدنى ${int(MIN_GUARANTEE_ORDERS)} غير مؤكَّد ولا يُحتسب`:"سعر ثابت 20﷼/طلب (قبل أغسطس 2026)"}</span></div>
       <div className="se-tblwrap">
       <table className="se-tbl">
-        <thead><tr><th>البايكر</th><th>الطلبات</th><th>الشريحة</th><th>السعر</th><th>الأساس</th><th>تقييم</th><th>شكاوى%</th><th>تذاكر%</th><th>حافز</th><th>خصم</th><th>الصافي</th><th></th></tr></thead>
+        <thead><tr><th>البايكر</th><th title="أونلاين + إضافات — تُحدَّد منه الشريحة">الإجمالي</th><th title="المدفوع">الصافي</th><th>الشريحة</th><th>السعر</th><th>الأساس</th><th>تقييم</th><th>شكاوى%</th><th>تذاكر%</th><th>حافز</th><th>خصم</th><th>الصافي</th><th></th></tr></thead>
         <tbody>
           {calc.map(({l,c},i)=>(<tr key={i}>
             <td className="se-emp"><select value={l.employee_id||""} onChange={e=>setLineEmp(i,e.target.value)}><option value="">— اختر —</option>{emps.map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></td>
+            <td><input className="se-num" type="number" value={l.total} placeholder={String(l.orders||0)} onChange={e=>setLine(i,"total",e.target.value)}/></td>
             <td><input className="se-num" type="number" value={l.orders} onChange={e=>setLine(i,"orders",e.target.value)}/></td>
-            <td><span className="se-tier">{typeof c.tier==="number"?"T"+c.tier:"G"}</span>{c.billableOrders>Number(l.orders||0)&&<em className="se-min" title="طُبِّق الحد الأدنى المضمون">⤴</em>}</td>
+            <td><span className="se-tier">{typeof c.tier==="number"?"T"+c.tier:"G"}</span>{c.minGap>0&&<em className="se-min" title={`دون الحد الأدنى ${MIN_GUARANTEE_ORDERS} بفارق ${c.minGap} — غير مؤكَّد ولا يُحتسب`}>⚠</em>}</td>
             <td>{money(c.unit)}</td>
             <td>{money(c.base)}</td>
             <td><input className="se-num sm" type="number" step="0.01" value={l.rating} onChange={e=>setLine(i,"rating",e.target.value)}/></td>
@@ -279,9 +291,9 @@ export default function Settlement({opId,me,owner}){
             <td><b>{money(c.net)}</b></td>
             <td><button className="se-x" onClick={()=>rmLine(i)}><Icon n="trash" s={13}/></button></td>
           </tr>))}
-          {!lines.length&&<tr><td colSpan={12} className="se-empt">لا سطور — «توليد من العمليات» أو «إضافة بايكر».</td></tr>}
+          {!lines.length&&<tr><td colSpan={13} className="se-empt">لا سطور — «توليد من العمليات» أو «إضافة بايكر».</td></tr>}
         </tbody>
-        {lines.length>0&&<tfoot><tr><td>الإجمالي</td><td>{int(calc.reduce((a,{l})=>a+Number(l.orders||0),0))}</td><td colSpan={2}></td><td><b>{money(tot.base)}</b></td><td colSpan={3}></td><td className="se-pos"><b>{money(tot.incentive)}</b></td><td className="se-neg"><b>{money(tot.deduction)}</b></td><td><b>{money(tot.net)}</b></td><td></td></tr></tfoot>}
+        {lines.length>0&&<tfoot><tr><td>المجموع</td><td>{int(calc.reduce((a,{c})=>a+Number(c.totalWashes||0),0))}</td><td>{int(calc.reduce((a,{l})=>a+Number(l.orders||0),0))}</td><td colSpan={2}></td><td><b>{money(tot.base)}</b></td><td colSpan={3}></td><td className="se-pos"><b>{money(tot.incentive)}</b></td><td className="se-neg"><b>{money(tot.deduction)}</b></td><td><b>{money(tot.net)}</b></td><td></td></tr></tfoot>}
       </table>
       </div>
     </div>}

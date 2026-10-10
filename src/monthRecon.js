@@ -1,6 +1,7 @@
 // الإقفال الشهري — الخطوة 2: مطابقة صافي ومستحق كل بايكر مع كشف سويتر (Breakdown). دوال نقية بلا Supabase.
 // المعادلة كما في كشف سويتر: الصافي = أونلاين + إضافات − خصم بايكر − صيانة − غسلات مجانية، ثم + غسلات الضمان؛
 // الإجمالي = الصافي × سعر الوحدة؛ المستحق = الإجمالي − المخالفات − التلفيات − التعويضات الأخرى.
+// الشريحة المتوقعة من «الإجمالي» (أونلاين + إضافات، قبل الخصومات) والدفع على الصافي — تأكيد سويتر 07/10/2026.
 import{payoutForBiker,tiersActive,MIN_GUARANTEE_ORDERS,PRICING_TIERS}from"./sweaterContract";
 
 export const r2=x=>Math.round((Number(x)||0)*100)/100;
@@ -34,12 +35,13 @@ export function reconcileMonth({bikers=[],adjustments=[],tickets=[],violations=[
     const freeWash=tk.filter(t=>FREE.test(String(t.compensation??""))).length;
     const otherCompCalc=r2(tk.reduce((a,t)=>a+(compAmount(t.compensation)||0),0));
     const violPlat=r2(violations.filter(v=>sid(v.sweater_id)===id).reduce((a,v)=>a+(Number(v.amount)||0),0));
-    const netCalc=online+add-deduct-maintenance-freeWash;
+    const totalWashes=online+add;
+    const netCalc=totalWashes-deduct-maintenance-freeWash;
 
     const sv={};SWEATER_FIELDS.forEach(f=>{sv[f]=num(s[f]);});
     const guarantee=sv.guarantee??0;
     const netBill=netCalc+guarantee;
-    const pe=payoutForBiker(netBill,period);
+    const pe=payoutForBiker(netBill,period,totalWashes);
     const unitExp=pe.unit,tierExp=pe.tier;
     const unit=sv.unit??unitExp;
     const gross=r2(netBill*unit);
@@ -55,13 +57,13 @@ export function reconcileMonth({bikers=[],adjustments=[],tickets=[],violations=[
     const dComp=sv.otherComp!=null?r2(sv.otherComp-otherCompCalc):null;
     // أثر فرق السعر على المستحق (موجب = علينا): «فرق 99.44 ﷼»
     const unitImpact=dUnit?r2(netBill*-dUnit):0;
-    // الحد الأدنى المضمون (ملحق التسعير، من أغسطس 2026) — للعرض فقط
+    // الحد الأدنى المضمون (ملحق التسعير، من أغسطس 2026) — غير مؤكَّد، للعرض والسؤال فقط ولا يدخل المستحق
     const belowMin=tiers&&netBill<MIN_GUARANTEE_ORDERS;
     const minGap=belowMin?MIN_GUARANTEE_ORDERS-netBill:0;
     const minGapAmount=belowMin?r2(minGap*unitExp):0;
 
     return{sweater_id:id,biker_name:(b&&b.biker_name)||s.biker_name||id,inPlatform:!!b,inSweater:sv.net!=null||sv.payable!=null,
-      online,add,deduct,maintenance,freeWash,otherCompCalc,violPlat,netCalc,
+      online,add,deduct,maintenance,freeWash,otherCompCalc,violPlat,totalWashes,netCalc,
       guarantee,netBill,unitExp,tierExp,tierSweater:sv.unit!=null?tierOfUnit(sv.unit):null,unit,gross,unitVat,grossVat,
       violations:viol,damages:dam,otherComp:oc,deductions,payableCalc,
       sweaterNet:sv.net,sweaterPayable:sv.payable,
@@ -71,7 +73,7 @@ export function reconcileMonth({bikers=[],adjustments=[],tickets=[],violations=[
 
   const sum=k=>r2(rows.reduce((a,r)=>a+(Number(r[k])||0),0));
   const totals={};
-  ["online","add","deduct","maintenance","freeWash","netCalc","guarantee","netBill","gross","grossVat","violations","damages","otherComp","deductions","payableCalc","otherCompCalc","violPlat","unitImpact"].forEach(k=>{totals[k]=sum(k);});
+  ["online","add","deduct","maintenance","freeWash","totalWashes","netCalc","guarantee","netBill","gross","grossVat","violations","damages","otherComp","deductions","payableCalc","otherCompCalc","violPlat","unitImpact"].forEach(k=>{totals[k]=sum(k);});
   totals.sweaterNet=rows.some(r=>r.sweaterNet!=null)?sum("sweaterNet"):null;
   totals.sweaterPayable=rows.some(r=>r.sweaterPayable!=null)?sum("sweaterPayable"):null;
   totals.dNet=rows.some(r=>r.dNet!=null)?sum("dNet"):null;
@@ -87,7 +89,7 @@ export function reconcileMonth({bikers=[],adjustments=[],tickets=[],violations=[
 
 // ── تنبيهات تعاقدية (ليست مطالبة مؤكدة): أسئلة عن تفسير ملحق التسعير ──
 const fm=v=>Number(v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-const tierAr=t=>t==null?"—":typeof t==="number"?`الشريحة ${t}`:t==="Golden Guarantee"?"الحد الأدنى المضمون":String(t);
+const tierAr=t=>t==null?"—":typeof t==="number"?`الشريحة ${t}`:t==="Golden Guarantee"?"دون الشريحة 1 (20﷼)":String(t);
 const tierEn=t=>t==null?"—":typeof t==="number"?`Tier ${t}`:String(t);
 // unit: السعر المطبّق أقل من المتوقع من العقد · min_guarantee: الصافي أقل من الحد الأدنى المضمون (من 2026-08)
 export function alertsOf(res,period){
@@ -96,13 +98,13 @@ export function alertsOf(res,period){
     const who=`${r.biker_name} (${r.sweater_id})`;
     if(r.dUnit!=null){const amount=r2((r.unitExp-r.unit)*r.netBill);
       if(amount>0)out.push({id:`unit:${r.sweater_id}`,sweater_id:r.sweater_id,biker_name:r.biker_name,kind:"unit",amount,orders:0,
-        unit:r.unit,unitExp:r.unitExp,netBill:r.netBill,
-        ar:`البايكر ${who}: سعر الوحدة المطبّق ${fm(r.unit)} ﷼ (${tierAr(r.tierSweater)})، والمتوقع وفق ملحق التسعير ${fm(r.unitExp)} ﷼ (${tierAr(r.tierExp)}) لصافي ${r.netBill} غسلة — الفرق ${fm(amount)} ﷼.`,
-        en:`${who}: applied unit price SAR ${fm(r.unit)} (${tierEn(r.tierSweater)}); expected per the pricing appendix SAR ${fm(r.unitExp)} (${tierEn(r.tierExp)}) for ${r.netBill} net washes — difference SAR ${fm(amount)}.`});}
+        unit:r.unit,unitExp:r.unitExp,netBill:r.netBill,totalWashes:r.totalWashes,
+        ar:`البايكر ${who}: سعر الوحدة المطبّق ${fm(r.unit)} ﷼ (${tierAr(r.tierSweater)})، والمتوقع وفق ملحق التسعير ${fm(r.unitExp)} ﷼ (${tierAr(r.tierExp)}) لإجمالي ${r.totalWashes} غسلة (صافي ${r.netBill}) — الفرق ${fm(amount)} ﷼.`,
+        en:`${who}: applied unit price SAR ${fm(r.unit)} (${tierEn(r.tierSweater)}); expected per the pricing appendix SAR ${fm(r.unitExp)} (${tierEn(r.tierExp)}) for ${r.totalWashes} total washes (${r.netBill} net) — difference SAR ${fm(amount)}.`});}
     if(tiersActive(period)&&r.inPlatform&&r.netBill<MIN_GUARANTEE_ORDERS){const orders=MIN_GUARANTEE_ORDERS-r.netBill,amount=r2(orders*r.unit);
       out.push({id:`min:${r.sweater_id}`,sweater_id:r.sweater_id,biker_name:r.biker_name,kind:"min_guarantee",amount,orders,
-        unit:r.unit,netBill:r.netBill,
-        ar:`البايكر ${who}: الصافي المطبّق ${r.netBill} غسلة، أقل من الحد الأدنى المضمون ${MIN_GUARANTEE_ORDERS} — الفارق ${orders} غسلة × ${fm(r.unit)} ﷼ = ${fm(amount)} ﷼.`,
+        unit:r.unit,netBill:r.netBill,unconfirmed:true,
+        ar:`البايكر ${who}: الصافي المطبّق ${r.netBill} غسلة، أقل من الحد الأدنى ${MIN_GUARANTEE_ORDERS} (مشروط وفق «ثانياً» من الملحق: هل كان نقص الطلبات من سويتر أم من الحضور؟) — الفارق ${orders} غسلة × ${fm(r.unit)} ﷼ = ${fm(amount)} ﷼.`,
         en:`${who}: applied net ${r.netBill} washes, below the guaranteed minimum of ${MIN_GUARANTEE_ORDERS} — shortfall ${orders} washes × SAR ${fm(r.unit)} = SAR ${fm(amount)}.`});}
   });
   return out;
