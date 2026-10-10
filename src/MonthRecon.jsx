@@ -65,7 +65,7 @@ export default function MonthRecon({period,opId,opName,me,owner,reloadKey,onStat
     let missing=false;
     if(stl.error&&COLS_MISSING(stl.error)){missing=true;stl=await q("sweater_settlements","id,operator_id,status,invoice_ref,invoice_amount,net_total");}
     const[bm,adj,tk,vio,cl]=await Promise.all([
-      q("ops_biker_month","sweater_id,biker_name,net_washes,employee_id").eq("operator_id",opId),
+      q("ops_biker_month","sweater_id,biker_name,net_washes,employee_id,rating,complaint_pct").eq("operator_id",opId),
       q("sweater_adjustments","kind,sweater_id").or(opOr(opId)),
       q("ops_tickets","sweater_id,compensation").or(opOr(opId)),
       q("violations","sweater_id,employee_id,fine_applied").eq("status","confirmed").or(opOr(opId)),
@@ -96,7 +96,7 @@ export default function MonthRecon({period,opId,opName,me,owner,reloadKey,onStat
   useEffect(()=>{if(perm&&perm.view)load();/*eslint-disable-next-line*/},[period,opId,reloadKey,perm&&perm.view]);
 
   const res=useMemo(()=>data?reconcileMonth({bikers:data.bikers,adjustments:data.adjustments,tickets:data.tickets,violations:data.violations,sweater:sw,period}):null,[data,sw,period]);
-  const alerts=useMemo(()=>res?alertsOf(res,period):[],[res,period]);
+  const alerts=useMemo(()=>res?alertsOf(res,period,{ratings:data&&data.bikers}):[],[res,period,data]);
   const picked=useMemo(()=>pickSel==null?alerts:alerts.filter(a=>pickSel.includes(a.id)),[alerts,pickSel]);
   // المطالبة = فروق الأرقام السالبة علينا + التنبيهات المختارة
   const claim=useMemo(()=>res?claimFrom(res,picked):null,[res,picked]);
