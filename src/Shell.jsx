@@ -179,7 +179,7 @@ export default function Shell({onLogout,me}){
         {view==="performance"&&<Suspense fallback={<Sk/>}><Performance opId={op} onNav={go}/></Suspense>}
         {view==="field_rounds"&&<Suspense fallback={<Sk/>}><FieldRounds opId={op} onGo={go}/></Suspense>}
         {view==="supply_requests"&&<Suspense fallback={<Sk/>}><SupplyRequests owner={owner} opId={op}/></Suspense>}
-        {view==="custody"&&<Suspense fallback={<Sk/>}><Custody owner={owner} opId={op}/></Suspense>}
+        {view==="custody"&&<Suspense fallback={<Sk/>}><Custody owner={owner} opId={op} onGo={go}/></Suspense>}
         {view==="ui_kit"&&owner&&<Suspense fallback={<Sk/>}><UiKitPage/></Suspense>}
         {view==="myteam"&&<Suspense fallback={<Sk/>}><MyTeam/></Suspense>}
         {view==="daily"&&<Suspense fallback={<Sk/>}><DailyAdmin me={me} owner={owner}/></Suspense>}
