@@ -182,9 +182,9 @@
 
 - [ ] Step 17: الأمان المرحلة 2 — إغلاق الوصول المجهول للمتقدمين والمقابلات وTMA (قرارات المالك 2026-10-11: الخطة الموحّدة معتمدة، والمرحلة 2 في أكتوبر، ودورة حياة الفاتورة أول بند في المالية):
   - الثغرة: anon يقرأ ويعدّل `applicants` (6) و`interview_sessions` (6) بسياسات true، ويقرأ `tma_invites` (0).
-  - الحل (`docs/sql/close_anon_2.sql`، **لم يُطبَّق**): `applicant_exists(p_id)` و`applicants_count()` و`submit_application(p)` (أعمدة مسموحة فقط، status=pending دائماً) و`interview_session(p_id)` (الأسئلة والحالة والاسم والرقم فقط) و`submit_interview(p_id, p_answers)` (مرة واحدة) — كلها security definer للزائر والمسجّل؛ ثم revoke all من anon على الجداول الثلاثة وحذف سياساتها. `job_ad` و`page_visits` ورفع ملفات المتقدمين (applicant-photos/licenses/videos) بلا تغيير.
+  - الحل (`docs/sql/close_anon_2.sql`، **لم يُطبَّق**): `applicants_count()` و`submit_application(p)` (أعمدة مسموحة فقط، status=pending دائماً، ترفض التكرار برقم الإقامة المطبّع تحت قفل استشاري — لا دالة «هل يوجد؟» لأنها أداة تعداد) و`interview_session(p_id)` (الأسئلة والحالة والاسم والرقم فقط) و`submit_interview(p_id, p_answers)` (مرة واحدة) — كلها security definer للزائر والمسجّل؛ ثم revoke all من anon على الجداول الثلاثة وحذف سياساتها. `job_ad` و`page_visits` ورفع ملفات المتقدمين (applicant-photos/licenses/videos) بلا تغيير.
   - الواجهة: `ApplicantForm` و`RecruitmentAd` و`InterviewPage` تستدعي الدوال؛ `TMAQuestionnaire` تعرض «الرابط غير متاح» بلا استدعاء (`TMA_PUBLIC_ENABLED=false`؛ صفحة الإدارة `TMA.jsx` للمالك كما هي).
-  - **الترتيب: المالك يشغّل الملف من SQL Editor (فيه drop policy) ثم يُدمج PR الواجهة**، ثم اختبار النماذج الثلاثة من الجوال بمتقدم تجريبي (خطة الاختبار في وصف الـPR) وحذفه من صفحة المتقدمين.
+  - **الترتيب: المالك يشغّل الملف من SQL Editor (فيه drop policy) ثم يُدمج PR الواجهة فوراً** (بين الخطوتين النماذج العامة القديمة معطّلة)، ثم اختبار النماذج الثلاثة من الجوال بمتقدم تجريبي (خطة الاختبار في وصف الـPR) وحذفه من صفحة المتقدمين.
   - الجداول الأجنبية الخمس التي كانت ضمن المرحلة 2 (entities/records/attachments/webapp_*) تُحذف بـ `drop_foreign_tables.sql` (ينتظر تشغيل المالك).
 
 **قواعد ثابتة من المالك:**

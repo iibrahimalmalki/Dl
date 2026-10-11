@@ -34,17 +34,24 @@ $$;
 -- يُدرج فقط ما يملؤه النموذج؛ الحالة والملاحظات الإدارية ورقم الطلب والسجل لا تأتي من الزائر
 create or replace function public.submit_application(p jsonb)
 returns uuid language plpgsql security definer set search_path = public as $$
-declare v_id uuid; v_iq text := btrim(coalesce(p ->> 'passport_or_iqama', ''));
+declare v_id uuid; v_iq text := btrim(coalesce(p ->> 'passport_or_iqama', '')); v_key text; k text; lim int;
 begin
   if jsonb_typeof(p) <> 'object' then raise exception 'بيانات غير صالحة'; end if;
+  -- الطول الزائد يُرفض لا يُقصّ (قصّ الجوال أو الجواب بصمت يفسد البيانات)
+  for k, lim in select * from (values ('full_name',200),('whatsapp',40),('location',200),('marital_status',40),('bangladesh_district',120),('bangladesh_city',120),('map_link',500),('saudi_city',120),('ready_for_riyadh',40),('referred_by',120),('ai_classification',60),
+      ('car_wash_description',4000),('q1_client_refusal',4000),('q2_equipment_damage',4000),('q3_left_previous_job',4000),('q4_salary_deduction',4000),('q5_one_year_goal',4000),('q6_difficult_colleague',4000),('ai_notes',4000)) v(k, lim) loop
+    if length(coalesce(p ->> k, '')) > lim then raise exception 'الحقل % أطول من المسموح (%)', k, lim; end if;
+  end loop;
   -- الأعمدة not null في الجدول: يُرفض الناقص برسالة واضحة بدل خطأ القيد
   if btrim(coalesce(p ->> 'full_name', '')) = '' or btrim(coalesce(p ->> 'whatsapp', '')) = '' or v_iq = ''
      or btrim(coalesce(p ->> 'location', '')) = '' or nullif(p ->> 'age', '') is null or nullif(p ->> 'height_cm', '') is null or nullif(p ->> 'weight_kg', '') is null then
     raise exception 'الاسم والجوال ورقم الإقامة/الجواز والموقع والعمر والطول والوزن مطلوبة';
   end if;
-  -- قفل على الرقم نفسه داخل المعاملة: إرسالان متزامنان بنفس الرقم لا يمرّان معاً (لا فهرس فريد: في الإنتاج تكرار قائم A20558187×2)
-  perform pg_advisory_xact_lock(hashtext('applicant:' || v_iq));
-  if exists (select 1 from public.applicants where btrim(passport_or_iqama) = v_iq) then
+  -- مفتاح التكرار مطبّع (حروف كبيرة بلا مسافات): 'a 20558187' = 'A20558187'. يُخزَّن الرقم كما أُدخل بعد القص.
+  v_key := upper(regexp_replace(v_iq, '\s', '', 'g'));
+  -- قفل على المفتاح داخل المعاملة: إرسالان متزامنان بنفس الرقم لا يمرّان معاً (لا فهرس فريد: في الإنتاج تكرار قائم A20558187×2)
+  perform pg_advisory_xact_lock(hashtext('applicant:' || v_key));
+  if exists (select 1 from public.applicants where upper(regexp_replace(passport_or_iqama, '\s', '', 'g')) = v_key) then
     raise exception 'DUPLICATE_APPLICANT' using errcode = '23505';
   end if;
   insert into public.applicants (
@@ -55,18 +62,18 @@ begin
     geo_score, ai_score_total, ai_score_technical, ai_score_behavioral, score_physical, score_responsibility,
     ai_classification, ai_notes, ai_evaluation_json, status)
   values (
-    left(p ->> 'full_name', 200), left(p ->> 'whatsapp', 40), left(p ->> 'location', 200),
+    p ->> 'full_name', p ->> 'whatsapp', p ->> 'location',
     nullif(p ->> 'age', '')::int, nullif(p ->> 'height_cm', '')::int, nullif(p ->> 'weight_kg', '')::int, v_iq,
-    coalesce((p ->> 'has_license')::boolean, false), left(p ->> 'marital_status', 40), coalesce(nullif(p ->> 'children_count', '')::int, 0),
+    coalesce((p ->> 'has_license')::boolean, false), p ->> 'marital_status', coalesce(nullif(p ->> 'children_count', '')::int, 0),
     p ->> 'license_image_url', p ->> 'personal_photo_url', p ->> 'driving_video_url', p ->> 'iqama_image_url', p ->> 'passport_image_url',
-    left(p ->> 'car_wash_description', 4000),
-    left(p ->> 'q1_client_refusal', 4000), left(p ->> 'q2_equipment_damage', 4000), left(p ->> 'q3_left_previous_job', 4000),
-    left(p ->> 'q4_salary_deduction', 4000), left(p ->> 'q5_one_year_goal', 4000), left(p ->> 'q6_difficult_colleague', 4000),
-    left(p ->> 'bangladesh_district', 120), left(p ->> 'bangladesh_city', 120), left(p ->> 'map_link', 500), left(p ->> 'saudi_city', 120),
-    left(p ->> 'ready_for_riyadh', 40), left(p ->> 'referred_by', 120),
+    p ->> 'car_wash_description',
+    p ->> 'q1_client_refusal', p ->> 'q2_equipment_damage', p ->> 'q3_left_previous_job',
+    p ->> 'q4_salary_deduction', p ->> 'q5_one_year_goal', p ->> 'q6_difficult_colleague',
+    p ->> 'bangladesh_district', p ->> 'bangladesh_city', p ->> 'map_link', p ->> 'saudi_city',
+    p ->> 'ready_for_riyadh', p ->> 'referred_by',
     nullif(p ->> 'geo_score', '')::numeric, nullif(p ->> 'ai_score_total', '')::numeric, nullif(p ->> 'ai_score_technical', '')::numeric,
     nullif(p ->> 'ai_score_behavioral', '')::numeric, nullif(p ->> 'score_physical', '')::numeric, nullif(p ->> 'score_responsibility', '')::numeric,
-    left(p ->> 'ai_classification', 60), left(p ->> 'ai_notes', 4000), case when jsonb_typeof(p -> 'ai_evaluation_json') = 'object' then p -> 'ai_evaluation_json' end,
+    p ->> 'ai_classification', p ->> 'ai_notes', case when jsonb_typeof(p -> 'ai_evaluation_json') = 'object' then p -> 'ai_evaluation_json' end,
     'pending')
   returning id into v_id;
   return v_id;

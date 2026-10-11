@@ -49,8 +49,9 @@ insert into tma_invites (subject_name) values ('x');`);
 ok('قبل الملف: الزائر يقرأ المتقدمين كلهم بملاحظاتهم الإدارية (الثغرة)',anon(`select count(*) from applicants where admin_notes is not null`)==='1');
 
 const file=fs.readFileSync('docs/sql/close_anon_2.sql','utf8');
-ps(file);ps(file);
-ok('الملف يُطبَّق مرتين بلا خطأ',true);
+const e1=err(file),e2=err(file);
+ok('الملف يُطبَّق مرتين بلا خطأ'+(e1||e2?' — '+String(e1||e2).slice(0,200):''),!e1&&!e2);
+if(e1||e2)process.exit(1);
 
 // ── العزل ──
 ok('الزائر: لا قراءة للمتقدمين',/permission denied/.test(anonErr(`select count(*) from applicants`)||''));
@@ -67,7 +68,8 @@ ok('submit_application: يُدرج ويُرجع المعرّف، والرقم م
 ok('… الحالة pending رغم إرسال approved، ولا ملاحظات إدارية، ورقم الطلب من التسلسل، والقيم الرقمية محوّلة',
   ps(`select status||'|'||coalesce(admin_notes,'-')||'|'||application_number||'|'||age||'|'||has_license||'|'||children_count||'|'||geo_score||'|'||(ai_evaluation_json->>'x')||'|'||coalesce(operator_id::text,'-') from applicants where id='${NEW}'`)==='pending|-|105|25|true|0|7.5|1|-');
 const FULL='"whatsapp":"y","location":"R","age":"20","height_cm":"170","weight_kg":"60"';
-ok('submit_application: التكرار يُرفض برمز DUPLICATE_APPLICANT (حتى بمسافات)',/DUPLICATE_APPLICANT/.test(anonErr(`select submit_application('{"full_name":"x",${FULL},"passport_or_iqama":" 2222222222"}'::jsonb)`)||''));
+ok('submit_application: التكرار يُرفض برمز DUPLICATE_APPLICANT (حتى بمسافات أو حروف صغيرة)',/DUPLICATE_APPLICANT/.test(anonErr(`select submit_application('{"full_name":"x",${FULL},"passport_or_iqama":" 2222222222"}'::jsonb)`)||'')&&/DUPLICATE_APPLICANT/.test(anonErr(`select submit_application('{"full_name":"x",${FULL},"passport_or_iqama":"a 20558187"}'::jsonb)`)||''));
+ok('submit_application: الطول الزائد يُرفض لا يُقصّ',/أطول من المسموح/.test(anonErr(`select submit_application('{"full_name":"x",${FULL},"passport_or_iqama":"8","whatsapp":"${'1'.repeat(41)}"}'::jsonb)`)||'')&&ps(`select count(*) from applicants where passport_or_iqama='8'`)==='0');
 ok('submit_application: النواقص (الأعمدة not null) تُرفض برسالة عربية لا بخطأ القيد',/مطلوبة/.test(anonErr(`select submit_application('{"full_name":"x","whatsapp":"y","passport_or_iqama":"5"}'::jsonb)`)||'')&&/مطلوبة/.test(anonErr(`select submit_application('{"full_name":"x",${FULL},"passport_or_iqama":"5","age":""}'::jsonb)`)||''));
 // تزامن: إرسالان بنفس الرقم في معاملتين متزامنتين ⇒ واحد فقط يمرّ (القفل الاستشاري)
 {const {spawn}=await import('node:child_process');const run=()=>new Promise(r=>{const c=spawn('psql',['-U','postgres','-h','/var/run/postgresql','-p',port,'-d',db,'-qAt','-c',`begin; set local role anon; select submit_application('{"full_name":"x",${FULL},"passport_or_iqama":"7777777777"}'::jsonb); select pg_sleep(0.3); commit;`]);let o='',e='';c.stdout.on('data',d=>o+=d);c.stderr.on('data',d=>e+=d);c.on('close',()=>r(o+e));});
