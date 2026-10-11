@@ -13,7 +13,7 @@ export const CATALOG=[
   {key:"watergun",name:"مسدس الماء",en:"Water Gun",type:"tool",category:"أدوات",life:12,lead:30,mode:"replace"},
   {key:"watermotor",name:"موتور الماء",en:"Water Motor",type:"tool",category:"أدوات",life:18,lead:45,mode:"replace"},
   {key:"headlight",name:"كشّاف الرأس",en:"Headlight",type:"tool",category:"أدوات",life:12,lead:30,mode:"replace"},
-  // water_tank: قيمة مبدئية يؤكدها المالك (24 شهراً، مهلة 45 يوماً)
+  // water_tank: 24 شهراً ومهلة 45 يوماً — اعتمدها المالك 2026-10-10
   {key:"watertank",name:"خزان الماء",en:"Water Tank",type:"tool",category:"أدوات",life:24,lead:45,mode:"replace"},
   {key:"servicebox",name:"صندوق الخدمة",en:"Service Box",type:"tool",category:"أدوات",life:24,lead:45,mode:"replace"},
   {key:"brushes",name:"الفرش (إطارات/مكيّف/أرضية/صغيرة)",en:"Brushes set",type:"tool",category:"أدوات",life:6,lead:14,mode:"replace"},
