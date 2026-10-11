@@ -30,8 +30,7 @@ function LiveUrgencyBar(){
   const[realCount,setRealCount]=useState(0);
   const[loaded,setLoaded]=useState(false);
   useEffect(()=>{
-    supabase.from("applicants").select("id",{count:"exact",head:true})
-      .then(({count})=>{setRealCount(count||0);setLoaded(true);});
+    supabase.rpc("applicants_count").then(({data})=>{setRealCount(Number(data)||0);setLoaded(true);},()=>setLoaded(true));
   },[]);
   const weeksSince = Math.max(0,Math.floor((Date.now()-LAUNCH_DATE.getTime())/(7*24*60*60*1000)));
   const total = realCount + (weeksSince*10);
@@ -218,7 +217,7 @@ export default function RecruitmentAd({onApply,onBack}){
     setSharing(true);
     let total="৫০+";
     try{
-      const{count}=await supabase.from("applicants").select("id",{count:"exact",head:true});
+      const{data:count}=await supabase.rpc("applicants_count");
       const weeksSince=Math.max(0,Math.floor((Date.now()-LAUNCH_DATE.getTime())/(7*24*60*60*1000)));
       total=((count||0)+(weeksSince*10)).toLocaleString();
     }catch(e){}

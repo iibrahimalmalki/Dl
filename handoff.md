@@ -50,7 +50,8 @@
 - `docs/sql/custody_lifecycle.sql` - **طُبِّق** 2026-10-10. `docs/sql/custody_replacement.sql` - **أُلغي** (حلّ محله custody_lifecycle.sql).
 - `supabase/functions/ticket-image-pull/index.ts` - مصدر الدالة المعدّل (غير منشور): نطاقات محددة، وفحص كل تحويل، ورفض غير الصور.
 - `docs/sql/biker_tabs.sql` - جدول صلاحيات التبويبات. **طُبِّق** في 2026-10-08، ورأس الملف يقول ذلك.
-- `docs/sql/close_anon_1.sql` و`docs/sql/close_anon_1_verify.sql` - إغلاق الوصول المجهول، المرحلة 1 (غير مطبّق).
+- `docs/sql/close_anon_1.sql` و`docs/sql/close_anon_1_verify.sql` - إغلاق الوصول المجهول، المرحلة 1 (أُغلق أثره 2026-10-08).
+- `docs/sql/close_anon_2.sql` - المرحلة 2 (**لم يُطبَّق**): 5 دوال محدودة للنماذج العامة + سحب وصول anon عن applicants/interview_sessions/tma_invites. اختباره `tests/closeAnon2Sql.test.mjs`.
 - `docs/sql/tickets_bad_images.sql` - تنظيف الشكاوى. القسم 2 طُبِّق، وحذف الملفات السبعة لم يتم.
 - `tests/*.test.mjs` - اختبارات Node؛ `npm test` يشغّلها كلها (30 ملفاً). اختبارات SQL المحلية تعمل فقط مع `PGTEST_PORT` (وإلا تُتخطّى).
 - `tests/portal360.test.mjs` - فحص بوابة البايكر على عرض 360 في Chromium (Playwright) بمحاكاة Supabase كاملة: `npm run check:360`؛ يُتخطّى بلا `PORTAL360`. الصور في `.portal360/`.
@@ -178,6 +179,13 @@
     - بطارية دراجة ميدول (عرض QT-20261011-0004): صف جديد `15402b0f…` (INSERT 1) بتاريخ **2026-10-11** ومبلغ **109.25** شاملة الضريبة، المرجع 9111102600606542.
     - سجلات جبال الساحل الآن 3: عمرة المحرك 805 (06/10)، صيانة بلا رسوم 0 (10/10)، البطارية 109.25 (11/10).
   - PR #50 (أسئلة ريال الجودة في المطابقة الشهرية) ما زال مفتوحاً بانتظار المراجعة.
+
+- [ ] Step 17: الأمان المرحلة 2 — إغلاق الوصول المجهول للمتقدمين والمقابلات وTMA (قرارات المالك 2026-10-11: الخطة الموحّدة معتمدة، والمرحلة 2 في أكتوبر، ودورة حياة الفاتورة أول بند في المالية):
+  - الثغرة: anon يقرأ ويعدّل `applicants` (6) و`interview_sessions` (6) بسياسات true، ويقرأ `tma_invites` (0).
+  - الحل (`docs/sql/close_anon_2.sql`، **لم يُطبَّق**): `applicant_exists(p_id)` و`applicants_count()` و`submit_application(p)` (أعمدة مسموحة فقط، status=pending دائماً) و`interview_session(p_id)` (الأسئلة والحالة والاسم والرقم فقط) و`submit_interview(p_id, p_answers)` (مرة واحدة) — كلها security definer للزائر والمسجّل؛ ثم revoke all من anon على الجداول الثلاثة وحذف سياساتها. `job_ad` و`page_visits` ورفع ملفات المتقدمين (applicant-photos/licenses/videos) بلا تغيير.
+  - الواجهة: `ApplicantForm` و`RecruitmentAd` و`InterviewPage` تستدعي الدوال؛ `TMAQuestionnaire` تعرض «الرابط غير متاح» بلا استدعاء (`TMA_PUBLIC_ENABLED=false`؛ صفحة الإدارة `TMA.jsx` للمالك كما هي).
+  - **الترتيب: المالك يشغّل الملف من SQL Editor (فيه drop policy) ثم يُدمج PR الواجهة**، ثم اختبار النماذج الثلاثة من الجوال بمتقدم تجريبي (خطة الاختبار في وصف الـPR) وحذفه من صفحة المتقدمين.
+  - الجداول الأجنبية الخمس التي كانت ضمن المرحلة 2 (entities/records/attachments/webapp_*) تُحذف بـ `drop_foreign_tables.sql` (ينتظر تشغيل المالك).
 
 **قواعد ثابتة من المالك:**
 - لا SQL على الإنتاج، ولا دمج في `main`، إلا بموافقة صريحة لكل خطوة.

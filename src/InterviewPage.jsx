@@ -2,11 +2,10 @@ import{useState,useEffect}from"react";import{supabase}from"./supabase";import{Th
 export default function InterviewPage({sessionId}){
   const[session,setSession]=useState(null);const[answers,setAnswers]=useState({});const[submitted,setSubmitted]=useState(false);const[loading,setLoading]=useState(true);const[submitting,setSubmitting]=useState(false);
   useEffect(()=>{load();},[sessionId]);
-  const load=async()=>{const{data}=await supabase.from("interview_sessions").select("*,applicants(full_name,application_number)").eq("id",sessionId).single();if(data){setSession(data);const i={};data.questions.forEach((_,n)=>{i[n]="";});setAnswers(i);}setLoading(false);};
+  const load=async()=>{const{data}=await supabase.rpc("interview_session",{p_id:sessionId});if(data&&data.id){setSession({...data,applicants:{full_name:data.applicant_name,application_number:data.application_number}});const i={};data.questions.forEach((_,n)=>{i[n]="";});setAnswers(i);}setLoading(false);};
   const submit=async()=>{const un=session.questions.filter((_,i)=>!answers[i]?.trim());if(un.length>0){alert("সমস্ত প্রশ্নের উত্তর দিন");return;}setSubmitting(true);
     try{const obj={};Object.keys(answers).forEach(k=>{obj[k]=answers[k];});
-      await supabase.from("interview_sessions").update({answers:obj,status:"completed",completed_at:new Date().toISOString()}).eq("id",sessionId);
-      await supabase.from("applicants").update({interview_answers:obj,interview_completed_at:new Date().toISOString(),status:"interview"}).eq("id",session.applicant_id);
+      const{error}=await supabase.rpc("submit_interview",{p_id:sessionId,p_answers:obj});if(error)throw error;
       setSubmitted(true);}catch(err){alert("ত্রুটি: "+err.message);}setSubmitting(false);};
   if(loading)return <div className="g-iso" style={{minHeight:"100dvh",background:"var(--bg)",color:"var(--ink)",display:"flex",alignItems:"center",justifyContent:"center"}}><div className="g-spin" style={{width:40,height:40}}/></div>;
   if(!session)return <div className="g-iso" style={{minHeight:"100dvh",background:"var(--bg)",color:"var(--ink)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:48}}>⚠️</div><p style={{color:"var(--bad-ink)",fontWeight:700}}>লিংকটি সঠিক নয়</p></div></div>;
