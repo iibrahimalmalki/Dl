@@ -5,7 +5,7 @@ import{ITEMS,SCALE,TOTAL_ITEMS,scoreFromAnswers,answeredCount}from"./tmaQuestion
 
 // الاستبيان العام مغلق بقرار المالك 2026-10-11 (close_anon_2.sql: الزائر بلا وصول إلى tma_invites، ولا دالة بديلة لأنه لم يُستخدم).
 // الصفحة تعرض «الرابط غير متاح» بلا أي استدعاء للقاعدة. المنطق أدناه محفوظ لإعادة التفعيل بدالة محدودة عند الحاجة.
-export const TMA_PUBLIC_ENABLED=false;
+const TMA_PUBLIC_ENABLED=false;
 export default function TMAQuestionnaire({token}){
   const[inv,setInv]=useState(null);
   const[loading,setLoading]=useState(true);
@@ -15,7 +15,7 @@ export default function TMAQuestionnaire({token}){
   const[done,setDone]=useState(false);
 
   useEffect(()=>{(async()=>{
-    if(!TMA_PUBLIC_ENABLED){setLoading(false);return;}
+    if(!TMA_PUBLIC_ENABLED)return;
     const{data}=await supabase.from("tma_invites").select("*").eq("id",token).maybeSingle();
     setInv(data||null);
     if(data){setAns(data.answers||{});if(data.status==="completed")setDone(true);}
@@ -37,8 +37,8 @@ export default function TMAQuestionnaire({token}){
   };
 
   const wrap={minHeight:"100dvh",background:"var(--bg)",color:"var(--ink)",fontFamily:"system-ui,-apple-system,'Segoe UI','Noto Sans Bengali',Tahoma,sans-serif"};
-  if(loading)return <div className="g-iso" style={{...wrap,display:"flex",alignItems:"center",justifyContent:"center"}}><div className="g-spin" style={{width:40,height:40}}/></div>;
   if(!TMA_PUBLIC_ENABLED)return <div className="g-iso" style={{...wrap,display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",padding:24}}><Orbs/><div className="g-corner"><ThemeToggle/></div><div><div style={{fontSize:48}}>🔒</div><p style={{fontWeight:800,fontSize:18,margin:"8px 0 4px"}}>الرابط غير متاح</p><p style={{color:"var(--mut)",fontWeight:700,margin:0}}>লিংকটি বর্তমানে উপলব্ধ নয়</p><p style={{color:"var(--mut)",fontSize:13,marginTop:12}}>تواصل مع الإدارة إن كنت تتوقع هذا الاستبيان. · প্রয়োজনে ম্যানেজমেন্টের সাথে যোগাযোগ করুন।</p></div></div>;
+  if(loading)return <div className="g-iso" style={{...wrap,display:"flex",alignItems:"center",justifyContent:"center"}}><div className="g-spin" style={{width:40,height:40}}/></div>;
   if(!inv)return <div className="g-iso" style={{...wrap,display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center"}}><div><div style={{fontSize:48}}>⚠️</div><p style={{color:"var(--bad-ink)",fontWeight:700}}>লিংকটি সঠিক নয় · الرابط غير صحيح</p></div></div>;
 
   if(done)return(<div className="g-iso" style={{...wrap,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32,textAlign:"center"}}><Orbs/><div className="g-corner"><ThemeToggle/></div>

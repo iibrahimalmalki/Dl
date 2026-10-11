@@ -12,8 +12,9 @@
 --   job_ad: قراءة عامة للإعلان — تبقى كما هي (ليست بيانات شخصية). page_visits: إدراج الزائر يبقى (المرحلة 1).
 --
 -- ما يحتاجه الزائر فعلاً (من حصر الكود في ApplicantForm/RecruitmentAd/InterviewPage):
---   1) هل يوجد طلب بنفس رقم الإقامة/الجواز؟           ⇒ applicant_exists(p_id)        ⇒ صح/خطأ فقط
---   2) تقديم طلب جديد                                   ⇒ submit_application(p)         ⇒ يُدرج الأعمدة المسموحة فقط، status='pending'
+--   1) تقديم طلب جديد                                   ⇒ submit_application(p)         ⇒ يُدرج الأعمدة المسموحة فقط، status='pending'،
+--      ويرفض التكرار برقم الإقامة/الجواز برمز DUPLICATE_APPLICANT (لا دالة «هل يوجد؟» منفصلة: كانت ستسمح لأي أحد بتعداد أرقام الإقامات)
+--   2) (أُلغي)
 --   3) عدد المتقدمين (شريط «تقدّم N» في الإعلان)        ⇒ applicants_count()            ⇒ رقم فقط
 --   4) فتح المقابلة برمزها                              ⇒ interview_session(p_id)       ⇒ الأسئلة والحالة واسم المتقدم ورقمه فقط
 --   5) إرسال أجوبة المقابلة                             ⇒ submit_interview(p_id, p_answers) ⇒ مرة واحدة، للجلسة غير المكتملة
@@ -23,10 +24,7 @@
 begin;
 
 -- ═══ 1) الدوال المحدودة ═══
-create or replace function public.applicant_exists(p_id text)
-returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.applicants where passport_or_iqama = btrim(coalesce(p_id, '')) and btrim(coalesce(p_id, '')) <> '');
-$$;
+drop function if exists public.applicant_exists(text);
 
 create or replace function public.applicants_count()
 returns integer language sql stable security definer set search_path = public as $$
@@ -39,10 +37,14 @@ returns uuid language plpgsql security definer set search_path = public as $$
 declare v_id uuid; v_iq text := btrim(coalesce(p ->> 'passport_or_iqama', ''));
 begin
   if jsonb_typeof(p) <> 'object' then raise exception 'بيانات غير صالحة'; end if;
-  if btrim(coalesce(p ->> 'full_name', '')) = '' or btrim(coalesce(p ->> 'whatsapp', '')) = '' or v_iq = '' then
-    raise exception 'الاسم والجوال ورقم الإقامة/الجواز مطلوبة';
+  -- الأعمدة not null في الجدول: يُرفض الناقص برسالة واضحة بدل خطأ القيد
+  if btrim(coalesce(p ->> 'full_name', '')) = '' or btrim(coalesce(p ->> 'whatsapp', '')) = '' or v_iq = ''
+     or btrim(coalesce(p ->> 'location', '')) = '' or nullif(p ->> 'age', '') is null or nullif(p ->> 'height_cm', '') is null or nullif(p ->> 'weight_kg', '') is null then
+    raise exception 'الاسم والجوال ورقم الإقامة/الجواز والموقع والعمر والطول والوزن مطلوبة';
   end if;
-  if exists (select 1 from public.applicants where passport_or_iqama = v_iq) then
+  -- قفل على الرقم نفسه داخل المعاملة: إرسالان متزامنان بنفس الرقم لا يمرّان معاً (لا فهرس فريد: في الإنتاج تكرار قائم A20558187×2)
+  perform pg_advisory_xact_lock(hashtext('applicant:' || v_iq));
+  if exists (select 1 from public.applicants where btrim(passport_or_iqama) = v_iq) then
     raise exception 'DUPLICATE_APPLICANT' using errcode = '23505';
   end if;
   insert into public.applicants (
@@ -89,16 +91,17 @@ begin
   if not found then raise exception 'INTERVIEW_NOT_FOUND'; end if;
   if s.status = 'completed' then raise exception 'INTERVIEW_COMPLETED'; end if;
   update public.interview_sessions set answers = p_answers, status = 'completed', completed_at = now() where id = p_id;
-  update public.applicants set interview_answers = p_answers, interview_completed_at = now(), status = 'interview' where id = s.applicant_id;
+  -- الأجوبة تُحفظ دائماً؛ الحالة تتقدّم إلى interview فقط من pending/interview (لا تُرجع متقدماً قُبل أو رُفض إلى المسار)
+  update public.applicants set interview_answers = p_answers, interview_completed_at = now(),
+    status = case when status in ('pending', 'interview') then 'interview' else status end where id = s.applicant_id;
   return true;
 end $$;
 
-revoke all on function public.applicant_exists(text) from public;
 revoke all on function public.applicants_count() from public;
 revoke all on function public.submit_application(jsonb) from public;
 revoke all on function public.interview_session(uuid) from public;
 revoke all on function public.submit_interview(uuid, jsonb) from public;
-grant execute on function public.applicant_exists(text), public.applicants_count(), public.submit_application(jsonb),
+grant execute on function public.applicants_count(), public.submit_application(jsonb),
   public.interview_session(uuid), public.submit_interview(uuid, jsonb) to anon, authenticated;
 
 -- ═══ 2) سحب وصول الزائر للجداول الثلاثة ═══
@@ -120,7 +123,7 @@ commit;
 -- select table_name, string_agg(privilege_type, ',') from information_schema.role_table_grants
 --   where grantee = 'anon' and table_name in ('applicants','interview_sessions','tma_invites') group by 1;   -- لا صفوف
 -- select tablename, policyname from pg_policies where tablename in ('applicants','interview_sessions','tma_invites') and roles::text like '%anon%';  -- لا صفوف
--- select proname, prosecdef from pg_proc where proname in ('applicant_exists','applicants_count','submit_application','interview_session','submit_interview');  -- 5 صفوف، prosecdef = t
+-- select proname, prosecdef from pg_proc where proname in ('applicants_count','submit_application','interview_session','submit_interview');  -- 4 صفوف، prosecdef = t
 -- select has_function_privilege('anon', 'public.submit_application(jsonb)', 'execute');  -- t
 -- اختبار عزل بمفتاح الزائر (من المتصفح أو curl بلا توكن): GET /rest/v1/applicants?select=id ⇒ 401/403 أو [] ، و rpc/applicants_count ⇒ رقم.
 
@@ -136,7 +139,7 @@ commit;
 -- create policy iv_anon_update on public.interview_sessions for update to anon using (true) with check (true);
 -- create policy tma_inv_anon_read on public.tma_invites for select to anon using (true);
 -- create policy tma_inv_anon_answer on public.tma_invites for update to anon using (status <> 'completed') with check (true);
--- drop function if exists public.applicant_exists(text), public.applicants_count(), public.submit_application(jsonb),
+-- drop function if exists public.applicants_count(), public.submit_application(jsonb),
 --   public.interview_session(uuid), public.submit_interview(uuid, jsonb);
 -- commit;
 -- (التراجع يعيد الواجهة القديمة إلى العمل؛ الواجهة الجديدة تحتاج الدوال)

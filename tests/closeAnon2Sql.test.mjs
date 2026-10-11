@@ -20,7 +20,7 @@ ps(`do $$ begin create role anon; exception when others then null; end $$;
 do $$ begin create role authenticated; exception when others then null; end $$;
 create schema auth; create function auth.uid() returns uuid language sql stable as $f$ select null::uuid $f$;
 create sequence applicant_number_seq start 101;
-create table public.applicants (id uuid primary key default gen_random_uuid(), full_name text, whatsapp text, location text, age int, height_cm int, weight_kg int, passport_or_iqama text, has_license boolean default false,
+create table public.applicants (id uuid primary key default gen_random_uuid(), full_name text not null, whatsapp text not null, location text not null, age int not null, height_cm int not null, weight_kg int not null, passport_or_iqama text not null, has_license boolean not null default false,
   license_image_url text, personal_photo_url text, driving_video_url text, iqama_image_url text, passport_image_url text, car_wash_description text,
   q1_client_refusal text, q2_equipment_damage text, q3_left_previous_job text, q4_salary_deduction text, q5_one_year_goal text, q6_difficult_colleague text,
   ai_score_total numeric, ai_score_technical numeric, ai_score_behavioral numeric, ai_classification text, ai_notes text, ai_evaluation_json jsonb, status text default 'pending', admin_notes text,
@@ -29,13 +29,21 @@ create table public.applicants (id uuid primary key default gen_random_uuid(), f
   geo_score numeric, map_link text, status_history jsonb default '[]', referred_by text, operator_id uuid);
 create table public.interview_sessions (id uuid primary key default gen_random_uuid(), applicant_id uuid, questions jsonb, answers jsonb, status text default 'pending', scheduled_at timestamptz, completed_at timestamptz, created_at timestamptz default now(), rating numeric, decision text, note text, reviewed_at timestamptz);
 create table public.tma_invites (id uuid primary key default gen_random_uuid(), operator_id uuid, subject_name text, subject_role text, interview_id uuid, applicant_id uuid, answers jsonb default '{}', scores jsonb default '{}', status text default 'pending', created_at timestamptz default now(), completed_at timestamptz, imported_assessment_id uuid);
+create table public.audit_log (table_name text, row_id uuid, action text, actor uuid, actor_email text, old_data jsonb, new_data jsonb);
+create function public.audit_capture() returns trigger language plpgsql security definer set search_path to 'public' as $f$
+declare aid uuid; rid uuid; begin begin aid := auth.uid(); exception when others then aid := null; end;
+  if TG_OP='DELETE' then rid := (to_jsonb(OLD)->>'id')::uuid; else rid := (to_jsonb(NEW)->>'id')::uuid; end if;
+  insert into public.audit_log(table_name,row_id,action,actor,old_data,new_data) values(TG_TABLE_NAME, rid, TG_OP, aid, case when TG_OP<>'INSERT' then to_jsonb(OLD) end, case when TG_OP<>'DELETE' then to_jsonb(NEW) end);
+  return case when TG_OP='DELETE' then OLD else NEW end; end $f$;
+create trigger trg_applicants_audit after insert or update or delete on applicants for each row execute function audit_capture();
 alter table applicants enable row level security; alter table interview_sessions enable row level security; alter table tma_invites enable row level security;
 grant usage on schema public to anon, authenticated;
 grant select, insert, update on applicants to anon; grant select, update on interview_sessions to anon; grant select, update on tma_invites to anon;
 create policy anon_select on applicants for select to anon using (true); create policy anon_insert on applicants for insert to anon with check (true); create policy anon_update on applicants for update to anon using (true) with check (true);
 create policy iv_anon_select on interview_sessions for select to anon using (true); create policy iv_anon_update on interview_sessions for update to anon using (true) with check (true);
 create policy tma_inv_anon_read on tma_invites for select to anon using (true); create policy tma_inv_anon_answer on tma_invites for update to anon using (status <> 'completed') with check (true);
-insert into applicants (id, full_name, whatsapp, passport_or_iqama, admin_notes, ai_notes, status) values ('${A1}','Rahim','+8801','2222222222','ملاحظة إدارية سرية','تقييم','pending'),('${A2}','Karim','+8802','3333333333',null,null,'interview');
+insert into applicants (id, full_name, whatsapp, location, age, height_cm, weight_kg, passport_or_iqama, admin_notes, ai_notes, status) values ('${A1}','Rahim','+8801','Riyadh',22,170,65,'2222222222','ملاحظة إدارية سرية','تقييم','pending'),('${A2}','Karim','+8802','Riyadh',24,172,70,'3333333333',null,null,'rejected');
+insert into applicants (full_name, whatsapp, location, age, height_cm, weight_kg, passport_or_iqama, status) values ('Dup','+8809','Jeddah',30,170,70,'A20558187','rejected'),('Dup2','+8810','Jeddah',31,171,71,'A20558187','rejected');
 insert into interview_sessions (id, applicant_id, questions, status, answers, decision) values ('${S1}','${A1}','["س1","س2"]','pending',null,null),('${S2}','${A2}','["س1"]','completed','{"0":"جواب قديم"}','accept');
 insert into tma_invites (subject_name) values ('x');`);
 ok('قبل الملف: الزائر يقرأ المتقدمين كلهم بملاحظاتهم الإدارية (الثغرة)',anon(`select count(*) from applicants where admin_notes is not null`)==='1');
@@ -50,17 +58,20 @@ ok('الزائر: لا إدراج مباشر في المتقدمين',/permissio
 ok('الزائر: لا تعديل للمقابلات ولا قراءة',/permission denied/.test(anonErr(`update interview_sessions set decision='accept'`)||'')&&/permission denied/.test(anonErr(`select * from interview_sessions`)||''));
 ok('الزائر: لا وصول لاستبيان TMA',/permission denied/.test(anonErr(`select * from tma_invites`)||'')&&/permission denied/.test(anonErr(`update tma_invites set status='completed'`)||''));
 ok('لا سياسة anon باقية على الجداول الثلاثة',ps(`select count(*) from pg_policies where tablename in ('applicants','interview_sessions','tma_invites') and roles::text like '%anon%'`)==='0');
-ok('الدوال الخمس security definer',ps(`select count(*) from pg_proc where proname in ('applicant_exists','applicants_count','submit_application','interview_session','submit_interview') and prosecdef`)==='5');
+ok('الدوال الأربع security definer، ولا دالة applicant_exists (أداة تعداد)',ps(`select count(*) from pg_proc where proname in ('applicants_count','submit_application','interview_session','submit_interview') and prosecdef`)==='4'&&ps(`select count(*) from pg_proc where proname='applicant_exists'`)==='0');
 
 // ── الدوال المحدودة ──
-ok('applicant_exists: صح للموجود، خطأ لغيره وللفراغ',anon(`select applicant_exists('2222222222')`)==='t'&&anon(`select applicant_exists(' 2222222222 ')`)==='t'&&anon(`select applicant_exists('9')`)==='f'&&anon(`select applicant_exists('')`)==='f');
-ok('applicants_count: رقم فقط',anon(`select applicants_count()`)==='2');
-const NEW=anon(`select submit_application('{"full_name":"Jamal","whatsapp":"+8803","passport_or_iqama":"4444444444","age":"25","has_license":"true","children_count":"","geo_score":"7.5","ai_evaluation_json":{"x":1},"status":"approved","admin_notes":"حقن","application_number":"1","operator_id":"00000000-0000-0000-0000-000000000001"}'::jsonb)`);
-ok('submit_application: يُدرج ويُرجع المعرّف',/^[0-9a-f-]{36}$/.test(NEW));
+ok('applicants_count: رقم فقط',anon(`select applicants_count()`)==='4');
+const NEW=anon(`select submit_application('{"full_name":"Jamal","whatsapp":"+8803","passport_or_iqama":" 4444444444 ","location":"Riyadh","height_cm":"170","weight_kg":"66","age":"25","has_license":"true","children_count":"","geo_score":"7.5","ai_evaluation_json":{"x":1},"status":"approved","admin_notes":"حقن","application_number":"1","operator_id":"00000000-0000-0000-0000-000000000001"}'::jsonb)`);
+ok('submit_application: يُدرج ويُرجع المعرّف، والرقم مقصوص، ومشغّل التدقيق سجّل الإدراج بلا فاعل',/^[0-9a-f-]{36}$/.test(NEW)&&ps(`select passport_or_iqama from applicants where id='${NEW}'`)==='4444444444'&&ps(`select count(*)||'|'||coalesce(actor::text,'-') from audit_log where row_id='${NEW}' and action='INSERT' group by actor`)==='1|-');
 ok('… الحالة pending رغم إرسال approved، ولا ملاحظات إدارية، ورقم الطلب من التسلسل، والقيم الرقمية محوّلة',
-  ps(`select status||'|'||coalesce(admin_notes,'-')||'|'||application_number||'|'||age||'|'||has_license||'|'||children_count||'|'||geo_score||'|'||(ai_evaluation_json->>'x')||'|'||coalesce(operator_id::text,'-') from applicants where id='${NEW}'`)==='pending|-|103|25|true|0|7.5|1|-');
-ok('submit_application: التكرار يُرفض برمز DUPLICATE_APPLICANT',/DUPLICATE_APPLICANT/.test(anonErr(`select submit_application('{"full_name":"x","whatsapp":"y","passport_or_iqama":"2222222222"}'::jsonb)`)||''));
-ok('submit_application: النواقص تُرفض',/مطلوبة/.test(anonErr(`select submit_application('{"full_name":"x"}'::jsonb)`)||''));
+  ps(`select status||'|'||coalesce(admin_notes,'-')||'|'||application_number||'|'||age||'|'||has_license||'|'||children_count||'|'||geo_score||'|'||(ai_evaluation_json->>'x')||'|'||coalesce(operator_id::text,'-') from applicants where id='${NEW}'`)==='pending|-|105|25|true|0|7.5|1|-');
+const FULL='"whatsapp":"y","location":"R","age":"20","height_cm":"170","weight_kg":"60"';
+ok('submit_application: التكرار يُرفض برمز DUPLICATE_APPLICANT (حتى بمسافات)',/DUPLICATE_APPLICANT/.test(anonErr(`select submit_application('{"full_name":"x",${FULL},"passport_or_iqama":" 2222222222"}'::jsonb)`)||''));
+ok('submit_application: النواقص (الأعمدة not null) تُرفض برسالة عربية لا بخطأ القيد',/مطلوبة/.test(anonErr(`select submit_application('{"full_name":"x","whatsapp":"y","passport_or_iqama":"5"}'::jsonb)`)||'')&&/مطلوبة/.test(anonErr(`select submit_application('{"full_name":"x",${FULL},"passport_or_iqama":"5","age":""}'::jsonb)`)||''));
+// تزامن: إرسالان بنفس الرقم في معاملتين متزامنتين ⇒ واحد فقط يمرّ (القفل الاستشاري)
+{const {spawn}=await import('node:child_process');const run=()=>new Promise(r=>{const c=spawn('psql',['-U','postgres','-h','/var/run/postgresql','-p',port,'-d',db,'-qAt','-c',`begin; set local role anon; select submit_application('{"full_name":"x",${FULL},"passport_or_iqama":"7777777777"}'::jsonb); select pg_sleep(0.3); commit;`]);let o='',e='';c.stdout.on('data',d=>o+=d);c.stderr.on('data',d=>e+=d);c.on('close',()=>r(o+e));});
+  const rs=await Promise.all([run(),run()]);ok('تزامن: إرسالان بنفس الرقم ⇒ صف واحد وخطأ تكرار واحد',ps(`select count(*) from applicants where passport_or_iqama='7777777777'`)==='1'&&rs.filter(x=>/DUPLICATE_APPLICANT/.test(x)).length===1);}
 ok('submit_application: نص بدل كائن ⇒ خطأ',!!anonErr(`select submit_application('"abc"'::jsonb)`));
 
 const iv=JSON.parse(anon(`select interview_session('${S1}')`));
@@ -70,6 +81,8 @@ ok('submit_interview: يكمل الجلسة ويحدّث المتقدم',anon(`s
   &&ps(`select status||'|'||(answers->>'1')||'|'||(completed_at is not null) from interview_sessions where id='${S1}'`)==='completed|ب|true'
   &&ps(`select status||'|'||(interview_answers->>'0')||'|'||(interview_completed_at is not null) from applicants where id='${A1}'`)==='interview|أ|true');
 ok('submit_interview: الجلسة المكتملة لا تُعاد',/INTERVIEW_COMPLETED/.test(anonErr(`select submit_interview('${S2}','{"0":"تغيير"}')`)||'')&&ps(`select answers->>'0' from interview_sessions where id='${S2}'`)==='جواب قديم');
+ps(`insert into interview_sessions (id, applicant_id, questions, status) values ('50000000-0000-0000-0000-000000000003','${A2}','["س"]','pending')`);
+ok('submit_interview: متقدم مرفوض يُرسل أجوبته ⇒ تُحفظ وحالته لا ترجع إلى interview',anon(`select submit_interview('50000000-0000-0000-0000-000000000003','{"0":"ج"}')`)==='t'&&ps(`select status||'|'||(interview_answers->>'0') from applicants where id='${A2}'`)==='rejected|ج');
 ok('submit_interview: رمز مجهول ⇒ INTERVIEW_NOT_FOUND',/INTERVIEW_NOT_FOUND/.test(anonErr(`select submit_interview('50000000-0000-0000-0000-000000000009','{}')`)||''));
 ok('submit_interview: مصفوفة بدل كائن ⇒ خطأ',!!anonErr(`select submit_interview('${S1}','[]')`));
 ok('الدوال غير متاحة للدور public (مثل دور غير معروف)',ps(`select has_function_privilege('authenticated','public.submit_application(jsonb)','execute')`)==='t'&&ps(`do $$ begin create role nobody_x nologin; exception when others then null; end $$; select has_function_privilege('nobody_x','public.submit_application(jsonb)','execute')`)==='f');

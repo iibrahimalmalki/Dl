@@ -45,7 +45,6 @@ export default function ApplicantForm({onBack}){
       const ppUrl=form.passportFile?await upload(form.passportFile,"applicant-licenses",`${uid}/pp.jpg`):null;
       setProg(80);
       // كشف التكرار برقم الإقامة/الجواز قبل الإدخال
-      try{const{data:dup}=await supabase.rpc("applicant_exists",{p_id:form.passport_or_iqama.trim()});if(dup===true){setSubmitting(false);alert("يوجد لديك طلب مسبق بنفس رقم الإقامة/الجواز. سنتواصل معك على الرقم المسجّل.");return;}}catch(e){}
       const geoResult=calcGeoScore(form.bangladesh_district);
       const rec={full_name:form.full_name,whatsapp:form.whatsapp,location:form.location,age:+form.age,height_cm:+form.height_cm,weight_kg:+form.weight_kg,passport_or_iqama:form.passport_or_iqama,has_license:form.has_license==="yes",marital_status:form.marital_status,children_count:form.children_count?+form.children_count:0,license_image_url:licUrl,personal_photo_url:photoUrl,driving_video_url:videoUrl,iqama_image_url:iqUrl,passport_image_url:ppUrl,car_wash_description:form.car_wash_description,q1_client_refusal:form.q1,q2_equipment_damage:form.q2,q3_left_previous_job:form.q3,q4_salary_deduction:form.q4,q5_one_year_goal:form.q5,q6_difficult_colleague:form.q6,bangladesh_district:form.bangladesh_district,bangladesh_city:form.bangladesh_city,map_link:form.map_link||null,saudi_city:form.saudi_city||null,ready_for_riyadh:form.ready_for_riyadh||null,referred_by:REFERRER};
       // ✅ التقييم الآلي عند الإرسال (كان معطّلاً — الطلبات كانت تصل بلا درجات)
