@@ -51,7 +51,7 @@
 - `supabase/functions/ticket-image-pull/index.ts` - مصدر الدالة المعدّل (غير منشور): نطاقات محددة، وفحص كل تحويل، ورفض غير الصور.
 - `docs/sql/biker_tabs.sql` - جدول صلاحيات التبويبات. **طُبِّق** في 2026-10-08، ورأس الملف يقول ذلك.
 - `docs/sql/close_anon_1.sql` و`docs/sql/close_anon_1_verify.sql` - إغلاق الوصول المجهول، المرحلة 1 (أُغلق أثره 2026-10-08).
-- `docs/sql/close_anon_2.sql` - المرحلة 2 (**لم يُطبَّق**): 5 دوال محدودة للنماذج العامة + سحب وصول anon عن applicants/interview_sessions/tma_invites. اختباره `tests/closeAnon2Sql.test.mjs`.
+- `docs/sql/close_anon_2.sql` - المرحلة 2 (**طُبِّق 2026-10-11** الجزء الفعّال عبر apply_migration): 4 دوال محدودة للنماذج العامة + سحب وصول anon عن applicants/interview_sessions/tma_invites. اختباره `tests/closeAnon2Sql.test.mjs`. `docs/sql/close_anon_2_cleanup.sql` (**لم يُطبَّق**): حذف سياسات anon السبع الباقية بلا أثر، من SQL Editor.
 - `docs/sql/tickets_bad_images.sql` - تنظيف الشكاوى. القسم 2 طُبِّق، وحذف الملفات السبعة لم يتم.
 - `tests/*.test.mjs` - اختبارات Node؛ `npm test` يشغّلها كلها (30 ملفاً). اختبارات SQL المحلية تعمل فقط مع `PGTEST_PORT` (وإلا تُتخطّى).
 - `tests/portal360.test.mjs` - فحص بوابة البايكر على عرض 360 في Chromium (Playwright) بمحاكاة Supabase كاملة: `npm run check:360`؛ يُتخطّى بلا `PORTAL360`. الصور في `.portal360/`.
@@ -182,9 +182,10 @@
 
 - [ ] Step 17: الأمان المرحلة 2 — إغلاق الوصول المجهول للمتقدمين والمقابلات وTMA (قرارات المالك 2026-10-11: الخطة الموحّدة معتمدة، والمرحلة 2 في أكتوبر، ودورة حياة الفاتورة أول بند في المالية):
   - الثغرة: anon يقرأ ويعدّل `applicants` (6) و`interview_sessions` (6) بسياسات true، ويقرأ `tma_invites` (0).
-  - الحل (`docs/sql/close_anon_2.sql`، **لم يُطبَّق**): `applicants_count()` و`submit_application(p)` (أعمدة مسموحة فقط، status=pending دائماً، ترفض التكرار برقم الإقامة المطبّع تحت قفل استشاري — لا دالة «هل يوجد؟» لأنها أداة تعداد) و`interview_session(p_id)` (الأسئلة والحالة والاسم والرقم فقط) و`submit_interview(p_id, p_answers)` (مرة واحدة) — كلها security definer للزائر والمسجّل؛ ثم revoke all من anon على الجداول الثلاثة وحذف سياساتها. `job_ad` و`page_visits` ورفع ملفات المتقدمين (applicant-photos/licenses/videos) بلا تغيير.
+  - الحل (`docs/sql/close_anon_2.sql`، **طُبِّق 2026-10-11**): `applicants_count()` و`submit_application(p)` (أعمدة مسموحة فقط، status=pending دائماً، ترفض التكرار برقم الإقامة المطبّع تحت قفل استشاري — لا دالة «هل يوجد؟» لأنها أداة تعداد) و`interview_session(p_id)` (الأسئلة والحالة والاسم والرقم فقط) و`submit_interview(p_id, p_answers)` (مرة واحدة) — كلها security definer للزائر والمسجّل؛ ثم revoke all من anon على الجداول الثلاثة وحذف سياساتها. `job_ad` و`page_visits` ورفع ملفات المتقدمين (applicant-photos/licenses/videos) بلا تغيير.
   - الواجهة: `ApplicantForm` و`RecruitmentAd` و`InterviewPage` تستدعي الدوال؛ `TMAQuestionnaire` تعرض «الرابط غير متاح» بلا استدعاء (`TMA_PUBLIC_ENABLED=false`؛ صفحة الإدارة `TMA.jsx` للمالك كما هي).
-  - **الترتيب: المالك يشغّل الملف من SQL Editor (فيه drop policy) ثم يُدمج PR الواجهة فوراً** (بين الخطوتين النماذج العامة القديمة معطّلة)، ثم اختبار النماذج الثلاثة من الجوال بمتقدم تجريبي (خطة الاختبار في وصف الـPR) وحذفه من صفحة المتقدمين.
+  - **ما حدث 2026-10-11:** المالك شغّل الملف من SQL Editor وأبلغ بنجاحه، ودُمج PR #58 ونُشر (`d3c3e68`)، ثم تبيّن بالقراءة أن القاعدة بلا دوال ولا سحب (الأرجح رجوع المعاملة begin/commit عند خطأ في منتصفها أو تنفيذ على جلسة أخرى) ⇒ النماذج العامة كانت معطّلة حتى طبّق Claude بأمر المالك الجزء 1 + revoke عبر `apply_migration` (محاولة أولى انتهت مهلتها بسبب `drop function`؛ الثانية بلا drop نجحت). **درس:** بعد أي تشغيل من SQL Editor يتحقق Claude بالقراءة قبل الدمج. اختبار العزل بعده: anon مرفوض على الجداول الثلاثة، والدوال تعمل. بقي: `close_anon_2_cleanup.sql` (المالك)، واختبار النماذج الثلاثة من جوال المالك بمتقدم تجريبي (خطة الاختبار في وصف PR #58) وحذفه.
+  - قرارات المالك 2026-10-11 بعد المراجعة: رسالة «طلب مسبق» تبقى؛ حساب درجات التقييم في الخادم (دالة Edge) بند **منخفض الأولوية في المسار ب**؛ إخفاء زرّي إنشاء روابط TMA في `TMA.jsx` و`Interviews.jsx` **مع أول PR كود قادم**؛ التكرار `A20558187` يراجعه المالك بنفسه.
   - الجداول الأجنبية الخمس التي كانت ضمن المرحلة 2 (entities/records/attachments/webapp_*) تُحذف بـ `drop_foreign_tables.sql` (ينتظر تشغيل المالك).
 
 **قواعد ثابتة من المالك:**
