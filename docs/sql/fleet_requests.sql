@@ -1,8 +1,10 @@
 -- ═══ طلبات الوقود وتغيير الزيت من بوابة الدرّاج + «تنبيهات الأسطول» (المرحلة 2، الخطوة 1: القاعدة فقط) ═══
 -- المشروع: cnmggdrlkgsyrjxmvydv · التصميم: docs/design/fleet_requests.md (#65، وافق عليه المالك 2026-10-12)
--- الحالة: **لم يُطبَّق** — يُطبَّق بعد مراجعة المالك وأمره «نفّذ»:
---   القسمان 1 و2 عبر apply_migration (لا أوامر حذف فيهما: السياسات تُنشأ إن لم توجد، والمشغّلات create or replace)، ثم تحقق بالقراءة (آخر الملف)، ثم القسم 3 (بيانات) في معاملة محروسة بعدد الصفوف.
---   الواجهة (البوابة + اللوحة) في PR منفصل لاحق، ولا يُدمج قبل تطبيق هذا والتحقق منه.
+-- الحالة: **طُبِّق 2026-10-12** بأمر المالك:
+--   القسمان 1 و2 عبر apply_migration (fleet_requests_tables_and_functions، النسخة 20261012141852) ثم تحقق بالقراءة: 3 جداول، RLS مفعّل،
+--   الحدود التسعة، 13 دالة security definer، anon بلا تنفيذ ولا قراءة، المسجّل بلا كتابة مباشرة ولا legacy/request_id، 4 سياسات، 3 مشغّلات تدقيق.
+--   ثم القسم 3 (بتعديل المالك: صف عابد التجريبي ضمن legacy بدل حذفه) في معاملة محروسة: 8 صفوف بالضبط.
+--   الواجهة (البوابة + اللوحة) في PR منفصل لاحق.
 --
 -- قرارات المالك 2026-10-12:
 --   1) الطلب يُغلق تلقائياً عند الطلب التالي للدراجة نفسها.
@@ -464,13 +466,16 @@ grant execute on function public.request_fuel(numeric, text, numeric), public.ad
   public.transfer_fuel_request(uuid, text, timestamptz), public.send_oil_to_sweater(uuid, text, timestamptz),
   public.approve_oil_change(uuid, text), public.set_fleet_alert_setting(text, numeric, uuid), public.fleet_alerts() to authenticated;
 
--- ═══ 3) بيانات (تُنفَّذ بموافقة مستقلة بعد القسمين 1 و2): علامة legacy على الصفوف السبعة المدفوعة يدوياً ═══
--- تعرّفها: status='paid' وبلا عدّاد وبلا vehicle_id، قبل 2026-10-01 (7 صفوف بالضبط، 03/09–25/09). صف عابد التجريبي (0﷼) خارجها: تنظيفه قرار مستقل.
+-- ═══ 3) بيانات (طُبِّق 2026-10-12 بموافقة مستقلة بعد القسمين 1 و2): علامة legacy ═══
+-- الصفوف السبعة المدفوعة يدوياً (status='paid' بلا عدّاد ولا vehicle_id، قبل 2026-10-01) + صف عابد التجريبي (petrol، 0﷼، عدّاد 24، submitted)
+-- — قرار المالك: يُعلَّم legacy بدل حذفه ⇒ 8 صفوف بالضبط، وإلا تتراجع المعاملة.
 -- do $$ declare n int; begin
 --   update public.fuel_logs set legacy = true
---   where status = 'paid' and odometer is null and vehicle_id is null and fill_at < '2026-10-01' and not legacy;
+--   where not legacy and (
+--     (status = 'paid' and odometer is null and vehicle_id is null and fill_at < '2026-10-01')
+--     or (fuel_type = 'petrol' and amount = 0 and odometer = 24 and status = 'submitted'));
 --   get diagnostics n = row_count;
---   if n <> 7 then raise exception 'المتوقع 7 صفوف، تأثّر %', n; end if;
+--   if n <> 8 then raise exception 'المتوقع 8 صفوف، تأثّر %', n; end if;
 -- end $$;
 
 -- ═══ تحقق بالقراءة بعد التطبيق ═══
@@ -484,7 +489,7 @@ grant execute on function public.request_fuel(numeric, text, numeric), public.ad
 --        has_function_privilege('authenticated','public._fleet_notify_admins(text,text,text,text)','execute');  -- f, t, f
 -- select has_table_privilege('anon','public.fuel_logs','select'), has_table_privilege('anon','public.fuel_requests','select'),
 --        has_table_privilege('authenticated','public.fuel_requests','insert');  -- f, f, f
--- (بعد القسم 3) select count(*) from fuel_logs where legacy;  -- 7
+-- (بعد القسم 3) select count(*) from fuel_logs where legacy;  -- 8
 
 -- ═══ تراجع (من SQL Editor؛ لا بيانات إنتاجية في الجداول الجديدة قبل إطلاق الواجهة) ═══
 -- revoke execute on function public.request_fuel(numeric,text,numeric), public.add_fuel_fill(numeric,numeric,numeric,text,text,text), public.request_oil_change(numeric,text),

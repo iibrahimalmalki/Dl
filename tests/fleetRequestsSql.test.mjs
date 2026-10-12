@@ -188,7 +188,8 @@ ok('fleet_alerts لغير صاحب الصلاحية ⇒ لا صفوف (حتى ل
 ok('التنبيهات لكل دراجة: لا عمود درّاج في النتيجة',(()=>{const c=ps(`select array_to_string(proargnames, ',') from pg_proc where proname='fleet_alerts'`);return c.includes('vehicle_id')&&!/biker/.test(c);})());
 
 // ── القسم 3: علامة legacy (معاملة محروسة بعدد الصفوف) ──
-const leg=file.split('\n').filter(l=>/^-- (do \$\$|  update public\.fuel_logs set legacy|  where status = 'paid'|  get diagnostics|  if n <> 7|end \$\$;)/.test(l)).map(l=>l.replace(/^-- /,'')).join('\n');
-ok('القسم 3 يعلّم الصفوف السبعة المدفوعة فقط (لا صف عابد التجريبي)',!err(leg)&&ps(`select count(*) from fuel_logs where legacy and status='paid' and vehicle_id is null`)==='7'&&ps(`select legacy from fuel_logs where amount=0`)==='f');
-ok('إعادة تشغيل القسم 3 ترفض (0 ≠ 7) ولا تغيّر شيئاً',/المتوقع 7/.test(err(leg)||'')&&ps(`select count(*) from fuel_logs where legacy`)==='8');
+const leg=file.split('\n').filter(l=>/^-- (do \$\$|  update public\.fuel_logs set legacy|  where not legacy|    \(status = 'paid'|    or \(fuel_type|  get diagnostics|  if n <> 8|end \$\$;)/.test(l)).map(l=>l.replace(/^-- /,'')).join('\n');
+ps(`update fuel_logs set legacy=false where vehicle_id='${V2}' and amount=0`);  // حالة الإنتاج قبل القسم 3
+ok('القسم 3 يعلّم الصفوف السبعة المدفوعة + صف عابد التجريبي (8 بالضبط)',!err(leg)&&ps(`select count(*) from fuel_logs where legacy and status='paid' and vehicle_id is null`)==='7'&&ps(`select legacy from fuel_logs where amount=0 and odometer=24`)==='t');
+ok('إعادة تشغيل القسم 3 ترفض (0 ≠ 8) ولا تغيّر شيئاً',/المتوقع 8/.test(err(leg)||'')&&ps(`select count(*) from fuel_logs where legacy`)==='9');
 }finally{ps(`drop database if exists ${db}`,'postgres');}
