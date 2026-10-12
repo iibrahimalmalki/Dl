@@ -2,7 +2,7 @@ import{useState,useEffect,useMemo}from"react";
 import{supabase,SITE_URL}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
-import{completeness,topTalents}from"./tma";
+import{completeness,topTalents,TMA_LINKS_ENABLED}from"./tma";
 const tmaQLink=id=>`${SITE_URL}?tma=${id}`;
 
 const waNum=raw=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
@@ -120,9 +120,9 @@ export default function Interviews({owner,onOpenTMA}){
               {tt.length>0&&<div className="iv-tma-tags">{tt.map((x,i)=><span key={i} className={"iv-tma-tag "+(x.talent.side==="a"?"a":"b")}>{x.talent.n}</span>)}</div>}
               <button className="iv-btn tma" onClick={()=>openTMA(sel)}><Icon n="edit" s={14}/> فتح ملف المواهب</button>
             </>:<>
-              <p className="iv-tma-hint">إمّا أن يعبّئ المرشّح استبيان المواهب بنفسه (تقييم ذاتي، عربي + بنغالي)، أو تقيّمه أنت يدوياً على المحاور الـ22. الملف يُربط بهذه المقابلة تلقائياً.</p>
+              <p className="iv-tma-hint">{TMA_LINKS_ENABLED?"إمّا أن يعبّئ المرشّح استبيان المواهب بنفسه (تقييم ذاتي، عربي + بنغالي)، أو تقيّمه أنت يدوياً على المحاور الـ22.":"قيّم المرشّح يدوياً على المحاور الـ22 (رابط الاستبيان العام مغلق حالياً)."} الملف يُربط بهذه المقابلة تلقائياً.</p>
               {(()=>{const q=qMap[sel.id];return q?<div className="iv-tma-qst">{q.status==="completed"?<span className="iv-tma-qdone"><Icon n="check" s={12}/> عبّأ المرشّح الاستبيان — استورد النتائج من وحدة المواهب</span>:<span className="iv-tma-qwait"><Icon n="clock" s={12}/> أُرسل الاستبيان — بانتظار إجابة المرشّح</span>}</div>:null;})()}
-              {sel.applicants?.whatsapp&&<button className="iv-btn qsend" onClick={()=>sendQ(sel)}><Icon n="phone" s={14}/> {qMap[sel.id]?"إعادة إرسال الاستبيان":"إرسال استبيان المواهب (واتساب)"}</button>}
+              {TMA_LINKS_ENABLED&&sel.applicants?.whatsapp&&<button className="iv-btn qsend" onClick={()=>sendQ(sel)}><Icon n="phone" s={14}/> {qMap[sel.id]?"إعادة إرسال الاستبيان":"إرسال استبيان المواهب (واتساب)"}</button>}
               <button className="iv-btn tma" onClick={()=>openTMA(sel)}><Icon n="tma" s={14}/> تقييم يدوي للمرشّح</button>
             </>}
           </div>);})()}

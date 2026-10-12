@@ -2,7 +2,7 @@ import{useState,useEffect,useMemo}from"react";
 import{supabase,SITE_URL}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
-import{CATS,DRIVES,DRIVE_BY_KEY,TOTAL_DRIVES,TOTAL_TALENTS,interpret,talentOf,completeness,topTalents,categorySummary}from"./tma";
+import{CATS,DRIVES,DRIVE_BY_KEY,TOTAL_DRIVES,TOTAL_TALENTS,interpret,talentOf,completeness,topTalents,categorySummary,TMA_LINKS_ENABLED}from"./tma";
 import{TOTAL_ITEMS as Q_TOTAL,answeredCount}from"./tmaQuestionnaire";
 
 const waNum=raw=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
@@ -130,11 +130,12 @@ export default function TMA({opId,target,onTargetDone}){
       <div className="tm-inv-new">
         <div className="tm-inv-h"><Icon n="link" s={15}/> إرسال استبيان لمرشّح جديد</div>
         <p className="tm-inv-desc">يجيب المرشّح على {Q_TOTAL} عبارة (عربي + بنغالي) عبر رابط سهل، ثم تستورد النتيجة إلى ملف مواهبه — تقييم ذاتي أقلّ تحيّزاً من الحكم اليدوي.</p>
-        <div className="tm-frow">
+        {TMA_LINKS_ENABLED&&<div className="tm-frow">
           <label className="tm-field"><span>اسم المرشّح</span><input value={invName} onChange={e=>setInvName(e.target.value)} placeholder="الاسم الكامل"/></label>
           <label className="tm-field"><span>الدور</span><input value={invRole} onChange={e=>setInvRole(e.target.value)} placeholder="مرشّح للتوظيف"/></label>
-        </div>
-        <button className="tm-save" onClick={()=>createInvite()} disabled={invBusy}><Icon n="plus" s={15}/> {invBusy?"…":"إنشاء رابط الاستبيان"}</button>
+        </div>}
+        {TMA_LINKS_ENABLED?<button className="tm-save" onClick={()=>createInvite()} disabled={invBusy}><Icon n="plus" s={15}/> {invBusy?"…":"إنشاء رابط الاستبيان"}</button>
+        :<div className="tm-msg err" style={{marginBottom:0}}>رابط الاستبيان العام مغلق حالياً (قرار 2026-10-11) — استعمل التقييم اليدوي. الروابط السابقة تبقى للاستيراد أو الحذف.</div>}
         {invMsg&&<div className={"tm-msg "+(invMsg.ok?"ok":"err")} style={{marginTop:10,marginBottom:0}}>{invMsg.t}</div>}
       </div>
 
@@ -151,7 +152,7 @@ export default function TMA({opId,target,onTargetDone}){
           </div>
           {cp&&tt.length>0&&<div className="tm-card-tags" style={{margin:"4px 0 10px"}}>{tt.map((x,idx)=><span key={idx} className={"tm-mini "+(x.talent.side==="a"?"a":"b")}>{x.talent.n}</span>)}</div>}
           <div className="tm-inv-act">
-            {!cp&&<><button onClick={()=>copyInv(r)}><Icon n="link" s={13}/> نسخ</button><button onClick={()=>waInv(r)}><Icon n="phone" s={13}/> واتساب</button></>}
+            {!cp&&TMA_LINKS_ENABLED&&<><button onClick={()=>copyInv(r)}><Icon n="link" s={13}/> نسخ</button><button onClick={()=>waInv(r)}><Icon n="phone" s={13}/> واتساب</button></>}
             {cp&&(r.imported_assessment_id?<span className="tm-inv-imp"><Icon n="check" s={12}/> مُستورد إلى ملف مواهب</span>:<button className="imp" onClick={()=>importInv(r)} disabled={invBusy}><Icon n="download" s={13}/> استيراد النتائج</button>)}
             <button className="del" onClick={()=>delInv(r)}><Icon n="trash" s={13}/></button>
           </div>
