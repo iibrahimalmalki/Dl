@@ -78,7 +78,8 @@ const ins=(imei,extra='')=>`insert into custody_assets (employee_id,biker_name,s
 ok('الإدارة: جوال بلا IMEI أو بـIMEI غير صالح ⇒ يُرفض (قيد الجدول)',/custody_assets_device_imei_ck/.test(asErr(SUP,ins(null))||'')&&/custody_assets_device_imei_ck/.test(asErr(SUP,ins('490154203237519'))||''));
 const P1=as(SUP,ins('490154203237518'));
 ok('الإدارة: جوال بـIMEI صالح يُحفظ بمواصفاته',/^[0-9a-f-]{36}$/.test(P1)&&ps(`select serial_no||'|'||(specs->>'brand_model')||'|'||(specs->'acc'->>'holder') from custody_assets where id='${P1}'`)==='490154203237518|Samsung A15|true');
-ok('IMEI نفسه لجهاز نشط آخر ⇒ مرفوض (الفهرس الفريد، ولو بمسافات)',/custody_assets_active_device_serial/.test(asErr(SUP,ins(' 490154203237518'))||'')||/custody_assets_device_imei_ck/.test(asErr(SUP,ins(' 490154203237518'))||''));
+ok('IMEI نفسه لجهاز نشط آخر ⇒ مرفوض بالفهرس الفريد',/custody_assets_active_device_serial/.test(asErr(SUP,ins('490154203237518'))||''));
+ok('_imei_digits يوحّد الأرقام البنغالية والعربية ويحذف المسافات والشرطات',ps(`select _imei_digits('৪৯০১৫৪ ২০৩-২৩৭৫১৮')||'|'||_imei_digits('٤٩٠١٥٤٢٠٣٢٣٧٥١٨')||'|'||coalesce(_imei_digits('  '),'null')`)==='490154203237518|490154203237518|null');
 ps(`update custody_assets set status='replaced' where id='${P1}'`);
 const P2=as(SUP,ins('490154203237518'));
 ok('بعد استبدال الجهاز القديم يتحرّر رقمه ويُسجَّل لجهاز جديد',/^[0-9a-f-]{36}$/.test(P2));
@@ -95,14 +96,25 @@ ps(`update biker_assets set items='[${phoneItem('35209900176148')}]' where id='$
 ok('IMEI ناقص في الإقرار ⇒ IMEI_INVALID',/IMEI_INVALID/.test(asErr(SUP,`select custody_review('${B1}',true,null,null,'${line}'::jsonb)`)||''));
 ps(`update biker_assets set items='[{"key":"phone","condition":"good","photo":"pp","qty":1}]' where id='${B1}'`);
 ok('جوال بلا بيانات phone في الإقرار ⇒ IMEI_INVALID',/IMEI_INVALID/.test(asErr(SUP,`select custody_review('${B1}',true,null,null,'${line}'::jsonb)`)||''));
-ps(`update biker_assets set items='[${phoneItem('352099001761481')}]' where id='${B1}'`);
+// IMEI بأرقام بنغالية + مفاتيح زائدة في phone ⇒ يُوحَّد الرقم، وتُحفظ المواصفات المسموحة فقط
+ps(`update biker_assets set items='[{"key":"phone","condition":"good","photo":"pp","qty":1,"phone":{"brand_model":"Redmi 13","imei":"৩৫২০৯৯০০১৭৬১৪৮১","sim":"055-123 4567","acc":{"charger":true,"holder":"yes","case":true},"junk":"x"}}]' where id='${B1}'`);
 const r=JSON.parse(as(SUP,`select custody_review('${B1}',true,null,null,'${line}'::jsonb)::text`).split('\n').pop());
 ok('اعتماد جوال صالح: قطعة device بـIMEI والمواصفات (بلا تكرار IMEI داخل specs)',r.status==='approved'&&r.created===1
   &&ps(`select item_type||'|'||serial_no||'|'||(specs->>'brand_model')||'|'||(specs->>'sim')||'|'||(specs->'acc'->>'case')||'|'||(specs ? 'imei')||'|'||life_months||'|'||end_date from custody_assets where sweater_id='1700' and item_type='device'`)==='device|352099001761481|Redmi 13|0551234567|true|false|24|2028-10-12');
+ok('المواصفات قائمة بيضاء: لا مفاتيح زائدة، والقيم غير المنطقية للملحقات = false',ps(`select specs::text from custody_assets where sweater_id='1700' and item_type='device'`)==='{"acc": {"case": true, "holder": false, "charger": true}, "sim": "0551234567", "brand_model": "Redmi 13"}');
 ok('البايكر يرى جواله في قطعه (RLS كما هي)',as(RAKIB,`select count(*) from custody_assets where item_type='device'`)==='1');
 
+// ── جوال سجّلته الإدارة ثم أقرّه البايكر في تسجيله الأول (ربط asset_id) ──
+const ABED_P=as(SUP,`insert into custody_assets (employee_id,biker_name,sweater_id,item_type,category,name,name_en,start_date,life_months,lead_days,source,serial_no) values ('${E_ABED}','Abed mia','2637651411','device','أجهزة','الجوال','Mobile Phone','2026-10-12',24,45,'manual','356938035643809') returning id`);
+const BA='30000000-0000-0000-0000-000000000001';
+ps(`update biker_assets set items='[{"key":"helmet","condition":"good","qty":1},{"key":"phone","condition":"good","photo":"pp","qty":1,"phone":{"imei":"490154203237518"}}]' where id='${BA}'`);
+const lnk=(id)=>`[{"catalog_key":"helmet","item_keys":["helmet"],"asset_id":null,"name":"الخوذة","name_en":"Helmet","item_type":"safety","category":"معدات حماية","life_months":24,"lead_days":60},{"catalog_key":"phone","item_keys":["phone"],"asset_id":"${id}","name":"الجوال","name_en":"Mobile Phone","item_type":"device","category":"أجهزة","life_months":24,"lead_days":45}]`;
+ok('IMEI المُقَرّ يخالف جهاز الإدارة ⇒ IMEI_MISMATCH ولا يتغيّر شيء',/IMEI_MISMATCH/.test(asErr(OWNER,`select custody_review('${BA}',true,null,'2026-10-05','${lnk(ABED_P)}'::jsonb)`)||'')&&ps(`select status from biker_assets where id='${BA}'`)==='declared');
+ps(`update biker_assets set items='[{"key":"helmet","condition":"good","qty":1},{"key":"phone","condition":"good","photo":"pp","qty":1,"phone":{"imei":"356938035643809"}}]' where id='${BA}'`);
+
 // ── أصناف أخرى بلا تغيير في السلوك ──
-const r4=JSON.parse(as(OWNER,`select custody_review('30000000-0000-0000-0000-000000000001',true,null,'2026-10-05','[{"catalog_key":"helmet","item_keys":["helmet"],"asset_id":null,"name":"الخوذة","name_en":"Helmet","item_type":"safety","category":"معدات حماية","life_months":24,"lead_days":60}]'::jsonb)::text`).split('\n').pop());
+const r4=JSON.parse(as(OWNER,`select custody_review('${BA}',true,null,'2026-10-05','${lnk(ABED_P)}'::jsonb)::text`).split('\n').pop());
+ok('IMEI مطابق ⇒ الجوال مربوط بقطعة الإدارة (لا قطعة جديدة)',r4.linked===1&&ps(`select count(*) from custody_assets where employee_id='${E_ABED}' and item_type='device'`)==='1');
 ok('صنف غير الجوال (الخوذة لعابد): كما كان، serial_no فارغ وspecs {}',r4.created===1&&ps(`select coalesce(serial_no,'-')||'|'||specs::text||'|'||start_date from custody_assets where employee_id='${E_ABED}' and item_type='safety'`)==='-|{}|2026-10-05');
 ok('anon لا يملك تنفيذ custody_review، والمسجّل يملك',ps(`select has_function_privilege('anon','public.custody_review(uuid,boolean,text,date,jsonb)','execute')::text||has_function_privilege('authenticated','public.custody_review(uuid,boolean,text,date,jsonb)','execute')::text`)==='falsetrue');
 }finally{ps(`drop database if exists ${db}`,'postgres');}

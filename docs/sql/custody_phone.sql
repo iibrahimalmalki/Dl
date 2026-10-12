@@ -14,13 +14,22 @@
 --   • custody_assets: 40 قطعة، كلها active، لا جوال، لا عمود serial/imei، ولا قيود check. لـ anon كل صلاحيات الجدول
 --     (السياسات تمنعه فعلياً) ⇒ تُسحب هنا (revoke) لأن الجدول يُعدَّل في هذا الملف — كما في fleet_requests.sql مع fuel_logs.
 --   • custody_review في الإنتاج = نص docs/sql/custody_lifecycle.sql حرفياً (بلا سطرَي تعليق داخليين، ونهايات أسطر CRLF).
---     التعديل هنا على ذلك النص فقط: إدخال serial_no/specs لقطعة device جديدة + رسالتا IMEI_INVALID وIMEI_DUPLICATE. بقية السلوك كما هو.
+--     التعديل هنا على ذلك النص فقط: فرع device (إنشاء بـserial_no/specs، أو مطابقة IMEI قطعة الإدارة) + رسائل IMEI_INVALID/IMEI_DUPLICATE/IMEI_MISMATCH.
+--     فرع غير الجوال حرفياً كما هو (بلا كتلة استثناء إضافية).
 --   • القسمان 1 و2 بلا كلمة الحذف إطلاقاً (أداة MCP تتعطل عليها)؛ التراجع آخر الملف يشغّله المالك من SQL Editor.
 --   • item_type = device مقصور اليوم على الجوال: القيد والفهرس يشترطان IMEI صالحاً لكل device. أي جهاز آخر بلا IMEI لاحقاً ⇒ يُعدَّل الشرط.
+--   • لا جوال يمكن إنشاؤه قبل PR الواجهة (لا شاشة تُدخل device). PR الواجهة **يجب** أن يجعل «استبدال» الجهاز في Custody.jsx
+--     (replacementRow في src/custodyLifecycle.js) يطلب IMEI الجهاز البديل، وإلا رفض القيدُ إنشاء البديل.
+--   • التطبيق: القسمان 1 و2 معاً عبر apply_migration (معاملة واحدة: إن فشل أي سطر لا يبقى شيء). من SQL Editor: داخل begin … commit.
 
 -- ═══ 1) الأعمدة والفحص والفهرس ═══
 
--- 1.1 فحص IMEI: 15 رقماً + مجموع Luhn (يطابق imeiError في src/custodyDeclare.js)
+-- 1.1 فحص IMEI: 15 رقماً + مجموع Luhn (الواجهة تطبّق الفحص نفسه في PR الواجهة).
+--     _imei_digits يوحّد الأرقام العربية/الفارسية/البنغالية ويحذف المسافات والشرطات.
+create or replace function public._imei_digits(p text) returns text
+language sql immutable set search_path to 'public' as $$
+  select nullif(regexp_replace(translate(coalesce(p, ''), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹০১২৩৪৫৬৭৮৯', '012345678901234567890123456789'), '[\s-]', '', 'g'), '')
+$$;
 create or replace function public._imei_ok(p text) returns boolean
 language sql immutable set search_path to 'public' as $$
   select case when p ~ '^[0-9]{15}$' then
@@ -42,7 +51,7 @@ do $c$ begin
 end $c$;
 
 -- 1.4 IMEI واحد لجهاز نشط واحد (المستبدَل أو المُعاد يحرّر رقمه)
-create unique index if not exists custody_assets_active_device_serial on public.custody_assets (btrim(serial_no))
+create unique index if not exists custody_assets_active_device_serial on public.custody_assets (serial_no)
   where item_type = 'device' and status not in ('replaced', 'returned');
 
 -- 1.5 anon بلا أي صلاحية على الجدول (كانت مفتوحة على مستوى الجدول؛ السياسات تمنعه، والسحب يغلقها)
@@ -88,30 +97,50 @@ begin
       end if;
     end loop;
     for l in select x from jsonb_array_elements(p_lines) x loop
+      -- الجوال (item_type = device): بيانات phone من صنف الإقرار، والـIMEI بأرقام لاتينية موحّدة
+      v_phone := null; v_imei := null;
+      if l ->> 'item_type' = 'device' then
+        select x -> 'phone' into v_phone from jsonb_array_elements(v_items) x
+          where (l -> 'item_keys') ? (x ->> 'key') and jsonb_typeof(x -> 'phone') = 'object' limit 1;
+        v_imei := public._imei_digits(v_phone ->> 'imei');
+      end if;
       if nullif(l ->> 'asset_id', '') is not null then
         select * into a from public.custody_assets where id = (l ->> 'asset_id')::uuid and employee_id = v_emp.id and status not in ('replaced', 'returned');
         if not found then raise exception 'القطعة % ليست قطعة نشطة لهذا البايكر', l ->> 'asset_id'; end if;
-        v_aid := a.id; v_linked := v_linked + 1;
-      else
-        -- الجوال (item_type = device): IMEI صالح إلزامي من الإقرار، والماركة/الخط/الملحقات إلى specs
-        v_phone := null; v_imei := null;
-        if l ->> 'item_type' = 'device' then
-          select x -> 'phone' into v_phone from jsonb_array_elements(v_items) x
-            where (l -> 'item_keys') ? (x ->> 'key') and jsonb_typeof(x -> 'phone') = 'object' limit 1;
-          v_imei := btrim(v_phone ->> 'imei');
-          if not public._imei_ok(v_imei) then raise exception 'IMEI_INVALID: IMEI الجوال ناقص أو غير صحيح (15 رقماً)'; end if;
+        -- جوال سجّلته الإدارة: الـIMEI المُقَرّ (إن ذُكر) يجب أن يطابق المسجَّل
+        if l ->> 'item_type' = 'device' and v_imei is not null and v_imei is distinct from a.serial_no then
+          raise exception 'IMEI_MISMATCH: IMEI المُقَرّ (%) لا يطابق المسجَّل للجهاز (%)', v_imei, a.serial_no;
         end if;
+        v_aid := a.id; v_linked := v_linked + 1;
+      elsif l ->> 'item_type' = 'device' then
+        if not public._imei_ok(v_imei) then raise exception 'IMEI_INVALID: IMEI الجوال ناقص أو غير صحيح (15 رقماً)'; end if;
         begin
           insert into public.custody_assets (operator_id, employee_id, biker_name, sweater_id, item_type, category, name, name_en,
               start_date, life_months, lead_days, end_date, status, source, notes, created_by, serial_no, specs)
             values (r.operator_id, v_emp.id, v_emp.full_name, btrim(r.biker_employee_id), l ->> 'item_type', l ->> 'category', l ->> 'name', l ->> 'name_en',
               v_start, (l ->> 'life_months')::numeric, (l ->> 'lead_days')::int,
               (v_start + make_interval(months => round((l ->> 'life_months')::numeric)::int))::date,
-              'active', 'declaration', 'من إقرار العهدة ' || r.id, auth.uid(), v_imei, coalesce(v_phone - 'imei', '{}'::jsonb))
+              'active', 'declaration', 'من إقرار العهدة ' || r.id, auth.uid(), v_imei,
+              -- قائمة بيضاء: الماركة والموديل (60 حرفاً)، الخط (أرقام ≤ 15)، والملحقات الثلاثة كقيم منطقية
+              jsonb_strip_nulls(jsonb_build_object(
+                'brand_model', left(nullif(btrim(v_phone ->> 'brand_model'), ''), 60),
+                'sim', left(nullif(regexp_replace(coalesce(public._imei_digits(v_phone ->> 'sim'), ''), '\D', '', 'g'), ''), 15),
+                'acc', jsonb_build_object('charger', coalesce(v_phone -> 'acc' ->> 'charger', '') = 'true',
+                                          'holder', coalesce(v_phone -> 'acc' ->> 'holder', '') = 'true',
+                                          'case', coalesce(v_phone -> 'acc' ->> 'case', '') = 'true'))))
             returning * into a;
         exception when unique_violation then
           raise exception 'IMEI_DUPLICATE: هذا الـIMEI (%) مسجّل لجهاز نشط آخر', v_imei;
         end;
+        v_aid := a.id; v_new := v_new + 1;
+      else
+        insert into public.custody_assets (operator_id, employee_id, biker_name, sweater_id, item_type, category, name, name_en,
+            start_date, life_months, lead_days, end_date, status, source, notes, created_by)
+          values (r.operator_id, v_emp.id, v_emp.full_name, btrim(r.biker_employee_id), l ->> 'item_type', l ->> 'category', l ->> 'name', l ->> 'name_en',
+            v_start, (l ->> 'life_months')::numeric, (l ->> 'lead_days')::int,
+            (v_start + make_interval(months => round((l ->> 'life_months')::numeric)::int))::date,
+            'active', 'declaration', 'من إقرار العهدة ' || r.id, auth.uid())
+          returning * into a;
         v_aid := a.id; v_new := v_new + 1;
       end if;
       -- ربط أصناف السطر بالقطعة
@@ -170,8 +199,7 @@ begin
 end $$;
 revoke all on function public.custody_review(uuid, boolean, text, date, jsonb) from public, anon;
 grant execute on function public.custody_review(uuid, boolean, text, date, jsonb) to authenticated;
-revoke all on function public._imei_ok(text) from public, anon;
-grant execute on function public._imei_ok(text) to authenticated;
+-- _imei_ok و_imei_digits تبقيان قابلتين للتنفيذ للجميع: القيد يستدعي _imei_ok في كل كتابة على الجدول، وهما بلا أثر جانبي.
 
 -- ═══ تحقق بالقراءة بعد التطبيق ═══
 -- select column_name, data_type, is_nullable, column_default from information_schema.columns
@@ -189,5 +217,5 @@ grant execute on function public._imei_ok(text) to authenticated;
 -- 2) drop index if exists public.custody_assets_active_device_serial;
 --    alter table public.custody_assets drop constraint if exists custody_assets_device_imei_ck;
 --    alter table public.custody_assets drop column if exists specs, drop column if exists serial_no;   -- بعد التأكد ألا جوال مسجّل
---    drop function if exists public._imei_ok(text);
+--    drop function if exists public._imei_ok(text), public._imei_digits(text);
 -- 3) (سحب anon لا يُتراجع عنه: لم يكن له استعمال، والسياسات كانت تمنعه أصلاً)
