@@ -435,7 +435,7 @@ function Portal() {
                 <div>
                   <h1>بوابة البايكر</h1>
                   <div className="s">أهلاً {me.name} · স্বাগতম<br />رقمك · আপনার নম্বর: {me.biker_employee_id}</div>
-                  {me.is_test && <div className="s">🧪 حساب تجريبي — للتجربة فقط · পরীক্ষামূলক অ্যাকাউন্ট</div>}
+                  {me.is_test && <div className="s">🧪 حساب تجريبي — للتجربة فقط <span className="bn">পরীক্ষামূলক অ্যাকাউন্ট</span></div>}
                 </div>
                 <button className="bp-logout" onClick={() => supabase.auth.signOut()}>خروج<br />লগআউট</button>
               </div>
@@ -443,7 +443,7 @@ function Portal() {
             <div className="bp-prof">
               <div className="bp-pcell"><div className="k">الاسم · নাম</div><div className="v" style={{ fontSize: 13 }}>{me.name || "—"}</div></div>
               <div className="bp-pcell"><div className="k">رقم البايكر · নম্বর</div><div className="v">{me.biker_employee_id}</div></div>
-              <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div>{myBike && myBike.is_test && <div className="k">🧪 تجريبي · পরীক্ষামূলক</div>}</div>
+              <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div>{myBike && myBike.is_test && <div className="k">🧪 تجريبي <span className="bn">পরীক্ষামূলক</span></div>}</div>
             </div>
             {tabRules.locked && <div className="bp-card g-card"><div className="bp-sec">
               <div className="bp-note" style={{ marginTop: 0 }}>بقية الصفحات تظهر بعد تحميل الإعداد. <span className="bn">সেটিংস লোড হলে বাকি পাতা দেখা যাবে।</span></div>

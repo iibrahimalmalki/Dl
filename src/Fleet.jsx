@@ -4,7 +4,7 @@ import Icon from"./Icon";
 import{useToast}from"./ui";
 import HandoverLog from"./HandoverLog";
 import TestBadge from"./TestBadge";
-import{realOnly,testLast,testIds}from"./testSandbox";
+import{realOnly,realBy,testLast}from"./testSandbox";
 // «الطلبات والتنبيهات»: طلبات الوقود والزيت من البوابة + fleet_alerts() — بصلاحية fleet_alerts، تُحمَّل عند فتح التبويب فقط
 const FleetRequests=lazy(()=>import("./FleetRequests"));
 
@@ -48,15 +48,17 @@ export default function Fleet({opId,owner}){
     const[v,i]=await Promise.all([vq,iq]);
     const vr=(v.data||[]).slice().sort((a,b)=>V_ORDER.indexOf(a.status)-V_ORDER.indexOf(b.status)||(a.plate||"").localeCompare(b.plate||""));
     const ir=(i.data||[]).slice().sort((a,b)=>String(b.occurred_on||"").localeCompare(String(a.occurred_on||"")));
-    setVeh(testLast(vr));setInc(ir); // الدراجة التجريبية آخر القائمةsetLoading(false);
+    setVeh(testLast(vr));setInc(ir); /* الدراجة التجريبية آخر القائمة */setLoading(false);
   };
   useEffect(()=>{load();/*eslint-disable-next-line*/},[opId]);
   useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role,is_test").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
   // المؤشرات على الدراجات الحقيقية فقط: التجريبية تظهر بشارة وخارج كل عدّ ونسبة
-  const tv=useMemo(()=>testIds(veh),[veh]);
+  // كل الدراجات التجريبية (بلا قيد النشاط أو المشغّل) لأن الطلبات والتنبيهات تشمل كل الدراجات
+  const[tv,setTv]=useState(()=>new Set());
+  useEffect(()=>{supabase.from("fleet_vehicles").select("id").eq("is_test",true).then(({data})=>setTv(new Set((data||[]).map(x=>x.id))));},[]);
   const k=useMemo(()=>{
-    const rv=realOnly(veh),ri=inc.filter(x=>!tv.has(x.vehicle_id));
+    const rv=realOnly(veh),ri=realBy(inc,tv);
     const n=rv.length;
     return{
       total:n,
@@ -143,7 +145,7 @@ export default function Fleet({opId,owner}){
 
     <div className="fl-tabs">
       <button className={tab==="veh"?"on":""} onClick={()=>setTab("veh")}><Icon n="bike" s={16}/> المركبات <span>{k.total}</span></button>
-      <button className={tab==="inc"?"on":""} onClick={()=>setTab("inc")}><Icon n="alert" s={16}/> الحوادث والأعطال <span>{inc.length}</span></button>
+      <button className={tab==="inc"?"on":""} onClick={()=>setTab("inc")}><Icon n="alert" s={16}/> الحوادث والأعطال <span>{realBy(inc,tv).length}</span></button>
       <button className={tab==="key"?"on":""} onClick={()=>setTab("key")}><Icon n="key" s={16}/> المفاتيح</button>
       <button className={tab==="ho"?"on":""} onClick={()=>setTab("ho")}><Icon n="doc" s={16}/> سجل التسليم والاستلام</button>
       <button className={tab==="req"?"on":""} onClick={()=>setTab("req")}><Icon n="fuel" s={16}/> الطلبات والتنبيهات</button>

@@ -73,7 +73,7 @@ export default function FleetRequests({owner,tv}){
     </div>
 
     {/* ١) الطلبات «المطلوبة» غير المحوَّلة: بارزة أعلى الصفحة — الطلب الجديد لا يغلقها */}
-    <section className={"fq-sec"+(R.pending.length?" hot":"")}>
+    <section className={"fq-sec"+(nr(R.pending)?" hot":"")}>
       <h3><Icon n="fuel" s={16}/> طلبات وقود بانتظار التحويل <span className="fq-c">{nr(R.pending)}</span></h3>
       {R.pending.length===0?<div className="fq-none">لا طلبات معلّقة.</div>:R.pending.map(r=><div className="fq-row" key={r.id}>
         <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} {tb(r)}</b>

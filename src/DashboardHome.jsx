@@ -49,8 +49,8 @@ export default function DashboardHome({onNav,theme="light"}){
       q("field_rounds","compliance_pct,period,status,round_date,sweater_id"),
       q("vendor_expenses","exp_date,amount"),
       q("renewal_docs","id,doc_type,subject,end_date,active"),
-      q("fleet_vehicles","plate,status,has_gps,has_camera,active,is_test"),
-      q("fleet_incidents","title,status,active"),
+      q("fleet_vehicles","id,plate,status,has_gps,has_camera,active,is_test"),
+      q("fleet_incidents","title,status,active,vehicle_id"),
       q("housing_units","name,annual_rent,active"),
       q("housing_payments","seq,due_date,amount,paid"),
       q("housing_violations","category,status,active"),
@@ -62,8 +62,9 @@ export default function DashboardHome({onNav,theme="light"}){
       q("ops_daily","day,period,total_bookings,washes,cancel_client,cancel_admin,avg_quality"),
       supabase.from("insights").select("scope_ar,tone,icon,title,body,recommendation,severity,sort").eq("active",true).order("sort").then(({data})=>data||[],()=>[]),
     ]);
-    const nt=a=>a.filter(x=>!x.is_test); // السجلات التجريبية خارج العدّ والمؤشرات
-    setD({apps,visits,emps:nt(emps),teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh:nt(fveh),finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix,daily,ins});
+    const nt=a=>a.filter(x=>!x.is_test); // السجلات التجريبية خارج العدّ والمؤشرات (والحوادث المرتبطة بدراجة تجريبية)
+    const tvd=new Set(fveh.filter(x=>x.is_test).map(x=>x.id));
+    setD({apps,visits,emps:nt(emps),teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh:nt(fveh),finc:finc.filter(x=>!tvd.has(x.vehicle_id)),hunits,hpays,hviol,screq,scitems,setts,fin,tix,daily,ins});
   })();},[]);
 
   const s=useMemo(()=>{

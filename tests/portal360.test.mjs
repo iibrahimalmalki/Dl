@@ -125,7 +125,7 @@ try{
       ok('لا أرقام تحليلية للدرّاج (لا كم/لتر، لا استهلاك، لا مخصّص شهري)',!/كم\s*\/|كم لكل|استهلاك|متوسط|مخصّص|تجاوز|280/.test(txt));
     }
     if(key==='test')ok('الحساب التجريبي: «🧪 حساب تجريبي» في الرأس وعلى الدراجة، بالعربي والبنغالي',
-      await page.getByText('🧪 حساب تجريبي',{exact:false}).count()===1&&await page.getByText('🧪 تجريبي · পরীক্ষামূলক').count()===1&&await page.getByText('পরীক্ষামূলক অ্যাকাউন্ট',{exact:false}).count()===1);
+      await page.getByText('🧪 حساب تجريبي',{exact:false}).count()===1&&await page.locator('.bp-pcell .k',{hasText:'🧪 تجريبي'}).count()===1&&await page.locator('.bn',{hasText:'পরীক্ষামূলক অ্যাকাউন্ট'}).count()===1&&await page.locator('.bn',{hasText:/^পরীক্ষামূলক$/}).count()===1);
     if(key==='baseline')ok('الحساب الحقيقي: لا شارة «تجريبي»',await page.getByText('🧪',{exact:false}).count()===0);
     if(key==='pending')ok('بطاقة الانتظار تعرض صنفَي التسجيل',await page.getByText('بانتظار الاعتماد').count()>=1&&await page.locator('.bp-item').count()===2);
     if(key==='rejected')ok('سبب الرفض ظاهر بالعربي والبنغالي',await page.getByText('أعد التسجيل مع صورة لكل قطعة').count()===1&&await page.locator('.bp-asrej .bn').count()>=1);
