@@ -31,31 +31,42 @@ alter table public.employees      add column if not exists is_test boolean not n
 alter table public.fleet_vehicles add column if not exists is_test boolean not null default false;
 alter table public.app_users      add column if not exists is_test boolean not null default false;
 
--- 1.2 الحارس: إنشاء صف تجريبي أو تغيير العلامة للمالك فقط. بلا جلسة (auth.uid() فارغ) = الخادم أو SQL Editor ⇒ مسموح.
+-- 1.2 الحارس: إنشاء صف تجريبي أو تغيير العلامة للمالك فقط، وهوية الموظف التجريبي (employee_id) ثابتة ولا يأخذها صف آخر
+--     (كل الاستبعاد يمرّ عبر هذا الرقم: is_test_biker وmy_employee_uuid وربط daily_team).
+--     الدالة بصلاحية المستدعي (لا security definer) ليكون current_user هو دور الطلب: anon/authenticated من الواجهة ⇒ يُفحص؛
+--     أي دور آخر (postgres من SQL Editor، service_role، أو داخل دالة security definer موثوقة) ⇒ مسموح.
 create or replace function public._guard_is_test() returns trigger
-language plpgsql security definer set search_path to 'public' as $$
+language plpgsql set search_path to 'public' as $$
 begin
-  if auth.uid() is null or public.is_owner() then return new; end if;
+  if current_user not in ('anon', 'authenticated') or public.is_owner() then return new; end if;
   if (tg_op = 'INSERT' and new.is_test) or (tg_op = 'UPDATE' and new.is_test is distinct from old.is_test) then
     raise exception 'IS_TEST_OWNER_ONLY' using errcode = '42501';
   end if;
+  if tg_table_name = 'employees' then
+    if tg_op = 'UPDATE' and old.is_test and new.employee_id is distinct from old.employee_id then
+      raise exception 'IS_TEST_OWNER_ONLY' using errcode = '42501';
+    end if;
+    if (tg_op = 'INSERT' or new.employee_id is distinct from old.employee_id) and public.is_test_biker(new.employee_id) then
+      raise exception 'IS_TEST_OWNER_ONLY' using errcode = '42501';
+    end if;
+  end if;
   return new;
 end $$;
-create or replace trigger trg_guard_is_test before insert or update of is_test on public.employees
+create or replace trigger trg_guard_is_test before insert or update of is_test, employee_id on public.employees
   for each row execute function public._guard_is_test();
 create or replace trigger trg_guard_is_test before insert or update of is_test on public.fleet_vehicles
   for each row execute function public._guard_is_test();
 create or replace trigger trg_guard_is_test before insert or update of is_test on public.app_users
   for each row execute function public._guard_is_test();
 
--- 1.3 دوال الاشتقاق (داخلية للدوال الأخرى؛ الواجهة تقرأ العمود مباشرة)
+-- 1.3 دوال الاشتقاق (داخلية للدوال الأخرى والحارس؛ الواجهة تقرأ العمود مباشرة)
 create or replace function public.is_test_employee(p_id uuid) returns boolean
 language sql stable security definer set search_path to 'public' as $$
   select exists(select 1 from public.employees e where e.id = p_id and e.is_test)
 $$;
 create or replace function public.is_test_biker(p_biker text) returns boolean
 language sql stable security definer set search_path to 'public' as $$
-  select exists(select 1 from public.employees e where e.employee_id = btrim(p_biker) and e.is_test)
+  select coalesce(btrim(p_biker), '') <> '' and exists(select 1 from public.employees e where e.employee_id = btrim(p_biker) and e.is_test)
 $$;
 create or replace function public.is_test_vehicle(p_id uuid) returns boolean
 language sql stable security definer set search_path to 'public' as $$
@@ -63,6 +74,7 @@ language sql stable security definer set search_path to 'public' as $$
 $$;
 revoke all on function public._guard_is_test(), public.is_test_employee(uuid), public.is_test_biker(text), public.is_test_vehicle(uuid)
   from public, anon, authenticated;
+grant execute on function public.is_test_biker(text) to authenticated;  -- يستدعيها الحارس بصلاحية المستدعي؛ لا تكشف إلا «هل الرقم تجريبي»
 
 -- ═══ 2) الدوال المعدَّلة (نسخة الإنتاج 2026-10-12 + شرط is_test فقط؛ التوقيع والصلاحيات كما هي) ═══
 
@@ -103,11 +115,13 @@ declare n integer;
 begin
   if not public.daily_staff(true) then raise exception 'not allowed' using errcode = '42501'; end if;
   if p_on is null then raise exception 'p_on is required'; end if;
-  if p_on and public.is_test_employee(p_employee) then raise exception 'TEST_ACCOUNT' using errcode = '22023'; end if;
+  if p_on and exists(select 1 from public.employees e join public.app_users au on btrim(au.biker_employee_id) = e.employee_id
+                     where e.id = p_employee and (e.is_test or au.is_test)) then
+    raise exception 'TEST_ACCOUNT' using errcode = '22023';
+  end if;
   update public.app_users au set in_daily_split = p_on
   from public.employees e
-  where e.id = p_employee and btrim(au.biker_employee_id) = e.employee_id
-    and (not p_on or not au.is_test);
+  where e.id = p_employee and btrim(au.biker_employee_id) = e.employee_id;
   get diagnostics n = row_count;
   return n;
 end $$;
@@ -127,11 +141,12 @@ $$;
 --     (p_entity = معرّف fuel_requests أو maintenance_requests، كما في كل المستدعين في fleet_requests.sql)
 create or replace function public._fleet_notify_admins(p_title text, p_body text, p_entity text, p_dedupe text) returns void
 language plpgsql security definer set search_path to 'public' as $$
-declare u record; v_title text := p_title;
+declare u record; v_title text := p_title; v_id uuid; v_vid uuid;
 begin
-  if exists(select 1 from public.fuel_requests r join public.fleet_vehicles v on v.id = r.vehicle_id where r.id::text = p_entity and v.is_test)
-     or exists(select 1 from public.maintenance_requests m join public.fleet_vehicles v on v.id = m.vehicle_id where m.id::text = p_entity and v.is_test) then
-    v_title := '🧪 تجريبي — ' || p_title;
+  if p_entity ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    v_id := p_entity::uuid;
+    select coalesce((select vehicle_id from public.fuel_requests where id = v_id), (select vehicle_id from public.maintenance_requests where id = v_id)) into v_vid;
+    if public.is_test_vehicle(v_vid) then v_title := '🧪 تجريبي — ' || p_title; end if;
   end if;
   perform public.push_notification('owner', null, 'fleet', 'info', v_title, p_body, 'fleet_alerts', p_entity, p_dedupe || '-owner');
   for u in select distinct au.id from public.app_users au join public.user_permissions up on up.user_id = au.id
@@ -169,7 +184,9 @@ begin
     'dashboard', null, 'digest:'||to_char((now() at time zone 'Asia/Riyadh')::date,'YYYY-MM-DD'));
 end $$;
 
--- ═══ 3) السجلات — **لا تُنفَّذ مع 1 و2**: بموافقة مستقلة بعد دمج PR الواجهة. كل بند معاملة مستقلة، ويتراجع إن تأثر غير المتوقع ═══
+-- ═══ 3) السجلات — **لا تُنفَّذ مع 1 و2**: بموافقة مستقلة بعد دمج PR الواجهة ═══
+-- كل بند (3.1، 3.2، 3.3) يُشغَّل **وحده** في استدعاء مستقل (execute_sql واحد أو تشغيل واحد في SQL Editor)، فيكون معاملة مستقلة
+-- تتراجع وحدها إن تأثر غير المتوقع. لا تُلصق البنود الثلاثة معاً: تصير معاملة واحدة ويتراجع ما قبل البند الفاشل بصمت.
 
 -- 3.1 الموظف التجريبي (بلا أي بيانات شخصية؛ لا فريق؛ المشغّل الوحيد)
 do $$ declare n int; op uuid; begin
@@ -206,9 +223,10 @@ do $$ declare n int; begin
     raise exception 'حساب آخر مرتبط بـ TEST01';
   end if;
   update public.app_users set biker_employee_id = 'TEST01', in_daily_split = false, is_test = true
-  where id = '0efea7d4-f215-436b-8c74-9c4f6eca1074' and not is_owner;
+  where id = '0efea7d4-f215-436b-8c74-9c4f6eca1074' and not is_owner
+    and btrim(coalesce(biker_employee_id, '')) in ('ba6e536b-a0e0-44bd-9ae6-6b0fe86bacd9', 'TEST01');  -- القيمة المقروءة 2026-10-12 (أو سبق تطبيقه)
   get diagnostics n = row_count;
-  if n <> 1 then raise exception 'المتوقع صف واحد بالضبط، تأثّر %', n; end if;
+  if n <> 1 then raise exception 'المتوقع صف واحد بالضبط بالربط المقروء 2026-10-12، تأثّر % (تغيّر الحساب؟ اقرأه من جديد)', n; end if;
 end $$;
 
 -- ═══ تحقق بالقراءة بعد القسمين 1 و2 ═══
@@ -217,9 +235,10 @@ end $$;
 -- select event_object_table from information_schema.triggers where trigger_name='trg_guard_is_test' group by 1 order by 1;  -- الثلاثة
 -- select proname, prosecdef from pg_proc where pronamespace='public'::regnamespace and proname in
 --   ('_guard_is_test','is_test_employee','is_test_biker','is_test_vehicle','daily_team','daily_split_list','set_daily_split','relaunch_roster',
---    '_fleet_notify_admins','_fleet_notify_biker','daily_digest');  -- 11، كلها t
--- select has_function_privilege('authenticated','public.is_test_biker(text)','execute'), has_function_privilege('authenticated','public._fleet_notify_admins(text,text,text,text)','execute'),
---        has_function_privilege('authenticated','public.daily_team()','execute');  -- f, f, t
+--    '_fleet_notify_admins','_fleet_notify_biker','daily_digest');  -- 11، كلها t إلا _guard_is_test = f (بصلاحية المستدعي عمداً)
+-- select has_function_privilege('authenticated','public.is_test_vehicle(uuid)','execute'), has_function_privilege('authenticated','public.is_test_biker(text)','execute'),
+--        has_function_privilege('anon','public.is_test_biker(text)','execute'), has_function_privilege('authenticated','public._fleet_notify_admins(text,text,text,text)','execute'),
+--        has_function_privilege('authenticated','public.daily_team()','execute');  -- f, t, f, f, t
 -- select count(*) from notifications where title like '🧪%';  -- 0 (لا إشعار حقيقي يبدأ بالبادئة)
 
 -- ═══ تحقق بالقراءة بعد القسم 3 ═══
@@ -234,8 +253,21 @@ end $$;
 --             where id = '0efea7d4-f215-436b-8c74-9c4f6eca1074';   -- القيم السابقة كما قُرئت 2026-10-12
 --           delete from public.fleet_vehicles where plate = 'TEST-0000' and is_test;   -- بعد حذف طلباتها/تعبئاتها التجريبية إن وُجدت
 --           delete from public.employees where employee_id = 'TEST01' and is_test;
--- (القسم 2) إعادة تعريف الدوال السبع بنصوصها في docs/sql/daily_receive.sql وlaunch_support.sql وfleet_requests.sql (أو نسخ الإنتاج
---           المقروءة 2026-10-12: نفس الأجسام أعلاه بلا شروط is_test وبلا البادئة).
+-- (القسم 2) إعادة تعريف الدوال السبع بنسخ الإنتاج المقروءة 2026-10-12 = الأجسام أعلاه بلا شروط is_test وبلا البادئة:
+--           daily_team وdaily_split_list وset_daily_split في docs/sql/daily_receive.sql، relaunch_roster في launch_support.sql،
+--           _fleet_notify_admins و_fleet_notify_biker في fleet_requests.sql (2.4)، وdaily_digest ليست في أي ملف فنصّها هنا:
+-- create or replace function public.daily_digest() returns void language plpgsql security definer set search_path to 'public' as $f$
+-- declare summ text; expc int;
+-- begin
+--   select string_agg(category||' ('||c||')',' · ') into summ
+--     from (select category,count(*) c from public.notifications
+--           where created_at > now()-interval '24 hours' and category not in ('digest','escalation','system')
+--           group by category order by count(*) desc) t;
+--   select count(*) into expc from public.renewal_docs where active is distinct from false and end_date is not null and (end_date-current_date)<=30;
+--   perform push_notification('owner',null,'digest','info','📋 ملخّص اليوم',
+--     coalesce('أحداث آخر 24 ساعة — '||summ,'لا أحداث جديدة في آخر 24 ساعة')||case when expc>0 then ' · وثائق ضمن 30 يوماً: '||expc else '' end,
+--     'dashboard', null, 'digest:'||to_char((now() at time zone 'Asia/Riyadh')::date,'YYYY-MM-DD'));
+-- end $f$;
 -- (القسم 1) drop trigger if exists trg_guard_is_test on public.employees; drop trigger if exists trg_guard_is_test on public.fleet_vehicles;
 --           drop trigger if exists trg_guard_is_test on public.app_users;
 --           drop function if exists public._guard_is_test(), public.is_test_employee(uuid), public.is_test_biker(text), public.is_test_vehicle(uuid);

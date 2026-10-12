@@ -88,8 +88,10 @@ if(e1||e2)process.exit(1);
 ok('is_test على الجداول الثلاثة، not null وافتراضياً false',ps(`select string_agg(table_name||':'||is_nullable||':'||column_default, ',' order by table_name) from information_schema.columns where table_schema='public' and column_name='is_test'`)
   ==='app_users:NO:false,employees:NO:false,fleet_vehicles:NO:false');
 ok('لا صف تجريبي بعد القسمين 1 و2',ps(`select (select count(*) from employees where is_test)+(select count(*) from fleet_vehicles where is_test)+(select count(*) from app_users where is_test)`)==='0');
-ok('دوال الاشتقاق والحارس داخلية (لا تنفيذ للمسجّل)، والدوال العامة كما كانت',
-  ps(`select has_function_privilege('authenticated','public.is_test_biker(text)','execute')::text||has_function_privilege('authenticated','public._guard_is_test()','execute')::text
+ok('دوال الاشتقاق داخلية (عدا is_test_biker للمسجّل لأن الحارس يستدعيها)، والحارس بصلاحية المستدعي، والدوال العامة كما كانت',
+  ps(`select prosecdef from pg_proc where proname='_guard_is_test'`)==='f'&&ps(`select has_function_privilege('anon','public.is_test_biker(text)','execute')::text||has_function_privilege('authenticated','public.is_test_vehicle(uuid)','execute')::text
+    ||has_function_privilege('authenticated','public.is_test_biker(text)','execute')::text`)==='falsefalsetrue'
+  &&ps(`select has_function_privilege('authenticated','public.is_test_employee(uuid)','execute')::text||has_function_privilege('authenticated','public._guard_is_test()','execute')::text
     ||has_function_privilege('authenticated','public.daily_team()','execute')::text||has_function_privilege('anon','public.daily_team()','execute')::text
     ||has_function_privilege('authenticated','public._fleet_notify_admins(text,text,text,text)','execute')::text`)==='falsefalsetruefalsefalse');
 
@@ -99,6 +101,10 @@ ok('والدرّاج يبقى قادراً على تعديل بقية أعمدة
 ok('صاحب «الأسطول» و«الموظفين» لا يغيّر العلامة ولا ينشئ صفاً تجريبياً',/IS_TEST_OWNER_ONLY/.test(asErr(FLEET,`update fleet_vehicles set is_test=true where id='${V2}'`)||'')
   &&/IS_TEST_OWNER_ONLY/.test(asErr(FLEET,`insert into fleet_vehicles (plate,is_test) values ('X',true)`)||'')&&/IS_TEST_OWNER_ONLY/.test(asErr(FLEET,`update employees set is_test=true where id='${E_MIDUL}'`)||'')
   &&!asErr(FLEET,`insert into fleet_vehicles (id,plate) values ('20000000-0000-0000-0000-0000000000aa','N-9')`));
+ok('anon لا يغيّر العلامة حتى لو كانت له صلاحية جدول (auth.uid() فارغ لا يعني الخادم)',/IS_TEST_OWNER_ONLY/.test(err(`begin; set local role anon; update fleet_vehicles set is_test=true where id='${V2}'; commit;`)||'')
+  ||/IS_TEST_OWNER_ONLY/.test(err(`begin; set local role anon; insert into employees (full_name,is_test) values ('x',true); commit;`)||''));
+ok('غير المالك لا ينشئ موظفاً تجريبياً ولا يعلّم حساباً تجريبياً',/IS_TEST_OWNER_ONLY/.test(asErr(FLEET,`insert into employees (full_name,is_test) values ('x',true)`)||'')
+  &&/IS_TEST_OWNER_ONLY/.test(asErr(FLEET,`update app_users set is_test=true where id='${MIDUL}'`)||''));
 ok('المالك يغيّر العلامة ويعيدها',!asErr(OWNER,`update fleet_vehicles set is_test=true where id='${V2}'`)&&!asErr(OWNER,`update fleet_vehicles set is_test=false where id='${V2}'`));
 ps(`delete from fleet_vehicles where plate='N-9'`);
 
@@ -106,7 +112,10 @@ ps(`delete from fleet_vehicles where plate='N-9'`);
 ok('daily_team قبل السجلات: Midul فقط',as(MIDUL,`select string_agg(employee_id, ',') from daily_team()`)==='1648');
 
 // ── القسم 3: السجلات ──
-const e3=err(s3),e4=err(s3);
+const blocks=s3.split(/(?=^-- 3\.\d)/m).filter(b=>/^-- 3\.\d/.test(b));
+ok('القسم 3 ثلاثة بنود مستقلة',blocks.length===3);
+const runS3=()=>blocks.map(b=>err(b)).find(Boolean)||null;
+const e3=runS3(),e4=runS3();
 ok('القسم 3 يُطبَّق مرتين بلا خطأ ولا تكرار'+(e3||e4?' — '+String(e3||e4).slice(0,300):''),!e3&&!e4
   &&ps(`select count(*) from employees where employee_id='TEST01'`)==='1'&&ps(`select count(*) from fleet_vehicles where plate='TEST-0000'`)==='1');
 const E_T=ps(`select id from employees where employee_id='TEST01'`);
@@ -122,8 +131,14 @@ ps(`update app_users set in_daily_split=true where id='${ACC}'`);  // حتى ل�
 ok('daily_team: التجريبي لا يستلم نصيباً حتى مع in_daily_split=true (حارس is_test مستقل)، والحساب التجريبي لا يرى الفريق الحقيقي',as(MIDUL,`select string_agg(employee_id, ',') from daily_team()`)==='1648'&&as(ACC,`select count(*) from daily_team()`)==='0');
 ps(`update app_users set in_daily_split=false where id='${ACC}'`);
 ok('daily_split_list: لا يظهر التجريبي',as(SUP,`select string_agg(employee_id, ',') from daily_split_list()`)==='1648');
+ok('الهوية ثابتة: صاحب «الموظفين» لا يغيّر رقم TEST01 ولا يعطي رقمه لموظف حقيقي، ويبقى يعدّل الحقيقيين',/IS_TEST_OWNER_ONLY/.test(asErr(FLEET,`update employees set employee_id='1648' where id='${E_T}'`)||'')
+  &&/IS_TEST_OWNER_ONLY/.test(asErr(FLEET,`update employees set employee_id='TEST01' where id='${E_MIDUL}'`)||'')&&/IS_TEST_OWNER_ONLY/.test(asErr(FLEET,`insert into employees (full_name,employee_id) values ('y','TEST01')`)||'')
+  &&!asErr(FLEET,`update employees set full_name='Midul Hassan' where id='${E_MIDUL}'`));
 ok('set_daily_split: إدخال التجريبي ⇒ TEST_ACCOUNT، وإخراجه مسموح، وبقية الدرّاجين كما هم',/TEST_ACCOUNT/.test(asErr(SUP,`select set_daily_split('${E_T}',true)`)||'')
   &&as(SUP,`select set_daily_split('${E_T}',false)`)==='1'&&as(SUP,`select set_daily_split('${E_MIDUL}',true)`)==='1');
+ps(`update app_users set is_test=true where id='${MIDUL}'`);
+ok('set_daily_split: حساب تجريبي مرتبط بموظف غير تجريبي ⇒ TEST_ACCOUNT صريح لا 0 صامت',/TEST_ACCOUNT/.test(asErr(SUP,`select set_daily_split('${E_MIDUL}',true)`)||''));
+ps(`update app_users set is_test=false where id='${MIDUL}'`);
 ok('relaunch_roster: بلا التجريبي',as(SUP,`select string_agg(biker_employee_id, ',') from relaunch_roster()`)==='1648');
 
 // ── الإشعارات ──
@@ -144,8 +159,10 @@ ok('fleet_alerts() تعمل للمالك',!asErr(OWNER,`select count(*) from fle
 
 // ── القسم 3 محروس ──
 ps(`insert into app_users (id,display_name,biker_employee_id) values ('00000000-0000-0000-0000-0000000000cc','x','TEST01')`);
-ok('حساب آخر مرتبط بـ TEST01 ⇒ البند 3.3 يتوقف',/حساب آخر/.test(err(s3)||''));
+ok('حساب آخر مرتبط بـ TEST01 ⇒ البند 3.3 يتوقف',/حساب آخر/.test(err(blocks[2])||''));
 ps(`delete from app_users where id='00000000-0000-0000-0000-0000000000cc'`);
+ps(`update app_users set biker_employee_id='9999' where id='${ACC}'`);
+ok('الحساب تغيّر ربطه عمّا قُرئ ⇒ البند 3.3 يتوقف (لا يكتب فوق قيمة غير متوقعة)',/المتوقع صف واحد/.test(err(blocks[2])||''));
 ps(`insert into operators values (gen_random_uuid())`);
-ok('أكثر من مشغّل ⇒ البند 3.1 يتوقف',/مشغّل واحد/.test(err(s3)||''));
+ok('أكثر من مشغّل ⇒ البند 3.1 يتوقف',/مشغّل واحد/.test(err(blocks[0])||''));
 }finally{if(!process.env.KEEPDB)ps(`drop database if exists ${db}`,'postgres');else console.log(db);}
