@@ -39,7 +39,7 @@ export default function DashboardHome({onNav,theme="light"}){
     const[apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix,daily,ins]=await Promise.all([
       q("applicants","full_name,application_number,status,ai_classification,ai_score_total,location,saudi_city,bangladesh_district,submitted_at"),
       supabase.from("page_visits").select("step,session_id").eq("page","ad_page").then(({data})=>data||[],()=>[]),
-      q("employees","full_name,employee_id,team_id,staff_role,profession_ok"),
+      q("employees","full_name,employee_id,team_id,staff_role,profession_ok,is_test"),
       q("teams","id,name,supervisor_user_id"),
       q("interview_sessions","status,decision,rating"),
       q("onboarding","progress"),
@@ -49,7 +49,7 @@ export default function DashboardHome({onNav,theme="light"}){
       q("field_rounds","compliance_pct,period,status,round_date,sweater_id"),
       q("vendor_expenses","exp_date,amount"),
       q("renewal_docs","id,doc_type,subject,end_date,active"),
-      q("fleet_vehicles","plate,status,has_gps,has_camera,active"),
+      q("fleet_vehicles","plate,status,has_gps,has_camera,active,is_test"),
       q("fleet_incidents","title,status,active"),
       q("housing_units","name,annual_rent,active"),
       q("housing_payments","seq,due_date,amount,paid"),
@@ -62,7 +62,8 @@ export default function DashboardHome({onNav,theme="light"}){
       q("ops_daily","day,period,total_bookings,washes,cancel_client,cancel_admin,avg_quality"),
       supabase.from("insights").select("scope_ar,tone,icon,title,body,recommendation,severity,sort").eq("active",true).order("sort").then(({data})=>data||[],()=>[]),
     ]);
-    setD({apps,visits,emps,teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh,finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix,daily,ins});
+    const nt=a=>a.filter(x=>!x.is_test); // السجلات التجريبية خارج العدّ والمؤشرات
+    setD({apps,visits,emps:nt(emps),teams,ivs,onb,ops,pay,viol,rounds,vexp,docs,fveh:nt(fveh),finc,hunits,hpays,hviol,screq,scitems,setts,fin,tix,daily,ins});
   })();},[]);
 
   const s=useMemo(()=>{
