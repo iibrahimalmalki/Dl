@@ -1,8 +1,10 @@
-import{useState,useEffect,useMemo}from"react";
+import{useState,useEffect,useMemo,lazy,Suspense}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import HandoverLog from"./HandoverLog";
+// «الطلبات والتنبيهات»: طلبات الوقود والزيت من البوابة + fleet_alerts() — بصلاحية fleet_alerts، تُحمَّل عند فتح التبويب فقط
+const FleetRequests=lazy(()=>import("./FleetRequests"));
 
 const V_STATUS={
   active:{ar:"تعمل",c:"var(--ok-ink)",bg:"var(--ok-bg)"},
@@ -139,6 +141,7 @@ export default function Fleet({opId,owner}){
       <button className={tab==="inc"?"on":""} onClick={()=>setTab("inc")}><Icon n="alert" s={16}/> الحوادث والأعطال <span>{inc.length}</span></button>
       <button className={tab==="key"?"on":""} onClick={()=>setTab("key")}><Icon n="key" s={16}/> المفاتيح</button>
       <button className={tab==="ho"?"on":""} onClick={()=>setTab("ho")}><Icon n="doc" s={16}/> سجل التسليم والاستلام</button>
+      <button className={tab==="req"?"on":""} onClick={()=>setTab("req")}><Icon n="fuel" s={16}/> الطلبات والتنبيهات</button>
     </div>
 
     {tab==="veh"&&<div className="fl-panel">
@@ -227,6 +230,7 @@ export default function Fleet({opId,owner}){
       <div className="fl-recs"><b>توصيات تصحيحية:</b> نقطة مركزية واحدة لحفظ نُسخ المفاتيح مع نسخة احتياطية موثّقة · استرجاع المفاتيح بحوزة أطراف خارجية · دراسة الانتقال لأقفال بالكود لإنهاء مشكلة «المفتاح المفقود» نهائياً.</div>
     </div>}
 
+    {tab==="req"&&<Suspense fallback={<div className="fl-panel">…</div>}><FleetRequests owner={owner}/></Suspense>}
     {tab==="ho"&&<div className="fl-panel">
       <div className="fl-ph"><b>سجل التسليم والاستلام</b><span className="fl-hint">من بوابة البايكر · اضغط السطر لعرض التفاصيل والصور</span></div>
       <HandoverLog veh={veh}/>

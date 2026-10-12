@@ -9,7 +9,7 @@ export const MODULE_LABELS={
   onboarding:"التعاقد والإعداد",operations:"العمليات اليومية",performance:"الأداء",payroll:"الرواتب",
   complaints:"الشكاوى",field_rounds:"الجولات الميدانية",org:"الهيكل التنظيمي",employees:"الموظفون",
   vendors:"الموردون",reports:"التقارير",renewals:"الوثائق",
-  fleet:"الأسطول",housing:"السكن",supply:"سلاسل الإمداد",offboarding:"إنهاء الخدمة",settlement:"تسوية سويتر",
+  fleet:"الأسطول",fleet_alerts:"طلبات الأسطول",housing:"السكن",supply:"سلاسل الإمداد",offboarding:"إنهاء الخدمة",settlement:"تسوية سويتر",
 };
 
 // v = عرض فقط · ve = عرض + تعديل
