@@ -9,7 +9,9 @@ execSync(`npx esbuild src/fleetRequests.js --bundle --format=esm --platform=node
 const F=await import(`${tmp}/t.mjs`);
 
 ok('المبلغ الافتراضي 50﷼',F.DEFAULT_FUEL_AMOUNT===50);
-ok('numInput: ينقّي أثناء الكتابة (أرقام عربية/بنغالية، فاصلة ⇒ نقطة، حذف الحروف)',F.numInput('١٤٢a٣٠')==='14230'&&F.numInput('৫০')==='50'&&F.numInput('8٫5')==='8.5'&&F.numInput(null)==='');
+ok('intInput للعدّاد: فاصل الآلاف يُحذف (14,230 ⇒ 14230 لا 14.23)، وأرقام عربية/فارسية/بنغالية',F.intInput('14,230')==='14230'&&F.intInput('١٤٬٢٣٠')==='14230'&&F.intInput('۱۲')==='12'&&F.intInput('৫০km')==='50'&&F.intInput(null)==='');
+ok('decInput للمبالغ: نقطة عشرية واحدة، والفاصلة العربية نقطة',F.decInput('8٫5')==='8.5'&&F.decInput('5.0.1')==='5.01'&&F.decInput('50.')==='50.'&&F.parseNum('50.')===50);
+ok('riyadhMonth: منتصف الليل بتوقيت الرياض يبدأ الشهر الجديد',F.riyadhMonth('2026-10-31T23:00:00Z')==='2026-11'&&F.riyadhMonth('2026-10-31T20:00:00Z')==='2026-10');
 ok('parseNum: أرقام عربية وبنغالية وفاصلة عربية، والنص غير الرقمي ⇒ null',F.parseNum('١٤٢٣٠')===14230&&F.parseNum('১২')===12&&F.parseNum('8٫5')===8.5&&F.parseNum(' 50 ')===50&&F.parseNum('12a')===null&&F.parseNum('')===null&&F.parseNum(null)===null);
 
 // النماذج: الرفض لنقص حقل إلزامي فقط، بلا حدود ولا مقارنات

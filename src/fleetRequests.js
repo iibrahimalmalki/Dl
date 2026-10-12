@@ -67,12 +67,16 @@ export function parseNum(v) {
     .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0))
     .replace(/[০-৯]/g, d => String(d.charCodeAt(0) - 0x09E6))
     .replace(/[٫,]/g, ".").replace(/\s+/g, "");
-  if (!s || !/^\d+(\.\d+)?$/.test(s)) return null;
+  if (!s || !/^\d+(\.\d*)?$/.test(s)) return null;
   return Number(s);
 }
 
-// تنقية حقل رقمي أثناء الكتابة: أرقام عربية/بنغالية ← لاتينية، والنقطة فقط (مثل odoNum في handover.js)
-export const numInput = v => String(v ?? "").replace(/[٠-٩]/g, d => d.charCodeAt(0) - 0x0660).replace(/[০-৯]/g, d => d.charCodeAt(0) - 0x09E6).replace(/[٫,]/g, ".").replace(/[^\d.]/g, "");
+// تنقية الحقول الرقمية أثناء الكتابة: أرقام عربية/فارسية/بنغالية ← لاتينية
+const latin = v => String(v ?? "").replace(/[٠-٩]/g, d => d.charCodeAt(0) - 0x0660).replace(/[۰-۹]/g, d => d.charCodeAt(0) - 0x06F0).replace(/[০-৯]/g, d => d.charCodeAt(0) - 0x09E6);
+// العدّاد: أرقام صحيحة فقط — الفاصلة وفاصل الآلاف يُحذفان (14,230 ⇒ 14230، لا 14.23)
+export const intInput = v => latin(v).replace(/\D/g, "");
+// المبلغ واللترات: فاصلة عشرية واحدة (الفاصلة العربية ⇒ نقطة)، وما بعد النقطة الثانية يُحذف
+export const decInput = v => { const s = latin(v).replace(/[٫,]/g, ".").replace(/[^\d.]/g, ""); const i = s.indexOf("."); return i < 0 ? s : s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, ""); };
 
 // ── تحقق نماذج البوابة: حقل إلزامي ناقص فقط (لا حدود ولا مقارنات) ⇒ {field, ar, bn} أو null ──
 const NEED = {
@@ -179,8 +183,9 @@ export function alertsByVehicle(alerts) {
 }
 // تكلفة الكيلو لكل دراجة في شهر (YYYY-MM): مجموع التحويلات ÷ (أعلى − أدنى قراءة عدّاد في الشهر). عرض لا تنبيه.
 // requests: fuel_requests (transferred_at, amount, odometer, requested_at, vehicle_id, plate)؛ fills: fuel_logs غير legacy (fill_at, odometer)
+export const riyadhMonth = (v = new Date()) => { const d = new Date(v); return isNaN(d) ? "" : d.toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" }).slice(0, 7); };
 export function monthlyCostPerKm(month, requests, fills) {
-  const inMonth = iso => !!iso && String(iso).slice(0, 7) === month;
+  const inMonth = iso => !!iso && riyadhMonth(iso) === month;
   const m = new Map();
   const row = (id, plate) => { if (!m.has(id)) m.set(id, { vehicle_id: id, plate: plate || "—", amount: 0, min: null, max: null }); const r = m.get(id); if (plate && r.plate === "—") r.plate = plate; return r; };
   const read = (r, odo) => { const n = Number(odo); if (odo == null || odo === "" || !isFinite(n)) return; r.min = r.min == null ? n : Math.min(r.min, n); r.max = r.max == null ? n : Math.max(r.max, n); };

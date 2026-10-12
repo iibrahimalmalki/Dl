@@ -2,13 +2,12 @@ import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
-import{FUEL_STATUS,OIL_STATUS,statusOf,CHANNELS,channelAr,alertAr,ALERT_KINDS,SETTINGS,settingError,parseNum,adminRpcError,splitRequests,splitOil,since,alertsByVehicle,monthlyCostPerKm}from"./fleetRequests";
+import{FUEL_STATUS,OIL_STATUS,statusOf,CHANNELS,channelAr,alertAr,ALERT_KINDS,SETTINGS,settingError,parseNum,adminRpcError,splitRequests,splitOil,since,alertsByVehicle,monthlyCostPerKm,riyadhMonth}from"./fleetRequests";
 
 // «الأسطول ← الطلبات والتنبيهات»: طلبات الوقود والزيت من البوابة + لوحة fleet_alerts() + الحدود.
 // الصلاحية: وحدة fleet_alerts (عرض = القراءة، تعديل = التحويل والإرسال لسويتر والاعتماد وضبط الحدود) — المالك دائماً.
 // كل كتابة عبر دوال القاعدة (docs/sql/fleet_requests.sql). التنبيهات لكل دراجة لا لكل درّاج، ولا تصل الدرّاج.
 const fmt=iso=>{const d=new Date(iso);if(!iso||isNaN(d))return"—";const p=n=>String(n).padStart(2,"0");return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
-const ym=(d=new Date())=>d.toISOString().slice(0,7);
 const Badge=({st})=><span className={"g-badge "+st.tone}><i/>{st.ar}</span>;
 const Ph=({u,t})=>u?<a className="fq-ph" href={u} target="_blank" rel="noopener noreferrer"><Icon n="eye" s={12}/> {t}</a>:null;
 
@@ -17,7 +16,7 @@ export default function FleetRequests({owner}){
   const[perm,setPerm]=useState(owner?{view:true,edit:true}:null);
   const[d,setD]=useState(null);const[err,setErr]=useState(null);const[busy,setBusy]=useState(null);
   const[refs,setRefs]=useState({});const[chans,setChans]=useState({});const[notes,setNotes]=useState({});const[vals,setVals]=useState({});
-  const[month,setMonth]=useState(ym());
+  const[month,setMonth]=useState(()=>riyadhMonth());
   useEffect(()=>{if(owner)return;(async()=>{const{data:{user}}=await supabase.auth.getUser();
     const{data}=await supabase.from("user_permissions").select("can_view,can_edit").eq("user_id",user&&user.id).eq("module","fleet_alerts").maybeSingle();
     setPerm({view:!!(data&&(data.can_view||data.can_edit)),edit:!!(data&&data.can_edit)});})();},[owner]);
@@ -46,7 +45,8 @@ export default function FleetRequests({owner}){
   const plateOf=id=>{const x=d&&(d.fr.find(r=>r.vehicle_id===id)||d.mr.find(r=>r.vehicle_id===id));return x?x.plate:"—";};
 
   async function call(key,fn,args,ok){
-    setBusy(key);const{error}=await supabase.rpc(fn,args);setBusy(null);
+    setBusy(key);let error;
+    try{({error}=await supabase.rpc(fn,args));}catch(e){error=e;}finally{setBusy(null);}
     if(error){toast.bad(adminRpcError(error),undefined,6000);return false;}
     toast.ok(ok);load();return true;
   }
@@ -65,7 +65,7 @@ export default function FleetRequests({owner}){
       <div className={"fq-kpi"+(R.pending.length?" hot":"")}><b>{R.pending.length}</b><span>وقود بانتظار التحويل</span></div>
       <div className="fq-kpi"><b>{O.requested.length}</b><span>زيت بانتظار الإرسال</span></div>
       <div className="fq-kpi"><b>{O.done.length}</b><span>زيت بانتظار الاعتماد</span></div>
-      <div className="fq-kpi"><b>{d.al.filter(a=>a.severity==="warn").length}</b><span>تنبيهات</span></div>
+      <div className="fq-kpi"><b>{d.al.filter(a=>a.severity==="warn").length}</b><span>تحذيرات</span></div>
     </div>
 
     {/* ١) الطلبات «المطلوبة» غير المحوَّلة: بارزة أعلى الصفحة — الطلب الجديد لا يغلقها */}
@@ -115,7 +115,7 @@ export default function FleetRequests({owner}){
     {/* ٤) تكلفة الكيلو الشهرية — عرض لا تنبيه، لكل دراجة */}
     <section className="fq-sec">
       <h3><Icon n="cash" s={16}/> تكلفة الكيلو لكل دراجة
-        <select className="g-input fq-mon" value={month} onChange={e=>setMonth(e.target.value)}>{[0,1,2,3].map(i=>{const x=new Date();x.setDate(1);x.setMonth(x.getMonth()-i);const k=ym(x);return<option key={k} value={k}>{k}</option>;})}</select></h3>
+        <select className="g-input fq-mon" value={month} onChange={e=>setMonth(e.target.value)}>{[0,1,2,3].map(i=>{const[y,m]=riyadhMonth().split("-").map(Number);const x=new Date(Date.UTC(y,m-1-i,15));const k=x.toISOString().slice(0,7);return<option key={k} value={k}>{k}</option>;})}</select></h3>
       {C.length===0?<div className="fq-none">لا تحويلات أو قراءات في هذا الشهر.</div>:<div className="fq-tw"><table className="fq-t"><thead><tr><th>الدراجة</th><th>التحويلات</th><th>المسافة</th><th>﷼/كم</th></tr></thead>
         <tbody>{C.map(r=><tr key={r.vehicle_id}><td>{r.plate}</td><td>{r.amount}﷼</td><td>{r.km} كم</td><td>{r.perKm==null?"—":r.perKm}</td></tr>)}</tbody></table></div>}
     </section>
@@ -137,7 +137,7 @@ export default function FleetRequests({owner}){
         <span>{s.ar}</span>
         <div className="fq-setv"><input className="g-input" inputMode="decimal" disabled={!ed} value={v!==undefined?v:(cur??"")} onChange={e=>setVals(p=>({...p,[s.k]:e.target.value}))}/><em>{s.unit}</em>
           {ed&&v!==undefined&&String(v)!==String(cur)&&<button className="g-btn primary" disabled={busy==="st"+s.k} onClick={()=>saveSet(s.k)}>حفظ</button>}</div></div>;})}</div>
-      {overrides.length>0&&<div className="fq-none">تجاوزات لدراجات: {overrides.map(o=>`${plateOf(o.vehicle_id)}: ${o.key} = ${o.value}`).join(" · ")}</div>}
+      {overrides.length>0&&<div className="fq-none">تجاوزات لدراجات: {overrides.map(o=>`${plateOf(o.vehicle_id)}: ${(SETTINGS.find(x=>x.k===o.key)||{}).ar||o.key} = ${o.value}`).join(" · ")}</div>}
     </section>
     </>}
   </div>);
