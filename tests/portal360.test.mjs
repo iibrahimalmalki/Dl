@@ -23,6 +23,12 @@ const SCEN={
   baseline:{label:'العهدة — نموذج التسجيل الأول',biker_assets:[],custody_assets:[]},
   pending:{label:'العهدة — بانتظار الاعتماد',biker_assets:[decl('baseline','declared')],custody_assets:[]},
   rejected:{label:'العهدة — مرفوض (السبب ظاهر)',biker_assets:[decl('baseline','rejected',{reject_reason:'أعد التسجيل مع صورة لكل قطعة'})],custody_assets:[]},
+  // الوقود والزيت: طلب «مطلوب» وآخر «حُوِّل» وتعبئة، وطلب زيت «أُرسل لسويتر» ⇒ نموذج تأكيد التنفيذ ظاهر
+  fuel:{label:'الوقود والزيت — طلبات وتعبئة وتأكيد الزيت',tabs:[['fuel','الوقود']],biker_assets:[],custody_assets:[],
+    fuel_requests:[{id:'50000000-0000-0000-0000-000000000001',plate:'5531 BG',amount:50,odometer:14230,status:'requested',requested_at:'2026-10-12T08:00:00Z',transferred_at:null},
+      {id:'50000000-0000-0000-0000-000000000002',plate:'5531 BG',amount:50,odometer:13410,status:'transferred',requested_at:'2026-10-05T08:00:00Z',transferred_at:'2026-10-05T10:00:00Z'}],
+    fuel_logs:[{id:'60000000-0000-0000-0000-000000000001',plate:'5531 BG',odometer:13420,amount:25,fill_at:'2026-10-05T12:00:00Z',request_id:'50000000-0000-0000-0000-000000000002'}],
+    maintenance_requests:[{id:'70000000-0000-0000-0000-000000000001',plate:'5531 BG',status:'sent',odometer:14100,requested_at:'2026-10-10T08:00:00Z',sent_at:'2026-10-10T09:00:00Z',done_at:null,approved_at:null}]},
   mine:{label:'العهدة — «عهدتي الحالية» وتحديث الحالة',biker_assets:[decl('baseline','approved',{reviewed_at:'2026-10-09T12:00:00Z'}),{...decl('update','declared'),asset_id:HELM,items:[{key:'helmet',condition:'poor',photo:'p',note:'شرخ'}]}],
     custody_assets:[asset(VAC,'المكنسة','Vacuum Cleaner','2026-08-07','2028-02-07',18),asset(HELM,'الخوذة','Helmet','2026-08-07','2028-08-07',24,'due'),asset('20000000-0000-0000-0000-000000000003','الفرش (إطارات/مكيّف/أرضية/صغيرة)','Brushes set','2026-04-01','2026-10-01',6)]},
 };
@@ -38,6 +44,7 @@ function restReply(url,headers,scen){
     operators:[{id:OP,name:'دلو ورغوة'}],
     fleet_vehicles:[{id:'40000000-0000-0000-0000-000000000001',plate:'5531 BG',make:'Honda',biker_employee_id:EMP,held_by:null,held_until:null,held_reason:null,needs_receipt_update:false}],
     biker_assets:scen.biker_assets,custody_assets:scen.custody_assets,
+    fuel_requests:scen.fuel_requests||[],fuel_logs:scen.fuel_logs||[],maintenance_requests:scen.maintenance_requests||[],
   }[table]||[];
   const body=single?(rows[0]||null):rows;
   if(single&&!rows[0])return{status:406,body:JSON.stringify({code:'PGRST116',message:'0 rows'})};
@@ -82,7 +89,7 @@ try{
     await page.goto(BASE+'/#biker',{waitUntil:'networkidle'});
     await page.waitForSelector('.bp-content',{timeout:15000});
     // التبويبات: «ملفي» ثم كل تبويب مفتوح عبر الدرج (العهدة فقط في السيناريوهات غير الأول)
-    const tabs=key==='baseline'?[['profile','ملفي'],['handover','الدراجة'],['fuel','الوقود'],['perf','أدائي'],['docs','وثائقي'],['assets','العهدة'],['daily','الاستلام'],['academy','الأكاديمية'],['support','الدعم والأفكار']]:[['assets','العهدة']];
+    const tabs=scen.tabs||(key==='baseline'?[['profile','ملفي'],['handover','الدراجة'],['fuel','الوقود'],['perf','أدائي'],['docs','وثائقي'],['assets','العهدة'],['daily','الاستلام'],['academy','الأكاديمية'],['support','الدعم والأفكار']]:[['assets','العهدة']]);
     for(const[k,ar]of tabs){
       if(k!=='profile'){
         // على الجوال الدرج يُفتح من «المزيد» في الشريط السفلي (البرغر للأجهزة اللوحية فقط)
@@ -100,6 +107,20 @@ try{
       await page.getByRole('button',{name:'تحديث الحالة'}).first().click();await page.waitForTimeout(300);
       const o=await page.evaluate(overflow);await page.screenshot({path:path.join(OUT,'mine-assets-update.png'),fullPage:true});
       ok('نموذج «تحديث الحالة» مفتوح @360 بلا تجاوز',o.doc<=o.w&&o.bad.length===0&&await page.getByRole('button',{name:'إرسال للاعتماد'}).count()===1);
+    }
+    if(key==='baseline'){
+      // الوقود بلا بيانات: «اطلب وقوداً» بمبلغ 50 مملوء، و«سجّل تعبئة»، ونموذج «اطلب تغيير الزيت»، ولا خيار «زيت» في التعبئة
+      await page.locator('.g-bnav-i',{hasText:'الوقود'}).count()?await page.locator('.g-bnav-i',{hasText:'الوقود'}).first().click():(await page.getByRole('button',{name:/المزيد/}).click(),await page.locator('.gs-item',{hasText:'الوقود'}).first().click());
+      await page.waitForTimeout(500);
+      ok('الوقود: «اطلب وقوداً» (50 مملوءة) و«سجّل تعبئة» و«اطلب تغيير الزيت»، بلا اختيار «زيت» في التعبئة',
+        await page.getByText('اطلب وقوداً').count()===1&&await page.locator('#fr_amt').inputValue()==='50'&&await page.getByText('سجّل تعبئة').count()===1
+        &&await page.getByRole('button',{name:'اطلب تغيير الزيت'}).count()===1&&await page.getByRole('radio',{name:/زيت/}).count()===0);
+    }
+    if(key==='fuel'){
+      ok('الوقود: الحالات ظاهرة بلغتين («مطلوب» و«حُوِّل»)، ونموذج تأكيد الزيت (الإثبات + اسم مسؤول سويتر)',
+        await page.getByText('مطلوب ·',{exact:false}).count()>=1&&await page.getByText('حُوِّل ·',{exact:false}).count()>=1&&await page.locator('#oc_tech').count()===1&&await page.getByRole('button',{name:'أكّد تغيير الزيت'}).count()===1);
+      const txt=await page.locator('.bp-content').innerText();
+      ok('لا أرقام تحليلية للدرّاج (لا كم/لتر، لا استهلاك، لا مخصّص شهري)',!/كم\s*\/|كم لكل|استهلاك|متوسط|مخصّص|تجاوز|280/.test(txt));
     }
     if(key==='pending')ok('بطاقة الانتظار تعرض صنفَي التسجيل',await page.getByText('بانتظار الاعتماد').count()>=1&&await page.locator('.bp-item').count()===2);
     if(key==='rejected')ok('سبب الرفض ظاهر بالعربي والبنغالي',await page.getByText('أعد التسجيل مع صورة لكل قطعة').count()===1&&await page.locator('.bp-asrej .bn').count()>=1);

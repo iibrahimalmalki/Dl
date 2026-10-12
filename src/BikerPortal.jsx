@@ -26,6 +26,8 @@ const DailyReceive = lazy(() => import("./daily/DailyReceive"));
 const SupportBiker = lazy(() => import("./launch/SupportBiker"));
 const MySteps = lazy(() => import("./launch/MySteps"));
 const HandoverReport = lazy(() => import("./HandoverReport"));
+// الوقود والزيت (طلبات + تعبئات + تغيير الزيت) — docs/sql/fleet_requests.sql
+const FuelOil = lazy(() => import("./FuelOil"));
 
 /*  بوابة البايكر — دلو ورغوة | বাইকার পোর্টাল
     هوية دلو ورغوة (برتقالي) · ثنائية اللغة (عربي + বাংলা)
@@ -454,7 +456,7 @@ function Portal() {
             <div className="g-empty" style={{ padding: "22px 10px" }}><b>غير متاح حالياً<span className="bn" style={{ display: "block" }}>বর্তমানে উপলব্ধ নয়</span></b></div>
             <Btn kind="primary" block onClick={() => setTab("profile")} bn="হোমে ফিরুন">العودة إلى الرئيسية</Btn></div></div>}
           {TABS.isOpen(tab) && tab === "handover" && <>{tempCard}<Handover me={me} myBike={myBike} onDirty={setDirty} /></>}
-          {TABS.isOpen(tab) && tab === "fuel" && <Fuel me={me} myBike={myBike} />}
+          {TABS.isOpen(tab) && tab === "fuel" && <Suspense fallback={loading}><FuelOil me={me} myBike={myBike} kit={{ uploadPhoto, PhotoBox, NoBike }} /></Suspense>}
           {TABS.isOpen(tab) && tab === "assets" && <Assets me={me} />}
           {TABS.isOpen(tab) && tab === "docs" && <Docs me={me} />}
           {TABS.isOpen(tab) && tab === "perf" && <MyPerf me={me} />}
@@ -643,7 +645,7 @@ function Profile({ me, myBike, onGo, can = () => true }) {
       {(can("handover") || can("fuel")) && <>
       <label className="bp-lbl" style={{ marginTop: 14 }}>النماذج <span className="bn">/ ফর্মসমূহ</span></label>
       <div className="bp-stack">{can("handover") && <Btn kind="secondary" block onClick={() => onGo("handover")} bn="বাইক হস্তান্তর / গ্রহণ">📋 تسليم / استلام الدراجة</Btn>}
-      {can("fuel") && <Btn kind="secondary" block onClick={() => onGo("fuel")} bn="জ্বালানি রেকর্ড">⛽ تسجيل تعبئة وقود</Btn>}</div>
+      {can("fuel") && <Btn kind="secondary" block onClick={() => onGo("fuel")} bn="জ্বালানি ও তেল">⛽ الوقود والزيت</Btn>}</div>
       <div className="bp-note">التوثيق المنتظم يحمي حقّك ويوضّح التزامك. · নিয়মিত ডকুমেন্টেশন আপনার অধিকার রক্ষা করে।</div>
       </>}
     </div></div>
@@ -967,124 +969,6 @@ function Handover({ me, myBike, onDirty }) {
     </div></div>}
     {dlg}
     {report && <Suspense fallback={null}><HandoverReport row={report.row} mode="biker" saved={report.saved} onClose={() => setReport(null)} /></Suspense>}
-  </>);
-}
-
-/* ================= سجل الوقود ================= */
-const F_DRAFT = bid => "bp.fuel." + bid;
-function Fuel({ me, myBike }) {
-  const bid = me.biker_employee_id;
-  const d0 = React.useMemo(() => loadDraft(F_DRAFT(bid)) || {}, [bid]);
-  const [fuelType, setFuelType] = useState(d0.fuelType || "petrol");
-  const [odometer, setOdometer] = useState(d0.odometer || "");
-  const [amount, setAmount] = useState(d0.amount || "");
-  const [liters, setLiters] = useState(d0.liters || "");
-  const [odoFile, setOdoFile] = useState(null);
-  const [recFile, setRecFile] = useState(null);
-  const [notes, setNotes] = useState(d0.notes || "");
-  const [busy, setBusy] = useState(false);
-  const [prog, setProg] = useState(null);
-  const [fe, setFe] = useState(null), [err, setErr] = useState(null);
-  const uploaded = React.useRef(new Map()); // File → رابط: إعادة المحاولة تكمل من حيث توقفت
-  const toast = useToast();
-  const online = useOnline();
-  const [recent, setRecent] = useState(null);
-  const dec = v => odoNum(v);
-
-  async function loadRecent() {
-    const { data } = await supabase.from("fuel_logs")
-      .select("id,plate,fuel_type,odometer,amount,fill_at").order("fill_at", { ascending: false }).limit(8);
-    setRecent(data || []);
-  }
-  useEffect(() => { loadRecent(); }, []);
-  useEffect(() => { saveDraft(F_DRAFT(bid), { fuelType, odometer, amount, liters, notes }); }, [fuelType, odometer, amount, liters, notes]);
-
-  if (!myBike) return <NoBike />;
-  const focusField = id => setTimeout(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); try { el.focus({ preventScroll: true }); } catch (e) { /* */ } } }, 30);
-  const need = (field, ar, bn) => { setFe({ field, ar, bn }); focusField(field); };
-
-  async function submit() {
-    setErr(null); setFe(null);
-    if (!odometer) return need("f_odometer", "أدخل قراءة العدّاد.", "ওডোমিটার লিখুন।");
-    if (!amount) return need("f_amount", "أدخل المبلغ.", "পরিমাণ লিখুন।");
-    if (!odoFile) return need("f_odo", "التقط صورة العدّاد.", "ওডোমিটারের ছবি তুলুন।");
-    if (!recFile) return need("f_rec", "التقط صورة الفاتورة — إرفاقها إلزامي.", "রসিদের ছবি দিন — বাধ্যতামূলক।");
-    setBusy(true);
-    let photoNo = null;
-    try {
-      const jobs = [[odoFile, "fuel-odometer"], [recFile, "fuel-receipt"]], urls = [];
-      setProg({ done: 0, total: jobs.length });
-      for (let i = 0; i < jobs.length; i++) {
-        const [file, folder] = jobs[i];
-        let url = uploaded.current.get(file);
-        if (!url) { photoNo = i + 1; url = await uploadPhoto(file, folder, bid); uploaded.current.set(file, url); }
-        urls.push(url); setProg({ done: i + 1, total: jobs.length });
-      }
-      photoNo = null;
-      const { error } = await supabase.from("fuel_logs").insert({
-        operator_id: me.operator_id, vehicle_id: myBike.id, plate: myBike.plate,
-        biker_employee_id: bid, biker_name: me.name, fuel_type: fuelType,
-        odometer: Number(odometer), amount: Number(amount), liters: liters ? Number(liters) : null,
-        odometer_photo_url: urls[0], receipt_photo_url: urls[1], notes: notes || null, created_by: me.uid,
-      });
-      if (error) throw error;
-      toast.ok("تم تسجيل التعبئة ✓", "সংরক্ষিত", 3000);
-      saveDraft(F_DRAFT(bid), null); uploaded.current = new Map();
-      setOdometer(""); setAmount(""); setLiters(""); setOdoFile(null); setRecFile(null); setNotes(""); loadRecent();
-    } catch (e) { setErr(humanError(e, photoNo != null ? { photo: photoNo } : {})); }
-    setBusy(false); setProg(null);
-  }
-  const errAt = id => fe && fe.field === id ? <FieldErr t={fe} /> : null;
-  const inv = id => fe && fe.field === id ? " k-inv" : "";
-
-  return (<>
-    <div className="bp-card g-card bp-free"><div className="bp-sec">
-      <h2 className="bp-wiz-h" style={{ marginTop: 0 }}>تسجيل تعبئة وقود<span className="bn">জ্বালানি রেকর্ড</span></h2>
-      <div className="bp-bike"><span className="ic">🏍️</span><div><div className="p">{myBike.plate}</div>{myBike.make && <div className="m">{myBike.make}</div>}</div></div>
-
-      <label className="bp-lbl">النوع <span className="bn">/ ধরন</span></label>
-      <div className="bp-seg" role="radiogroup" aria-label="النوع">
-        <button type="button" role="radio" aria-checked={fuelType === "petrol"} className={fuelType === "petrol" ? "on" : ""} onClick={() => setFuelType("petrol")}>بنزين<span className="bn">পেট্রল</span></button>
-        <button type="button" role="radio" aria-checked={fuelType === "oil"} className={fuelType === "oil" ? "on" : ""} onClick={() => setFuelType("oil")}>زيت<span className="bn">অয়েল</span></button>
-      </div>
-
-      <div className="bp-row">
-        <div><label className="bp-lbl" htmlFor="f_odometer">العدّاد (كم) <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার</span></label>
-          <input id="f_odometer" className={"g-input bp-in" + inv("f_odometer")} inputMode="numeric" value={odometer} onChange={e => { setOdometer(dec(e.target.value)); setFe(null); }} placeholder="14230" dir="ltr" style={{ textAlign: "right" }} />{errAt("f_odometer")}</div>
-        <div><label className="bp-lbl" htmlFor="f_amount">المبلغ (ريال) <span className="bp-req">*</span> <span className="bn">/ পরিমাণ</span></label>
-          <input id="f_amount" className={"g-input bp-in" + inv("f_amount")} inputMode="decimal" value={amount} onChange={e => { setAmount(dec(e.target.value)); setFe(null); }} placeholder="50" dir="ltr" style={{ textAlign: "right" }} />{errAt("f_amount")}</div>
-      </div>
-      <label className="bp-lbl" htmlFor="f_liters">اللترات (اختياري) <span className="bn">/ লিটার (ঐচ্ছিক)</span></label>
-      <input id="f_liters" className="g-input bp-in" inputMode="decimal" value={liters} onChange={e => setLiters(dec(e.target.value))} placeholder="8.2" dir="ltr" style={{ textAlign: "right" }} />
-
-      <label className="bp-lbl">صورة العدّاد والفاتورة <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার ও রসিদের ছবি</span></label>
-      <div className="bp-pgrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <div className={inv("f_odo")}><PhotoBox id="f_odo" cap="صورة العدّاد" capBn="ওডোমিটার" tag="العداد" file={odoFile} onPick={x => { setOdoFile(x); setFe(null); }} /></div>
-        <div className={inv("f_rec")}><PhotoBox id="f_rec" cap="صورة الفاتورة" capBn="রসিদ" tag="الفاتورة *" file={recFile} onPick={x => { setRecFile(x); setFe(null); }} /></div>
-      </div>
-      {errAt("f_odo")}{errAt("f_rec")}
-      <div className="bp-note">إرفاق الفاتورة إلزامي لاعتماد التعبئة. · <span className="bn">রসিদ সংযুক্ত করা আবশ্যক।</span></div>
-
-      <label className="bp-lbl" htmlFor="f_notes">ملاحظات (اختياري) <span className="bn">/ নোট</span></label>
-      <textarea id="f_notes" className="g-textarea bp-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="…" />
-
-      {err && <div style={{ marginTop: 12 }}><ErrorNote e={err} who={bid} busy={busy} onRetry={submit} onLogin={() => supabase.auth.signOut()} /></div>}
-      <StickyBar>
-        {busy && prog && <UploadBar done={prog.done} total={prog.total} />}
-        <Btn kind="primary" block big busy={busy} disabled={!online} onClick={submit} bn={busy ? "সংরক্ষণ হচ্ছে…" : "রিফুয়েল সংরক্ষণ"}>{busy ? "جارٍ الحفظ…" : "حفظ التعبئة"}</Btn>
-        {!online && <OfflineHint />}
-      </StickyBar>
-    </div></div>
-    <div className="bp-card g-card"><div className="bp-sec">
-      <label className="bp-lbl" style={{ marginTop: 0 }}>سجل تعبئاتك <span className="bn">/ আপনার রিফুয়েল রেকর্ড</span></label>
-      <div className="bp-list">
-        {recent === null ? <Skel rows={2} card={false} /> : recent.length === 0 ? <div className="g-empty" style={{ padding: "18px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
-          recent.map(r => <div className="bp-item" key={r.id}>
-            <div className="t">{r.plate || "—"} · {r.fuel_type === "oil" ? "زيت · অয়েল" : "بنزين · পেট্রল"} · {r.amount ? r.amount + "﷼" : "—"} · العدّاد {r.odometer}<span className="g-badge info"><i />مُرسل · <span className="bn">জমা দেওয়া</span></span></div>
-            <div className="m">{new Date(r.fill_at).toLocaleString("ar")}</div>
-          </div>)}
-      </div>
-    </div></div>
   </>);
 }
 
