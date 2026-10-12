@@ -33,4 +33,7 @@ l=L.lifecycle({status:'draft'},T);
 ok('مسودة ⇒ لا خطوة منجزة والتالية الاعتماد',l.steps.every(s=>!s.done)&&l.next.key==='confirmed'&&l.due===null);
 ok('مقبولة ومدفوعة (paid=true) ⇒ مدفوعة لا متأخرة حتى بعد الموعد',L.lifecycle({...sep,paid:true,paid_at:'2026-10-20'},'2026-11-30').overdueDays===0);
 ok('الثابت DUE_DAYS = 14',L.DUE_DAYS===14);
+ok('riyadhDate: الطابع الزمني يُحوَّل لتاريخ الرياض، والتاريخ الصِرف يبقى',L.riyadhDate('2026-10-11T22:30:00Z')==='2026-10-12'&&L.riyadhDate('2026-10-11T20:58:00+00:00')==='2026-10-11'&&L.riyadhDate('2026-10-05')==='2026-10-05'&&L.riyadhDate(null)===null);
+ok('قبول بعد منتصف الليل بتوقيت الرياض ⇒ الموعد من يوم الرياض لا UTC',L.dueDateOf({accepted_at:'2026-10-11T22:30:00Z'})==='2026-10-26');
+ok('todayRiyadh بصيغة YYYY-MM-DD',/^\d{4}-\d{2}-\d{2}$/.test(L.todayRiyadh()));
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

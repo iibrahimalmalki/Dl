@@ -4,7 +4,7 @@ import Icon from"./Icon";
 import{useToast}from"./ui";
 import{settlementLine,MIN_GUARANTEE_ORDERS,SSP_CONTRACT,tiersActive}from"./sweaterContract";
 import{stageOf,stageLabel,isLocked}from"./settlementStatus";
-import{lifecycle,DUE_DAYS,addDays,tipFromPayment}from"./invoiceLifecycle";
+import{lifecycle,DUE_DAYS,addDays,tipFromPayment,riyadhDate,todayRiyadh}from"./invoiceLifecycle";
 import{reconcileMonth}from"./monthRecon";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" ﷼";
@@ -225,7 +225,8 @@ export default function Settlement({opId,me,owner}){
     setBusy(true);note(false,"");
     try{
       const vno=head.receipt_voucher_no||("DW-RV-"+period+"-01");
-      const patch={paid:markPaid,...(markPaid?{status:"paid"}:{}),
+      // الحالة paid فقط لما بعد الرفع على البوابة؛ المسودة/التقديرية تبقى كما كانت ولا تصبح رقماً رسمياً في التقارير
+      const patch={paid:markPaid,...(markPaid&&["submitted","accepted"].includes(head.status)?{status:"paid"}:{}),
         paid_amount:head.paid_amount===""?null:Number(head.paid_amount),
         paid_at:head.paid_at||null,payment_ref:head.payment_ref||null,payment_method:head.payment_method||null,
         payment_receipt_url:head.payment_receipt_url||null,receipt_voucher_no:vno,
@@ -238,7 +239,11 @@ export default function Settlement({opId,me,owner}){
     setBusy(false);
   };
   // دورة حياة الفاتورة: رُفعت على بوابة الموردين ⇒ submitted؛ قبِلتها سويتر (+البقشيش والموعد) ⇒ accepted
-  const lc=lifecycle(head,new Date().toISOString().slice(0,10));
+  const lc=lifecycle(head,todayRiyadh());
+  // قيم فعّالة واحدة للبقشيش والموعد تستعملها المدخلات والأزرار (المدخل الفارغ = المحفوظ)
+  const effTip=tipIn===""?Number(head.tip_amount||0):Number(tipIn);
+  const effDue=dueIn||lc.due||"";
+  const canStage=!!owner&&["submitted","accepted","paid"].includes(lc.stage);
   const setStage=async(patch,okMsg)=>{
     if(!head.id){note(false,"احفظ التسوية أولاً");return;}
     setBusy(true);note(false,"");
@@ -247,9 +252,9 @@ export default function Settlement({opId,me,owner}){
     setBusy(false);
   };
   const markSubmitted=()=>setStage({status:"submitted",submitted_at:new Date().toISOString()},"سُجِّل رفع الفاتورة على البوابة");
-  const markAccepted=()=>{const at=new Date().toISOString();const due=dueIn||addDays(at,DUE_DAYS);
-    setStage({status:"accepted",accepted_at:at,tip_amount:tipIn===""?0:Number(tipIn),due_date:due},`سُجِّل قبول سويتر — المستحق ${money(net+(tipIn===""?0:Number(tipIn)))} حتى ${due}`);};
-  const saveDue=()=>setStage({due_date:dueIn||null,tip_amount:tipIn===""?Number(head.tip_amount||0):Number(tipIn)},"تم حفظ الموعد والبقشيش");
+  const markAccepted=()=>{const at=new Date().toISOString();const due=dueIn||addDays(riyadhDate(at),DUE_DAYS);
+    setStage({status:"accepted",accepted_at:at,tip_amount:effTip,due_date:due},`سُجِّل قبول سويتر — المستحق ${money(net+effTip)} حتى ${due}`);};
+  const saveDue=()=>setStage({due_date:effDue||null,tip_amount:effTip},"تم حفظ الموعد والبقشيش");
   const openVoucher=()=>{
     if(!Number(head.paid_amount)){note(false,"أدخل مبلغ الدفعة أولاً");return;}
     const w=window.open("","_blank");
@@ -273,7 +278,7 @@ export default function Settlement({opId,me,owner}){
 
     <div className="se-bar">
       <div className="se-per"><Icon n="calendar" s={15}/><input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/><span>{periodAr(period)}</span>
-        {head.id&&<span className={"se-conf st-"+stageOf(head)}>{stageOf(head)==="confirmed"||stageOf(head)==="paid"?<Icon n="check" s={12}/>:null} {stageLabel(head)}</span>}</div>
+        {head.id&&<span className={"se-conf st-"+stageOf(head)}>{["confirmed","accepted","paid"].includes(stageOf(head))?<Icon n="check" s={12}/>:null} {stageLabel(head)}</span>}</div>
       <div className="se-acts">
         <button className="se-b ghost" disabled={locked} onClick={genFromOps}><Icon n="refresh" s={14}/> توليد من العمليات</button>
         <button className="se-b ghost" disabled={locked} onClick={addLine}><Icon n="plus" s={14}/> إضافة بايكر</button>
@@ -342,13 +347,13 @@ export default function Settlement({opId,me,owner}){
       <ol className="se-steps">{lc.steps.map(s=><li key={s.key} className={s.done?"on":""}><b>{s.ar}</b><span>{s.date||"—"}</span></li>)}</ol>
       <div className="se-lc-g">
         <div className="se-var" style={{background:"var(--p-50)"}}><span>المستحق (الصافي + البقشيش)</span><b>{money(lc.expected)}</b></div>
-        <label><span>بقشيش سويتر (﷼)</span><input type="number" step="0.01" value={tipIn===""&&head.tip_amount!==""?head.tip_amount:tipIn} onChange={e=>setTipIn(e.target.value)} placeholder="0.00" disabled={!owner}/></label>
-        <label><span>موعد التحويل المتوقع</span><input type="date" value={dueIn||lc.due||""} onChange={e=>setDueIn(e.target.value)} disabled={!owner}/></label>
+        <label><span>بقشيش سويتر (﷼)</span><input type="number" step="0.01" value={tipIn===""?(head.tip_amount===""?"":head.tip_amount):tipIn} onChange={e=>setTipIn(e.target.value)} placeholder="0.00" disabled={!canStage}/></label>
+        <label><span>موعد التحويل المتوقع</span><input type="date" value={effDue} onChange={e=>setDueIn(e.target.value)} disabled={!canStage}/></label>
       </div>
       <div className="se-pay-acts">
         {lc.stage==="confirmed"&&<button className="se-b brand" disabled={busy||!owner} onClick={markSubmitted}><Icon n="send" s={14}/> رُفعت على بوابة الموردين</button>}
         {lc.stage==="submitted"&&<button className="se-b green" disabled={busy||!owner} onClick={markAccepted}><Icon n="check" s={14}/> قبِلتها سويتر</button>}
-        {lc.stage==="accepted"&&<button className="se-b ghost" disabled={busy||!owner} onClick={saveDue}><Icon n="save" s={14}/> حفظ الموعد والبقشيش</button>}
+        {(lc.stage==="accepted"||lc.stage==="paid")&&<button className="se-b ghost" disabled={busy||!owner} onClick={saveDue}><Icon n="save" s={14}/> حفظ الموعد والبقشيش</button>}
         {lc.stage==="paid"&&tipFromPayment(head)!=null&&<span className="se-disc" style={{margin:0}}>البقشيش الفعلي من الدفعة: {money(tipFromPayment(head))}</span>}
       </div>
       {!owner&&<p className="se-disc">تسجيل مراحل الفاتورة مقصور على المالك.</p>}
@@ -397,6 +402,7 @@ const CSS=`
 .se-conf{display:flex;align-items:center;gap:4px;background:var(--ok-bg);color:var(--ok-ink);font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px}
 .se-conf.st-estimated,.se-conf.st-draft{background:var(--p-50);color:var(--p-700)}
 .se-conf.st-submitted{background:var(--info-bg);color:var(--info-ink)}
+.se-conf.st-accepted{background:var(--p-50);color:var(--p-700)}
 .se-lock{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--info-ink);background:var(--info-bg);border-radius:10px;padding:8px 11px;margin:8px 0 0;line-height:1.6}
 .se-acts{display:flex;gap:8px;flex-wrap:wrap}
 .se-b{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:11px;border:1px solid var(--line);background:var(--glass-2);font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;color:var(--ink)}

@@ -1,7 +1,8 @@
 -- ═══ دورة حياة فاتورة سويتر: تاريخ الرفع على البوابة، والقبول، والبقشيش كحقل، وموعد التحويل، وتنبيه التأخر ═══
 -- المشروع: cnmggdrlkgsyrjxmvydv
 -- الحالة: **لم يُطبَّق** — يُطبَّق بموافقة المالك (القسمان 1 و2 عبر apply_migration بلا drop؛ القسم 3 بيانات تُعرض عليه أولاً).
---          الترتيب: تطبيق القسمين 1 و2 ثم دمج PR الواجهة (الواجهة تقرأ الأعمدة الجديدة؛ بلا الأعمدة تفشل القراءة بـ column does not exist).
+--          الترتيب: تطبيق القسمين 1 و2 ثم دمج PR الواجهة. الصفحة تُفتح وتُقرأ بلا الأعمدة (select *)، لكن أزرار المراحل
+--          («رُفعت»/«قبِلتها»/«حفظ الموعد») تفشل بـ column does not exist حتى تُطبَّق الأعمدة.
 --          القسم 3 (تعبئة الأشهر السابقة) اختياري ومستقل.
 --
 -- الوضع قبل التطبيق (مقروء 2026-10-12): sweater_settlements بلا قيد على status؛ القيم المستعملة: confirmed (9 أشهر، 8 منها paid=true)،
@@ -45,7 +46,7 @@ begin
           'settlement', r.id::text, 'settle-wait-' || r.id || '-' || (v_days / 7));
         v_n := v_n + 1;
       end if;
-    elsif r.status = 'confirmed' and v_today >= (to_date(r.period, 'YYYY-MM') + interval '1 month 6 days')::date then
+    elsif r.status = 'confirmed' and r.period ~ '^\d{4}-\d{2}$' and v_today >= (to_date(r.period, 'YYYY-MM') + interval '1 month 6 days')::date then
       perform public.push_notification('owner', null, 'settlement', 'warn',
         'تسوية ' || r.period || ' معتمدة ولم تُرفع على بوابة الموردين',
         'ارفع الفاتورة على البوابة ثم سجّل «رُفعت» في صفحة التسوية',
