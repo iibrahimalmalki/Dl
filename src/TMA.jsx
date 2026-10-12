@@ -128,8 +128,10 @@ export default function TMA({opId,target,onTargetDone}){
     {tab==="invites"?
     <div className="tm-inv">
       <div className="tm-inv-new">
-        <div className="tm-inv-h"><Icon n="link" s={15}/> إرسال استبيان لمرشّح جديد</div>
-        <p className="tm-inv-desc">يجيب المرشّح على {Q_TOTAL} عبارة (عربي + بنغالي) عبر رابط سهل، ثم تستورد النتيجة إلى ملف مواهبه — تقييم ذاتي أقلّ تحيّزاً من الحكم اليدوي.</p>
+        {TMA_LINKS_ENABLED?<><div className="tm-inv-h"><Icon n="link" s={15}/> إرسال استبيان لمرشّح جديد</div>
+        <p className="tm-inv-desc">يجيب المرشّح على {Q_TOTAL} عبارة (عربي + بنغالي) عبر رابط سهل، ثم تستورد النتيجة إلى ملف مواهبه — تقييم ذاتي أقلّ تحيّزاً من الحكم اليدوي.</p></>
+        :<><div className="tm-inv-h"><Icon n="edit" s={15}/> تقييم المرشّحين يدوياً</div>
+        <p className="tm-inv-desc">قيّم المرشّح بنفسك على المحاور الـ22 من تبويب «التقييمات»، أو من صفحة المقابلات عبر «تقييم يدوي للمرشّح».</p></>}
         {TMA_LINKS_ENABLED&&<div className="tm-frow">
           <label className="tm-field"><span>اسم المرشّح</span><input value={invName} onChange={e=>setInvName(e.target.value)} placeholder="الاسم الكامل"/></label>
           <label className="tm-field"><span>الدور</span><input value={invRole} onChange={e=>setInvRole(e.target.value)} placeholder="مرشّح للتوظيف"/></label>
