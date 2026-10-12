@@ -1,15 +1,17 @@
 // حالات تسوية سويتر الشهرية (sweater_settlements.status) — منطق نقي بلا DOM ولا Supabase.
-// estimated تقديرية ← draft مسودة ← confirmed معتمدة ← submitted مُرسلة (رُفعت الفاتورة) ← paid مدفوعة.
+// estimated تقديرية ← draft مسودة ← confirmed معتمدة (داخلياً) ← submitted مُرسلة (رُفعت على بوابة الموردين) ← accepted مقبولة (قبِلتها سويتر + البقشيش) ← paid مدفوعة.
+// الخطوات وتواريخها والمستحق والتأخر في src/invoiceLifecycle.js.
 // العمود paid=true يعني «مدفوعة» أيّاً كانت الحالة النصية (أغسطس 2026: confirmed + paid).
 export const SETTLEMENT_STATUS={
   estimated:{ar:"تقديرية",tone:"muted"},
   draft:{ar:"مسودة",tone:"muted"},
   confirmed:{ar:"معتمدة",tone:"ok"},
   submitted:{ar:"مُرسلة",tone:"info"},
+  accepted:{ar:"مقبولة",tone:"ok"},
   paid:{ar:"مدفوعة",tone:"paid"},
 };
 // حالات صافيها رقم رسمي (فاتورة) يُقدَّم على الاحتساب من العمليات
-export const REVENUE_STATUSES=["confirmed","submitted","paid"];
+export const REVENUE_STATUSES=["confirmed","submitted","accepted","paid"];
 
 // الحالة الظاهرة للصف
 export function stageOf(row){
@@ -19,8 +21,8 @@ export function stageOf(row){
 }
 export const stageLabel=row=>{const s=row&&row.status;const k=stageOf(row);return SETTLEMENT_STATUS[k]&&(k!=="draft"||!s||s==="draft")?SETTLEMENT_STATUS[k].ar:String(s);};
 
-// مُرسلة أو مدفوعة ⇒ المبالغ والسطور مقفلة في صفحة التسوية (الحفظ يعيد احتساب net_total من السطور ويستبدلها)
-export const isLocked=row=>!!row&&(row.paid===true||row.status==="submitted"||row.status==="paid");
+// مُرسلة أو مقبولة أو مدفوعة ⇒ المبالغ والسطور مقفلة في صفحة التسوية (الحفظ يعيد احتساب net_total من السطور ويستبدلها)
+export const isLocked=row=>!!row&&(row.paid===true||row.status==="submitted"||row.status==="accepted"||row.status==="paid");
 
 // صافي الشهر الرسمي إن وُجد (null ⇒ يُحتسب من العمليات)
 export function settledNet(rows,period){
