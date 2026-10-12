@@ -4,7 +4,11 @@
 --   ثم تحقق بالقراءة: is_test على الجداول الثلاثة (not null، افتراضياً false)، صفر صفوف معلَّمة، الحارس على الثلاثة،
 --   الدوال security definer عدا _guard_is_test (بصلاحية المستدعي عمداً)، is_test_biker للمسجّل فقط، _fleet_notify_* داخلية،
 --   daily_team/set_daily_split للمسجّل لا لـ anon، لا إشعار يبدأ بـ🧪، الأسطول 6 مركبات غير تجريبية، الحساب 0efea7d4 لم يُمسّ.
---   القسم 3 **لم يُطبَّق** (بعد دمج PR الواجهة، بموافقة مستقلة لكل بند).
+--   القسم 3 **طُبِّق 2026-10-12** بأمر المالك بعد دمج PR الواجهة (#70) ونشر الإنتاج READY، بنداً بنداً عبر execute_sql مع تحقق بالقراءة بعد كل بند.
+--   بتعديل المالك: staff_role = 'biker' لـ TEST01 (بدل null). النتائج: TEST01 = 02076834-…، TEST-0000 مخصّصة له (active، is_test)،
+--   الحساب 0efea7d4 ⇒ TEST01 / in_daily_split=false / is_test=true؛ بجلسة الحساب: my_biker_id = TEST01 و_fleet_my_vehicle = TEST-0000
+--   وdaily_team فارغة له؛ مستلمو التوزيع 1624 و1648 و1700 فقط؛ لا صف لـ TEST01 في payroll_lines ولا في قائمة شاشة الرواتب؛
+--   الأسطول الحقيقي 6؛ سجل «عمر المالكي» كما هو.
 --
 -- قرارات المالك 2026-10-12 (موافقة على المذكرة وتوصيات §8):
 --   1) المرحلة 2 تبدأ بالحرج فقط (الرواتب، التوزيع، الأداء، مؤشرات الأسطول ولوحة المالك، الشارة).
@@ -192,12 +196,12 @@ end $$;
 -- كل بند (3.1، 3.2، 3.3) يُشغَّل **وحده** في استدعاء مستقل (execute_sql واحد أو تشغيل واحد في SQL Editor)، فيكون معاملة مستقلة
 -- تتراجع وحدها إن تأثر غير المتوقع. لا تُلصق البنود الثلاثة معاً: تصير معاملة واحدة ويتراجع ما قبل البند الفاشل بصمت.
 
--- 3.1 الموظف التجريبي (بلا أي بيانات شخصية؛ لا فريق؛ المشغّل الوحيد)
+-- 3.1 الموظف التجريبي (بلا أي بيانات شخصية؛ لا فريق؛ المشغّل الوحيد؛ staff_role = 'biker' بطلب المالك)
 do $$ declare n int; op uuid; begin
   if (select count(*) from public.operators) <> 1 then raise exception 'المتوقع مشغّل واحد بالضبط'; end if;
   select id into op from public.operators;
-  insert into public.employees (full_name, employee_id, operator_id, is_test)
-  select 'بايكر تجريبي', 'TEST01', op, true
+  insert into public.employees (full_name, employee_id, operator_id, staff_role, is_test)
+  select 'بايكر تجريبي', 'TEST01', op, 'biker', true
   where not exists (select 1 from public.employees where employee_id = 'TEST01');
   get diagnostics n = row_count;
   if n > 1 then raise exception 'المتوقع صف واحد على الأكثر، تأثّر %', n; end if;
@@ -246,7 +250,7 @@ end $$;
 -- select count(*) from notifications where title like '🧪%';  -- 0 (لا إشعار حقيقي يبدأ بالبادئة)
 
 -- ═══ تحقق بالقراءة بعد القسم 3 ═══
--- select e.employee_id, e.full_name, e.is_test, e.team_id, e.staff_role from employees e where employee_id='TEST01';  -- TEST01، بايكر تجريبي، t، null، null
+-- select e.employee_id, e.full_name, e.is_test, e.team_id, e.staff_role from employees e where employee_id='TEST01';  -- TEST01، بايكر تجريبي، t، null، biker
 -- select plate, make, model_year, status, active, is_test, current_biker from fleet_vehicles where plate='TEST-0000';  -- بوكسر، 2024، active، t، t
 -- select biker_employee_id, in_daily_split, is_test, is_owner from app_users where id='0efea7d4-f215-436b-8c74-9c4f6eca1074';  -- TEST01، f، t، f
 -- select count(*) from fleet_vehicles where not is_test;  -- 6 (لم يتغيّر)

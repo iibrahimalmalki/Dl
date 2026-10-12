@@ -119,7 +119,7 @@ const e3=runS3(),e4=runS3();
 ok('القسم 3 يُطبَّق مرتين بلا خطأ ولا تكرار'+(e3||e4?' — '+String(e3||e4).slice(0,300):''),!e3&&!e4
   &&ps(`select count(*) from employees where employee_id='TEST01'`)==='1'&&ps(`select count(*) from fleet_vehicles where plate='TEST-0000'`)==='1');
 const E_T=ps(`select id from employees where employee_id='TEST01'`);
-ok('TEST01: «بايكر تجريبي»، تجريبي، المشغّل الوحيد، بلا فريق ولا دور',ps(`select full_name||'|'||is_test||'|'||operator_id||'|'||coalesce(team_id::text,'-')||'|'||coalesce(staff_role,'-') from employees where id='${E_T}'`)===`بايكر تجريبي|true|${OP}|-|-`);
+ok('TEST01: «بايكر تجريبي»، تجريبي، المشغّل الوحيد، بلا فريق، ودوره biker',ps(`select full_name||'|'||is_test||'|'||operator_id||'|'||coalesce(team_id::text,'-')||'|'||coalesce(staff_role,'-') from employees where id='${E_T}'`)===`بايكر تجريبي|true|${OP}|-|biker`);
 ok('TEST-0000: بوكسر 2024، active، نشطة، تجريبية، مخصّصة لـ TEST01، بلا GPS',ps(`select make||'|'||model_year||'|'||status||'|'||active||'|'||is_test||'|'||biker_employee_id||'|'||has_gps||'|'||current_biker from fleet_vehicles where plate='TEST-0000'`)
   ===`بوكسر|2024|active|true|true|${E_T}|false|بايكر تجريبي (TEST01)`);
 ok('الحساب: TEST01، خارج التوزيع، تجريبي، والاسم كما هو',ps(`select biker_employee_id||'|'||in_daily_split||'|'||is_test||'|'||display_name||'|'||is_owner from app_users where id='${ACC}'`)==='TEST01|false|true|12345|false');
