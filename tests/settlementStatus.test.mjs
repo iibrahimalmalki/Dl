@@ -19,6 +19,7 @@ ok('null ⇒ مسودة',S.stageOf(null)==='draft'&&S.stageLabel(null)==='مسو
 
 ok('مُرسلة مقفلة',S.isLocked(sep));
 ok('مدفوعة (paid=true) مقفلة',S.isLocked(aug));
+ok('مقبولة (قبِلتها سويتر) مقفلة وتُعرض «مقبولة» وصافيها رسمي',S.isLocked({status:'accepted'})&&S.stageLabel({status:'accepted'})==='مقبولة'&&S.settledNet([{period:'2026-09',status:'accepted',net_total:'10131.66'}],'2026-09')===10131.66);
 ok('معتمدة غير مدفوعة غير مقفلة',!S.isLocked({status:'confirmed',paid:false}));
 ok('مسودة/تقديرية غير مقفلة',!S.isLocked({status:'draft'})&&!S.isLocked({status:'estimated'})&&!S.isLocked(null));
 
