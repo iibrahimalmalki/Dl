@@ -56,6 +56,20 @@ alter table public.fuel_logs add column if not exists legacy boolean not null de
 create index if not exists fuel_logs_request_idx on public.fuel_logs (request_id);
 create index if not exists fuel_logs_vehicle_idx on public.fuel_logs (vehicle_id, fill_at);
 revoke all on public.fuel_logs from anon;
+-- الكتابة المباشرة في fuel_logs (الشاشة الحالية تُدرج مباشرة) تبقى لكل الأعمدة القديمة، ولا تشمل legacy و request_id:
+-- لا يعلّم الدرّاج تعبئته «قديمة» فتختفي من التحليل، ولا يربطها بطلب غيره. الربط عبر add_fuel_fill، والعلامة عبر القسم 3.
+revoke insert, update on public.fuel_logs from authenticated;
+grant insert (id, operator_id, vehicle_id, plate, biker_employee_id, biker_name, fuel_type, fill_at, odometer, liters, amount,
+              odometer_photo_url, receipt_photo_url, notes, status, reviewed_by, reviewed_at, created_by, created_at),
+      update (operator_id, vehicle_id, plate, biker_employee_id, biker_name, fuel_type, fill_at, odometer, liters, amount,
+              odometer_photo_url, receipt_photo_url, notes, status, reviewed_by, reviewed_at)
+  on public.fuel_logs to authenticated;
+-- صاحب «تنبيهات الأسطول» يرى التعبئات (فواتيرها وصورها) التي تشير إليها التنبيهات — إضافة سياسة قراءة فقط
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'fuel_logs' and policyname = 'fl_sel_fleet_alerts') then
+    create policy fl_sel_fleet_alerts on public.fuel_logs for select to authenticated using (public.has_perm('fleet_alerts'));
+  end if;
+end $$;
 
 -- 1.3 طلبات الصيانة (تغيير الزيت الآن): مطلوب ← أُرسل لسويتر ← نُفّذ ← معتمد. المعتمد منها = سجل صيانة الدراجة.
 create table if not exists public.maintenance_requests (
@@ -89,18 +103,19 @@ create index if not exists maintenance_requests_biker_idx on public.maintenance_
 -- 1.4 حدود التنبيهات: صف عام (vehicle_id فارغ) + تجاوز اختياري لكل دراجة
 create table if not exists public.fleet_alert_settings (
   id uuid primary key default gen_random_uuid(),
-  key text not null check (key in ('fuel_drop_pct', 'fuel_min_km_per_50', 'fill_gap_km', 'fill_gap_hours', 'receipt_grace_days',
+  key text not null check (key in ('fuel_low_pct', 'fuel_min_km_per_50', 'fill_gap_km', 'fill_gap_hours', 'receipt_grace_days',
                                    'odo_max_km_per_day', 'oil_interval_km', 'oil_exec_days', 'fuel_price_91')),
   vehicle_id uuid references public.fleet_vehicles(id),
-  value numeric check (value is null or value >= 0),   -- فارغ في صف دراجة = «يرث العام»
+  value numeric check (value is null or value > 0),    -- فارغ في صف دراجة = «يرث العام»
   note text,
   updated_by uuid,
   updated_at timestamptz not null default now(),
-  check (vehicle_id is not null or value is not null)
+  check (vehicle_id is not null or value is not null),
+  check (key <> 'fuel_low_pct' or value is null or value < 100)
 );
 create unique index if not exists fleet_alert_settings_key_uq on public.fleet_alert_settings (key, coalesce(vehicle_id, '00000000-0000-0000-0000-000000000000'::uuid));
 insert into public.fleet_alert_settings (key, value, note) values
-  ('fuel_drop_pct',       25,   'استهلاك عالٍ: كم/50﷼ أقل من متوسط آخر 3 طلبات للدراجة بهذه النسبة ⇒ فحص صيانة مقترح'),
+  ('fuel_low_pct',       25,   'استهلاك عالٍ: كم/50﷼ أقل من متوسط آخر 3 طلبات للدراجة بهذه النسبة ⇒ فحص صيانة مقترح'),
   ('fuel_min_km_per_50',  600,  'استهلاك عالٍ قبل اكتمال 3 طلبات: أقل من هذا (كم لكل 50﷼). المرجع: بوكسر 150، 50﷼ ≈ 23 لتر ≈ 800–1000 كم'),
   ('fill_gap_km',         150,  'تعبئتان متقاربتان: فرق العدّاد أقل من هذا'),
   ('fill_gap_hours',      12,   'تعبئتان متقاربتان: الفرق الزمني أقل من هذا'),
@@ -132,10 +147,11 @@ end $$;
 revoke all on public.fuel_requests, public.maintenance_requests, public.fleet_alert_settings from anon, authenticated;
 grant select on public.fuel_requests, public.maintenance_requests, public.fleet_alert_settings to authenticated;
 
--- 1.6 السجل التدقيقي كبقية الجداول (audit_capture موجودة ومستعملة على fuel_logs)
-create or replace trigger trg_audit_fuel_requests after insert or update or delete on public.fuel_requests for each row execute function public.audit_capture();
-create or replace trigger trg_audit_maintenance_requests after insert or update or delete on public.maintenance_requests for each row execute function public.audit_capture();
-create or replace trigger trg_audit_fleet_alert_settings after insert or update or delete on public.fleet_alert_settings for each row execute function public.audit_capture();
+-- 1.6 السجل التدقيقي (audit_capture موجودة ومستعملة على fuel_logs) للإدراج والتعديل. لا أحد يملك الإزالة من هذه الجداول
+--     (لا صلاحية ولا دالة)، فتدقيق الإزالة غير لازم — وكلمتها تعطّل أداة MCP.
+create or replace trigger trg_audit_fuel_requests after insert or update on public.fuel_requests for each row execute function public.audit_capture();
+create or replace trigger trg_audit_maintenance_requests after insert or update on public.maintenance_requests for each row execute function public.audit_capture();
+create or replace trigger trg_audit_fleet_alert_settings after insert or update on public.fleet_alert_settings for each row execute function public.audit_capture();
 
 -- ═══ 2) الدوال ═══
 
@@ -200,7 +216,7 @@ begin
   return v_id;
 end $$;
 
--- 2.6 الدرّاج: تعبئة (فاتورة + عدّاد). تُربط بآخر طلب «محوَّل» للدراجة إن وُجد، وإلا تُقبل بلا طلب.
+-- 2.6 الدرّاج: تعبئة (فاتورة + عدّاد). تُربط بآخر تحويل للدراجة إن وُجد، وإلا تُقبل بلا طلب.
 create or replace function public.add_fuel_fill(p_odometer numeric, p_amount numeric, p_liters numeric,
   p_odometer_photo_url text, p_receipt_photo_url text, p_notes text default null)
 returns uuid language plpgsql security definer set search_path = public as $$
@@ -213,9 +229,11 @@ begin
   if p_amount is null or p_amount <= 0 then raise exception 'AMOUNT_REQUIRED'; end if;
   if coalesce(btrim(p_odometer_photo_url), '') = '' or coalesce(btrim(p_receipt_photo_url), '') = ''
      or length(p_odometer_photo_url) > 1000 or length(p_receipt_photo_url) > 1000 then raise exception 'PHOTO_REQUIRED'; end if;
+  if p_liters < 0 then raise exception 'BAD_LITERS'; end if;
   if length(p_notes) > 1000 then raise exception 'NOTES_TOO_LONG'; end if;
   select full_name into v_name from public.employees where id = public.my_employee_uuid();
-  select id into v_req from public.fuel_requests where vehicle_id = v.id and status = 'transferred' order by transferred_at desc nulls last, requested_at desc limit 1;
+  -- تُربط بآخر مبلغ حُوِّل للدراجة (محوَّل أو مُغلق بطلب أحدث لم يُحوَّل بعد): المال المصروف هو آخر تحويل
+  select id into v_req from public.fuel_requests where vehicle_id = v.id and transferred_at is not null order by transferred_at desc, requested_at desc limit 1;
   insert into public.fuel_logs (operator_id, vehicle_id, plate, biker_employee_id, biker_name, fuel_type, odometer, amount, liters,
                                 odometer_photo_url, receipt_photo_url, notes, created_by, request_id)
   values (v.operator_id, v.id, v.plate, v_bid, v_name, 'petrol', p_odometer, p_amount, nullif(p_liters, 0),
@@ -273,6 +291,7 @@ begin
   if not found then raise exception 'NOT_FOUND'; end if;
   if r.status <> 'requested' then raise exception 'NOT_REQUESTED'; end if;
   if coalesce(btrim(p_ref), '') = '' or length(p_ref) > 200 then raise exception 'REF_REQUIRED'; end if;
+  if p_at is not null and (p_at > now() + interval '1 hour' or p_at < r.requested_at - interval '1 day') then raise exception 'BAD_DATE'; end if;
   update public.fuel_requests set status = 'transferred', transfer_ref = btrim(p_ref), transferred_at = coalesce(p_at, now()), transferred_by = auth.uid()
   where id = p_id;
   perform public._fleet_notify_biker(r.biker_employee_id, 'حُوِّل مبلغ الوقود · জ্বালানির টাকা পাঠানো হয়েছে',
@@ -290,6 +309,7 @@ begin
   select * into r from public.maintenance_requests where id = p_id for update;
   if not found then raise exception 'NOT_FOUND'; end if;
   if r.status <> 'requested' then raise exception 'NOT_REQUESTED'; end if;
+  if p_at is not null and (p_at > now() + interval '1 hour' or p_at < r.requested_at - interval '1 day') then raise exception 'BAD_DATE'; end if;
   update public.maintenance_requests set status = 'sent', sent_at = coalesce(p_at, now()), sent_channel = p_channel, sent_by = auth.uid() where id = p_id;
   perform public._fleet_notify_biker(r.biker_employee_id, 'أُرسل طلب تغيير الزيت لسويتر · তেল পরিবর্তনের অনুরোধ সুইটারে পাঠানো হয়েছে',
     'بعد التنفيذ أكّد من البوابة · কাজ শেষে পোর্টালে নিশ্চিত করুন', p_id::text, 'oil-sent-' || p_id);
@@ -315,16 +335,13 @@ create or replace function public.set_fleet_alert_setting(p_key text, p_value nu
 returns boolean language plpgsql security definer set search_path = public as $$
 begin
   if not public.has_perm('fleet_alerts', true) then raise exception 'FORBIDDEN'; end if;
-  if p_key is null or p_key not in ('fuel_drop_pct', 'fuel_min_km_per_50', 'fill_gap_km', 'fill_gap_hours', 'receipt_grace_days',
+  if p_key is null or p_key not in ('fuel_low_pct', 'fuel_min_km_per_50', 'fill_gap_km', 'fill_gap_hours', 'receipt_grace_days',
                                     'odo_max_km_per_day', 'oil_interval_km', 'oil_exec_days', 'fuel_price_91') then raise exception 'BAD_KEY'; end if;
-  if (p_vehicle_id is null and p_value is null) or p_value < 0 then raise exception 'BAD_VALUE'; end if;
-  if p_vehicle_id is null then
-    update public.fleet_alert_settings set value = p_value, updated_by = auth.uid(), updated_at = now() where key = p_key and vehicle_id is null;
-    if not found then insert into public.fleet_alert_settings (key, value, updated_by) values (p_key, p_value, auth.uid()); end if;
-  else
-    update public.fleet_alert_settings set value = p_value, updated_by = auth.uid(), updated_at = now() where key = p_key and vehicle_id = p_vehicle_id;
-    if not found then insert into public.fleet_alert_settings (key, vehicle_id, value, updated_by) values (p_key, p_vehicle_id, p_value, auth.uid()); end if;
-  end if;
+  -- كل الحدود موجبة (الصفر يعطّل التنبيه أو يطلقه دائماً)، والنسبة أقل من 100
+  if (p_vehicle_id is null and p_value is null) or p_value <= 0 or (p_key = 'fuel_low_pct' and p_value >= 100) then raise exception 'BAD_VALUE'; end if;
+  insert into public.fleet_alert_settings (key, vehicle_id, value, updated_by) values (p_key, p_vehicle_id, p_value, auth.uid())
+  on conflict (key, coalesce(vehicle_id, '00000000-0000-0000-0000-000000000000'::uuid))
+  do update set value = excluded.value, updated_by = excluded.updated_by, updated_at = now();
   return true;
 end $$;
 
@@ -336,11 +353,11 @@ language plpgsql stable security definer set search_path = public as $$
 begin
   if not public.has_perm('fleet_alerts') then return; end if;
   return query
-  -- (1) استهلاك عالٍ: آخر فترة مكتملة (طلب ← الطلب التالي) مُطبَّعة إلى 50﷼، مقابل متوسط الفترات الثلاث السابقة أو الحد المطلق
+  -- (1) استهلاك عالٍ: آخر فترة مكتملة (طلب محوَّل ← الطلب المحوَّل التالي) مُطبَّعة إلى 50﷼، مقابل متوسط الفترات الثلاث السابقة أو الحد المطلق.
+  --     الطلبات غير المحوَّلة (مكررة أو لم يُرسل لها مال) لا تدخل: لا وقود بلا تحويل.
   with req as (
-    select r.*, lead(r.odometer) over w as next_odo, lead(r.requested_at) over w as next_at,
-           row_number() over (partition by r.vehicle_id order by r.requested_at desc) as rn_desc
-    from public.fuel_requests r window w as (partition by r.vehicle_id order by r.requested_at)
+    select r.*, lead(r.odometer) over w as next_odo, lead(r.requested_at) over w as next_at
+    from public.fuel_requests r where r.transferred_at is not null window w as (partition by r.vehicle_id order by r.requested_at)
   ), seg as (
     select q.*, (q.next_odo - q.odometer) * 50.0 / q.amount as km50 from req q where q.next_odo is not null and q.next_odo > q.odometer
   ), seg2 as (
@@ -350,11 +367,11 @@ begin
     from seg s
   )
   select 'high_consumption', 'warn', s.vehicle_id, s.plate, 'fuel_requests', s.id, s.next_at, round(s.km50),
-         case when s.nprev >= 3 then round(s.base * (1 - public._fleet_setting('fuel_drop_pct', s.vehicle_id) / 100.0)) else public._fleet_setting('fuel_min_km_per_50', s.vehicle_id) end,
+         case when s.nprev >= 3 then round(s.base * (1 - public._fleet_setting('fuel_low_pct', s.vehicle_id) / 100.0)) else public._fleet_setting('fuel_min_km_per_50', s.vehicle_id) end,
          'فحص صيانة مقترح: ' || round(s.km50) || ' كم لكل 50﷼' || case when s.nprev >= 3 then ' (متوسط سابق ' || round(s.base) || ' كم)' else '' end
   from seg2 s
   where s.last_rn = 1 and (
-    (s.nprev >= 3 and s.km50 < s.base * (1 - public._fleet_setting('fuel_drop_pct', s.vehicle_id) / 100.0))
+    (s.nprev >= 3 and s.km50 < s.base * (1 - public._fleet_setting('fuel_low_pct', s.vehicle_id) / 100.0))
     or (s.nprev < 3 and s.km50 < public._fleet_setting('fuel_min_km_per_50', s.vehicle_id)))
 
   union all
@@ -368,12 +385,13 @@ begin
          or f.fill_at - f.prev_at < make_interval(hours => public._fleet_setting('fill_gap_hours', f.vehicle_id)::int))
 
   union all
-  -- (3) حُوِّل بلا فواتير بعد المهلة
+  -- (3) حُوِّل بلا فواتير بعد المهلة (يبقى ظاهراً ولو أُغلق الطلب بطلب أحدث؛ نافذة 30 يوماً من التحويل)
   select 'no_receipts', 'warn', r.vehicle_id, r.plate, 'fuel_requests', r.id, r.transferred_at,
          floor(extract(epoch from now() - r.transferred_at) / 86400.0), public._fleet_setting('receipt_grace_days', r.vehicle_id),
          'حُوِّل ' || to_char(r.amount, 'FM999990.##') || ' ﷼ (' || coalesce(r.transfer_ref, '—') || ') ولا فاتورة بعد ' || floor(extract(epoch from now() - r.transferred_at) / 86400.0) || ' يوم'
   from public.fuel_requests r
-  where r.status = 'transferred' and r.transferred_at < now() - make_interval(days => public._fleet_setting('receipt_grace_days', r.vehicle_id)::int)
+  where r.transferred_at is not null and r.transferred_at > now() - interval '30 days'
+    and r.transferred_at < now() - make_interval(days => public._fleet_setting('receipt_grace_days', r.vehicle_id)::int)
     and not exists (select 1 from public.fuel_logs l where l.request_id = r.id)
 
   union all
@@ -384,19 +402,20 @@ begin
   where not l.legacy and l.request_id is null and l.vehicle_id is not null and l.fill_at > now() - interval '30 days'
 
   union all
-  -- (5) و(6) العدّاد: أقل من أعلى قراءة سابقة، أو قفزة يومية غير منطقية (كل القراءات: طلبات، تعبئات، زيت)
-  select o.kind, 'warn', o.vehicle_id, o.plate, o.src, o.id, o.at, o.val, o.thr, o.detail
+  -- (5) و(6) العدّاد: أقل من القراءة السابقة، أو قفزة يومية غير منطقية (كل القراءات: طلبات، تعبئات، زيت).
+  --     المقارنة بالقراءة السابقة لا بأعلاها: قراءة خاطئة واحدة تطلق تنبيهين فقط (قفزة ثم رجوع) لا سلسلة.
+  --     طلب الزيت له قراءتان (الطلب والتنفيذ) ⇒ يُبقى أحدث تنبيه واحد لكل (نوع، مرجع).
+  (select distinct on (o.kind, o.src, o.id) o.kind, 'warn'::text, o.vehicle_id, o.plate, o.src, o.id, o.at, o.val, o.thr, o.detail
   from (
-    select case when rd.odo < rd.prev_max then 'odometer_backwards' else 'odometer_jump' end as kind,
+    select case when rd.odo < rd.prev_odo then 'odometer_backwards' else 'odometer_jump' end as kind,
            rd.vehicle_id, rd.plate, rd.src, rd.id, rd.at,
-           case when rd.odo < rd.prev_max then rd.odo else round((rd.odo - rd.prev_odo) / greatest(extract(epoch from rd.at - rd.prev_at) / 86400.0, 1)) end as val,
-           case when rd.odo < rd.prev_max then rd.prev_max else public._fleet_setting('odo_max_km_per_day', rd.vehicle_id) end as thr,
-           case when rd.odo < rd.prev_max then 'قراءة العدّاد ' || rd.odo || ' أقل من سابقة ' || rd.prev_max
+           case when rd.odo < rd.prev_odo then rd.odo else round((rd.odo - rd.prev_odo) / greatest(extract(epoch from rd.at - rd.prev_at) / 86400.0, 1)) end as val,
+           case when rd.odo < rd.prev_odo then rd.prev_odo else public._fleet_setting('odo_max_km_per_day', rd.vehicle_id) end as thr,
+           case when rd.odo < rd.prev_odo then 'قراءة العدّاد ' || rd.odo || ' أقل من سابقة ' || rd.prev_odo
                 else 'قفزة عدّاد: ' || (rd.odo - rd.prev_odo) || ' كم خلال ' || round(extract(epoch from rd.at - rd.prev_at) / 86400.0, 1) || ' يوم' end as detail,
            (rd.odo - rd.prev_odo) / greatest(extract(epoch from rd.at - rd.prev_at) / 86400.0, 1) as per_day
     from (
-      select x.*, max(x.odo) over (partition by x.vehicle_id order by x.at rows between unbounded preceding and 1 preceding) as prev_max,
-             lag(x.odo) over (partition by x.vehicle_id order by x.at) as prev_odo, lag(x.at) over (partition by x.vehicle_id order by x.at) as prev_at
+      select x.*, lag(x.odo) over (partition by x.vehicle_id order by x.at) as prev_odo, lag(x.at) over (partition by x.vehicle_id order by x.at) as prev_at
       from (
         select r.vehicle_id, r.plate, 'fuel_requests'::text as src, r.id, r.requested_at as at, r.odometer as odo from public.fuel_requests r
         union all select l.vehicle_id, l.plate, 'fuel_logs', l.id, l.fill_at, l.odometer from public.fuel_logs l where not l.legacy and l.vehicle_id is not null and l.odometer is not null
@@ -407,6 +426,7 @@ begin
     where rd.at > now() - interval '30 days' and rd.prev_at is not null
   ) o
   where o.kind = 'odometer_backwards' or o.per_day > public._fleet_setting('odo_max_km_per_day', o.vehicle_id)
+  order by o.kind, o.src, o.id, o.at desc)
 
   union all
   -- (7) استحقاق تغيير الزيت: أعلى قراءة حالية − عدّاد آخر تغيير معتمد ≥ الحد، ولا طلب زيت مفتوح. بلا سجل سابق ⇒ لا تنبيه (لا أساس).

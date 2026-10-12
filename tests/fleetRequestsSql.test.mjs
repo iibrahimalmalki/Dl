@@ -65,18 +65,25 @@ const e1=err(file),e2=err(file);
 ok('الملف يُطبَّق مرتين بلا خطأ'+(e1||e2?' — '+String(e1||e2).slice(0,300):''),!e1&&!e2);
 if(e1||e2)process.exit(1);
 const s12=file.slice(file.indexOf('═══ 1)'),file.indexOf('═══ 3)'));
-ok('القسمان 1 و2 بلا أوامر drop/delete (أداة MCP تتعطل عليها)',!/^\s*(drop|delete|truncate)\b|\bdrop\s+(table|function|policy|trigger|index)|\bdelete\s+from\b/im.test(s12));
+ok('القسمان 1 و2 بلا كلمة drop أو delete إطلاقاً (أداة MCP تتعطل عليها)',!/drop|delete/i.test(s12));
 
 // ── البنية والصلاحيات ──
 ok('الجداول الثلاثة + عمودا fuel_logs',ps(`select count(*) from information_schema.tables where table_name in ('fuel_requests','maintenance_requests','fleet_alert_settings')`)==='3'
   &&ps(`select count(*) from information_schema.columns where table_name='fuel_logs' and column_name in ('request_id','legacy')`)==='2');
 ok('RLS مفعّل على الجداول الثلاثة',ps(`select bool_and(relrowsecurity) from pg_class where relname in ('fuel_requests','maintenance_requests','fleet_alert_settings')`)==='t');
 ok('الحدود الافتراضية التسعة كما وافق المالك',ps(`select string_agg(key||'='||value, ',' order by key) from fleet_alert_settings where vehicle_id is null`)===
-  'fill_gap_hours=12,fill_gap_km=150,fuel_drop_pct=25,fuel_min_km_per_50=600,fuel_price_91=2.18,odo_max_km_per_day=400,oil_exec_days=5,oil_interval_km=2000,receipt_grace_days=5');
+  'fill_gap_hours=12,fill_gap_km=150,fuel_low_pct=25,fuel_min_km_per_50=600,fuel_price_91=2.18,odo_max_km_per_day=400,oil_exec_days=5,oil_interval_km=2000,receipt_grace_days=5');
 ok('الدوال الثلاث عشرة security definer',ps(`select count(*)||'/'||count(*) filter (where prosecdef) from pg_proc where proname in ('request_fuel','add_fuel_fill','request_oil_change','confirm_oil_change','transfer_fuel_request','send_oil_to_sweater','approve_oil_change','set_fleet_alert_setting','fleet_alerts','_fleet_my_vehicle','_fleet_setting','_fleet_notify_admins','_fleet_notify_biker')`)==='13/13');
 ok('anon: لا قراءة لـ fuel_logs ولا fuel_requests، ولا تنفيذ request_fuel',ps(`select has_table_privilege('anon','public.fuel_logs','select')::text||has_table_privilege('anon','public.fuel_requests','select')::text||has_function_privilege('anon','public.request_fuel(numeric,text,numeric)','execute')::text`)==='falsefalsefalse');
 ok('المسجّل: قراءة فقط على الجداول الجديدة، ولا تنفيذ للدوال المساعدة',ps(`select has_table_privilege('authenticated','public.fuel_requests','select')::text||has_table_privilege('authenticated','public.fuel_requests','insert')::text||has_table_privilege('authenticated','public.maintenance_requests','update')::text||has_function_privilege('authenticated','public._fleet_notify_admins(text,text,text,text)','execute')::text`)==='truefalsefalsefalse');
 ok('الكتابة المباشرة في fuel_requests مرفوضة حتى للمالك (عبر الدوال فقط)',/permission denied/.test(asErr(OWNER,`insert into fuel_requests (vehicle_id,biker_employee_id,odometer,odometer_photo_url) values ('${V1}','1648',1,'x')`)||''));
+
+ok('الدرّاج لا يكتب legacy ولا request_id مباشرة، والإدراج القديم (بلا العمودين) يبقى يعمل',
+  /permission denied/.test(asErr(MIDUL,`insert into fuel_logs (biker_employee_id,odometer,amount,legacy) values ('1648',1,1,true)`)||'')
+  &&/permission denied/.test(asErr(MIDUL,`update fuel_logs set legacy=true where biker_employee_id='1648'`)||'')
+  &&!asErr(MIDUL,`insert into fuel_logs (biker_employee_id,odometer,amount,fill_at,notes) values ('1648',1,1,'2026-09-01','old-screen')`));
+ps(`delete from fuel_logs where notes='old-screen'`);
+ok('صاحب fleet_alerts (بلا «الأسطول») يقرأ التعبئات التي تشير إليها التنبيهات',as(FA_VIEW,`select count(*) from fuel_logs`)===ps(`select count(*) from fuel_logs`)&&as(NOBODY,`select count(*) from fuel_logs`)==='0');
 
 // ── طلب الوقود ──
 const r1=as(MIDUL,`select request_fuel(10000,'https://x/odo1.jpg')`);
@@ -91,7 +98,8 @@ ok('صاحب fleet_alerts (عرض) يرى الكل',as(FA_VIEW,`select count(*) 
 
 // ── التحويل ──
 ok('التحويل: عرض فقط ⇒ FORBIDDEN، والدرّاج ⇒ FORBIDDEN',/FORBIDDEN/.test(asErr(FA_VIEW,`select transfer_fuel_request('${r1}','REF')`)||'')&&/FORBIDDEN/.test(asErr(MIDUL,`select transfer_fuel_request('${r1}','REF')`)||''));
-ok('التحويل بلا مرجع ⇒ REF_REQUIRED',/REF_REQUIRED/.test(asErr(FA_EDIT,`select transfer_fuel_request('${r1}',' ')`)||''));
+ok('التحويل بلا مرجع ⇒ REF_REQUIRED، وبتاريخ مستقبلي أو قبل الطلب ⇒ BAD_DATE',/REF_REQUIRED/.test(asErr(FA_EDIT,`select transfer_fuel_request('${r1}',' ')`)||'')
+  &&/BAD_DATE/.test(asErr(FA_EDIT,`select transfer_fuel_request('${r1}','X',now()+interval '30 days')`)||'')&&/BAD_DATE/.test(asErr(FA_EDIT,`select transfer_fuel_request('${r1}','X',now()-interval '30 days')`)||''));
 as(FA_EDIT,`select transfer_fuel_request('${r1}','9112102600000001')`);
 ok('حُوِّل: المرجع ومن حوّل، وإشعار حالة للدرّاج نفسه',ps(`select status||'|'||transfer_ref||'|'||transferred_by from fuel_requests where id='${r1}'`)===`transferred|9112102600000001|${FA_EDIT}`
   &&ps(`select count(*) from notif_log where dedupe='fuel-tr-${r1}-${MIDUL}' and audience='user' and uid='${MIDUL}'`)==='1');
@@ -100,10 +108,12 @@ ok('تحويل مرتين ⇒ NOT_REQUESTED',/NOT_REQUESTED/.test(asErr(OWNER,`s
 // ── التعبئات ──
 const f1=as(MIDUL,`select add_fuel_fill(10010,25,11,'https://x/o.jpg','https://x/r.jpg')`);
 ok('التعبئة تُربط بآخر طلب محوَّل، بنزين، بلا legacy',ps(`select request_id||'|'||fuel_type||'|'||legacy||'|'||vehicle_id from fuel_logs where id='${f1}'`)===`${r1}|petrol|false|${V1}`);
-ok('التعبئة بلا فاتورة ⇒ PHOTO_REQUIRED',/PHOTO_REQUIRED/.test(asErr(MIDUL,`select add_fuel_fill(10010,25,null,'https://x/o.jpg','')`)||''));
+ok('التعبئة بلا فاتورة ⇒ PHOTO_REQUIRED، ولترات سالبة ⇒ BAD_LITERS',/PHOTO_REQUIRED/.test(asErr(MIDUL,`select add_fuel_fill(10010,25,null,'https://x/o.jpg','')`)||'')
+  &&/BAD_LITERS/.test(asErr(MIDUL,`select add_fuel_fill(10010,25,-11,'https://x/o.jpg','https://x/r.jpg')`)||''));
 const r3=as(MIDUL,`select request_fuel(10600,'https://x/odo3.jpg')`);
 ok('الطلب التالي يغلق المحوَّل السابق تلقائياً، ويبقى «المطلوب» غير المحوَّل كما هو',ps(`select string_agg(status, ',' order by requested_at) from fuel_requests where vehicle_id='${V1}'`)==='closed,requested,requested'&&!!r3);
-ok('تعبئة بلا طلب محوَّل تُقبل (request_id فارغ)',ps(`select request_id is null from fuel_logs where id='${as(MIDUL,`select add_fuel_fill(10650,20,null,'https://x/o.jpg','https://x/r.jpg')`)}'`)==='t');
+ok('بعد إغلاق الطلب المحوَّل بطلب أحدث لم يُحوَّل، التعبئة تُربط بآخر تحويل (المال المصروف)',ps(`select request_id from fuel_logs where id='${as(MIDUL,`select add_fuel_fill(10650,20,null,'https://x/o.jpg','https://x/r.jpg')`)}'`)===r1);
+ok('تعبئة بلا أي تحويل للدراجة تُقبل (request_id فارغ)',ps(`select request_id is null from fuel_logs where id='${as(ABED,`select add_fuel_fill(30,20,null,'https://x/o.jpg','https://x/r.jpg')`)}'`)==='t');
 
 // ── الحيازة المؤقتة: الطلب على الدراجة التي يحوزها الآن ──
 ps(`update fleet_vehicles set held_by='${E_ABED}' where id='${V1}'`);
@@ -126,17 +136,30 @@ ok('الاعتماد: عرض فقط ⇒ FORBIDDEN، ثم «معتمد» ويرا
 ok('الدرّاج لا يرى طلبات زيت غيره',as(ABED,`select count(*) from maintenance_requests`)==='0');
 
 // ── الحدود ──
-ok('ضبط الحدّ: عرض فقط ⇒ FORBIDDEN، مفتاح غير معروف ⇒ BAD_KEY',/FORBIDDEN/.test(asErr(FA_VIEW,`select set_fleet_alert_setting('fill_gap_km',100)`)||'')&&/BAD_KEY/.test(asErr(FA_EDIT,`select set_fleet_alert_setting('x',1)`)||''));
+ok('ضبط الحدّ: عرض فقط ⇒ FORBIDDEN، مفتاح غير معروف ⇒ BAD_KEY، صفر أو نسبة ≥ 100 ⇒ BAD_VALUE',/FORBIDDEN/.test(asErr(FA_VIEW,`select set_fleet_alert_setting('fill_gap_km',100)`)||'')&&/BAD_KEY/.test(asErr(FA_EDIT,`select set_fleet_alert_setting('x',1)`)||'')
+  &&/BAD_VALUE/.test(asErr(FA_EDIT,`select set_fleet_alert_setting('receipt_grace_days',0)`)||'')&&/BAD_VALUE/.test(asErr(FA_EDIT,`select set_fleet_alert_setting('fuel_low_pct',150)`)||''));
+as(FA_EDIT,`select set_fleet_alert_setting('fill_gap_km',150)`);
+ok('ضبط الحد العام مرة ثانية يحدّث الصف نفسه (upsert بلا تكرار)',ps(`select count(*)||':'||max(value) from fleet_alert_settings where key='fill_gap_km'`)==='1:150');
 as(FA_EDIT,`select set_fleet_alert_setting('oil_interval_km',3000,'${V4}')`);
 ok('تجاوز لدراجة يغلب العام، وتفريغه يعيدها للعام',ps(`select _fleet_setting('oil_interval_km','${V4}')||','||_fleet_setting('oil_interval_km','${V3}')`)==='3000,2000'
   &&as(FA_EDIT,`select set_fleet_alert_setting('oil_interval_km',null,'${V4}')`)==='t'&&ps(`select _fleet_setting('oil_interval_km','${V4}')`)==='2000');
 
 // ── التنبيهات: سيناريوهات على دراجات T-3..T-6 (بيانات مباشرة كمالك القاعدة) ──
-ps(`insert into fuel_requests (vehicle_id,plate,biker_employee_id,odometer,odometer_photo_url,requested_at) values
-  ('${V3}','T-3','x',0,'u',now()-interval '40 days'),('${V3}','T-3','x',900,'u',now()-interval '30 days'),('${V3}','T-3','x',1800,'u',now()-interval '20 days'),
-  ('${V3}','T-3','x',2700,'u',now()-interval '10 days'),('${V3}','T-3','x',3000,'u',now()-interval '1 day'),
-  ('${V4}','T-4','x',100,'u',now()-interval '20 days'),('${V4}','T-4','x',600,'u',now()-interval '10 days'),
+ps(`insert into fuel_requests (vehicle_id,plate,biker_employee_id,odometer,odometer_photo_url,requested_at,status,transferred_at) values
+  ('${V3}','T-3','x',0,'u',now()-interval '40 days','closed',now()-interval '40 days'),('${V3}','T-3','x',900,'u',now()-interval '30 days','closed',now()-interval '30 days'),
+  ('${V3}','T-3','x',1800,'u',now()-interval '20 days','closed',now()-interval '20 days'),('${V3}','T-3','x',2700,'u',now()-interval '10 days','closed',now()-interval '10 days'),
+  ('${V3}','T-3','x',3000,'u',now()-interval '1 day','transferred',now()-interval '1 day'),
+  ('${V4}','T-4','x',100,'u',now()-interval '20 days','closed',now()-interval '20 days'),('${V4}','T-4','x',600,'u',now()-interval '10 days','transferred',now()-interval '10 days');
+-- تعبئة مرتبطة بكل تحويل (+5 كم بعد ساعة) ⇒ لا «بلا فواتير» ولا «بلا طلب»
+insert into fuel_logs (vehicle_id,plate,biker_employee_id,fill_at,odometer,amount,request_id)
+  select vehicle_id,plate,'x',requested_at+interval '1 hour',odometer+5,50,id from fuel_requests where plate in ('T-3','T-4');
+-- مكرر غير محوَّل على T-3 بعد 5 كم: لا يدخل حساب الاستهلاك
+insert into fuel_requests (vehicle_id,plate,biker_employee_id,odometer,odometer_photo_url,requested_at) values ('${V3}','T-3','x',3010,'u',now()-interval '12 hours');
+insert into fuel_requests (vehicle_id,plate,biker_employee_id,odometer,odometer_photo_url,requested_at) values
   ('${V6}','T-6','x',8000,'u',now()-interval '5 days'),('${V6}','T-6','x',7000,'u',now()-interval '4 days');
+-- طلب حُوِّل ثم أُغلق بطلب أحدث، ولا فاتورة له ⇒ يبقى «بلا فواتير»
+insert into fuel_requests (vehicle_id,plate,biker_employee_id,odometer,odometer_photo_url,requested_at,status,transfer_ref,transferred_at,closed_at) values
+  ('${V6}','T-6','x',7500,'u',now()-interval '8 days','closed','R6',now()-interval '7 days',now()-interval '5 days');
 insert into fuel_requests (vehicle_id,plate,biker_employee_id,odometer,odometer_photo_url,requested_at,status,transfer_ref,transferred_at) values
   ('${V5}','T-5','x',4990,'u',now()-interval '7 days','transferred','R5',now()-interval '6 days');
 insert into fuel_logs (vehicle_id,plate,biker_employee_id,fill_at,odometer,amount) values
@@ -151,14 +174,16 @@ ok('استهلاك عالٍ بعد 3 فترات: 300 كم مقابل متوسط 
   &&as(FA_VIEW,`select value||'/'||threshold from fleet_alerts() where plate='T-3' and kind='high_consumption'`)==='300/675');
 ok('استهلاك عالٍ قبل 3 فترات: 500 كم < 600 (الحد المطلق)',has('T-4:high_consumption'));
 ok('تعبئتان متقاربتان (50 كم)',has('T-5:close_fills'));
-ok('حُوِّل منذ 6 أيام بلا فاتورة (المهلة 5)',has('T-5:no_receipts'));
+ok('حُوِّل منذ 6 أيام بلا فاتورة (المهلة 5)، ويبقى ظاهراً بعد إغلاق الطلب بطلب أحدث',has('T-5:no_receipts')&&has('T-6:no_receipts')&&!has('T-3:no_receipts')&&!has('T-4:no_receipts'));
 ok('تعبئة بلا طلب',has('T-5:fill_without_request')&&has('T-6:fill_without_request'));
 ok('عدّاد أقل من السابق (7000 بعد 8000)',has('T-6:odometer_backwards'));
 ok('قفزة عدّاد (2500 كم في يوم)',has('T-6:odometer_jump'));
 ok('صف legacy (عدّاد 10) لا يطلق «عدّاد أقل»',!has('T-5:odometer_backwards'));
-ok('استحقاق الزيت: 3000 − 960 ≥ 2000',has('T-3:oil_due'));
+ok('استحقاق الزيت: 3010 − 960 ≥ 2000',has('T-3:oil_due'));
+ok('طلبات غير محوَّلة (مكررة بعد 5 كم) لا تطلق «استهلاك عالٍ»',!A.split(',').some(k=>k==='M-1:high_consumption')&&as(FA_VIEW,`select count(*) from fleet_alerts() where plate='M-1' and kind='high_consumption'`)==='0');
+ok('صف واحد لكل (نوع، مرجع) في التنبيهات',as(FA_VIEW,`select count(*) = count(distinct (kind, ref_table, ref_id)) from fleet_alerts()`)==='t');
 ok('طلب زيت مطلوب منذ 6 أيام (المهلة 5) ⇒ لم يُنفَّذ، ولا «مستحق» مع طلب مفتوح',has('T-4:oil_overdue')&&!has('T-4:oil_due'));
-ok('لا تنبيهات زائفة على الدراجات التاريخية الطبيعية',A.split(',').length===11);
+ok('لا تنبيهات زائفة: 12 تنبيهاً بالضبط على T-3..T-6 — '+A,A.split(',').length===12);
 ok('fleet_alerts لغير صاحب الصلاحية ⇒ لا صفوف (حتى للدرّاج)',as(NOBODY,`select count(*) from fleet_alerts()`)==='0'&&as(MIDUL,`select count(*) from fleet_alerts()`)==='0');
 ok('التنبيهات لكل دراجة: لا عمود درّاج في النتيجة',(()=>{const c=ps(`select array_to_string(proargnames, ',') from pg_proc where proname='fleet_alerts'`);return c.includes('vehicle_id')&&!/biker/.test(c);})());
 
