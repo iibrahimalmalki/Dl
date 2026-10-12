@@ -28,7 +28,7 @@ export default function Payroll({opId}){
   // تحميل الفريق + كشف الشهر إن وُجد
   useEffect(()=>{(async()=>{
     setLoading(true);setMsg(null);
-    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id").not("employee_id","is",null).order("employee_id");
+    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id").not("employee_id","is",null).eq("is_test",false).order("employee_id"); // التجريبي خارج الكشف وراتب المشرف
     if(opId&&opId!=="all")q=q.eq("operator_id",opId);
     const{data:emps}=await q;
     // كشف محفوظ؟

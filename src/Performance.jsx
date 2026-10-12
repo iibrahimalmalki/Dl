@@ -50,7 +50,7 @@ export default function Performance({opId,onNav}){
     setLoading(true);
     const months=Array.from({length:6},(_,i)=>shift(period,i-5));   // 6 أشهر حتى المختار
     const prevP=shift(period,-1);
-    let emps=await safe(supabase.from("employees").select("id,full_name,employee_id,team_id,staff_role,mobile,applicant_id").not("employee_id","is",null));
+    let emps=await safe(supabase.from("employees").select("id,full_name,employee_id,team_id,staff_role,mobile,applicant_id,is_test").not("employee_id","is",null));
     if(emps.error)emps=await safe(supabase.from("employees").select("id,full_name,employee_id,team_id,mobile").not("employee_id","is",null));
     const[teams,ops,rounds,viol,tickets,runs]=await Promise.all([
       safe(supabase.from("teams").select("id,name")),
@@ -85,7 +85,7 @@ export default function Performance({opId,onNav}){
       return bikerScore(o,{rounds:(rBy[s]||[]).filter(r=>String(r.round_date)<=monthEnd(p)),violations:p===D.period?vBy[s]:[],settlement:p===D.period?setBySid[s]:null,level:(c&&c.level)||(l&&l.level)});};
     const cur=[],prev=[];
     Object.entries(opsBy).forEach(([s,byP])=>{
-      const e=empBySid[s];if(e&&e.staff_role&&e.staff_role!=="biker")return;
+      const e=empBySid[s];if(e&&(e.is_test||e.staff_role&&e.staff_role!=="biker"))return; // التجريبي خارج الترتيب والملخّص
       if(byP[D.prevP])prev.push(mk(byP[D.prevP],D.prevP));
       if(!byP[D.period])return;
       const sc=mk(byP[D.period],D.period);

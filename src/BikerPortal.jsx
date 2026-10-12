@@ -359,9 +359,9 @@ function Portal() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setErr(humanError({ status: 401, message: "session missing" })); return; }
       const { data: au } = await supabase.from("app_users")
-        .select("biker_employee_id,display_name,operator_id,position").eq("id", user.id).single();
+        .select("biker_employee_id,display_name,operator_id,position,is_test").eq("id", user.id).single();
       if (!au || !au.biker_employee_id) { setErr({ key: "nolink", code: "E-LINK", action: "whatsapp", ar: "هذا الحساب غير مرتبط برقم بايكر، فلا يمكن فتح البوابة. تواصل مع الإدارة لربطه.", bn: "এই অ্যাকাউন্ট কোনো বাইকার নম্বরের সাথে যুক্ত নয়। ম্যানেজমেন্টকে জানান।" }); return; }
-      const m = { uid: user.id, biker_employee_id: au.biker_employee_id, name: au.display_name, operator_id: au.operator_id };
+      const m = { uid: user.id, biker_employee_id: au.biker_employee_id, name: au.display_name, operator_id: au.operator_id, is_test: !!au.is_test };
       // ربط رقم البايكر بمعرّف الموظف (uuid) المستخدم في الأسطول
       const { data: emp } = await supabase.from("employees").select("id,full_name").eq("employee_id", au.biker_employee_id).maybeSingle();
       const empId = emp ? emp.id : null;
@@ -372,7 +372,7 @@ function Portal() {
       if (empId) {
         // الدراجة التي يحوزها هذا البايكر حالياً: إمّا حائز مؤقت، أو مخصّصة له ولا يحوزها أحد مؤقتاً
         const { data: bk } = await supabase.from("fleet_vehicles")
-          .select("id,plate,make,biker_employee_id,held_by,held_until,held_reason,needs_receipt_update")
+          .select("id,plate,make,biker_employee_id,held_by,held_until,held_reason,needs_receipt_update,is_test")
           .eq("active", true)
           .or(`held_by.eq.${empId},and(held_by.is.null,biker_employee_id.eq.${empId})`).limit(1);
         const b = bk && bk[0] ? bk[0] : null;
@@ -435,6 +435,7 @@ function Portal() {
                 <div>
                   <h1>بوابة البايكر</h1>
                   <div className="s">أهلاً {me.name} · স্বাগতম<br />رقمك · আপনার নম্বর: {me.biker_employee_id}</div>
+                  {me.is_test && <div className="s">🧪 حساب تجريبي — للتجربة فقط <span className="bn">পরীক্ষামূলক অ্যাকাউন্ট</span></div>}
                 </div>
                 <button className="bp-logout" onClick={() => supabase.auth.signOut()}>خروج<br />লগআউট</button>
               </div>
@@ -442,7 +443,7 @@ function Portal() {
             <div className="bp-prof">
               <div className="bp-pcell"><div className="k">الاسم · নাম</div><div className="v" style={{ fontSize: 13 }}>{me.name || "—"}</div></div>
               <div className="bp-pcell"><div className="k">رقم البايكر · নম্বর</div><div className="v">{me.biker_employee_id}</div></div>
-              <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div></div>
+              <div className="bp-pcell"><div className="k">دراجتي · আমার বাইক</div><div className="v" style={{ fontSize: 13 }}>{myBike ? myBike.plate : "—"}</div>{myBike && myBike.is_test && <div className="k">🧪 تجريبي <span className="bn">পরীক্ষামূলক</span></div>}</div>
             </div>
             {tabRules.locked && <div className="bp-card g-card"><div className="bp-sec">
               <div className="bp-note" style={{ marginTop: 0 }}>بقية الصفحات تظهر بعد تحميل الإعداد. <span className="bn">সেটিংস লোড হলে বাকি পাতা দেখা যাবে।</span></div>

@@ -2,6 +2,8 @@ import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
+import TestBadge from"./TestBadge";
+import{markTest,realBy}from"./testSandbox";
 import{FUEL_STATUS,OIL_STATUS,statusOf,CHANNELS,channelAr,alertAr,ALERT_KINDS,SETTINGS,settingError,parseNum,adminRpcError,splitRequests,splitOil,since,alertsByVehicle,monthlyCostPerKm,riyadhMonth}from"./fleetRequests";
 
 // «الأسطول ← الطلبات والتنبيهات»: طلبات الوقود والزيت من البوابة + لوحة fleet_alerts() + الحدود.
@@ -11,7 +13,8 @@ const fmt=iso=>{const d=new Date(iso);if(!iso||isNaN(d))return"—";const p=n=>S
 const Badge=({st})=><span className={"g-badge "+st.tone}><i/>{st.ar}</span>;
 const Ph=({u,t})=>u?<a className="fq-ph" href={u} target="_blank" rel="noopener noreferrer"><Icon n="eye" s={12}/> {t}</a>:null;
 
-export default function FleetRequests({owner}){
+// tv: معرّفات الدراجات التجريبية (من صفحة الأسطول) — تظهر بشارة وآخر القوائم، وخارج كل عدّاد ومجموع
+export default function FleetRequests({owner,tv}){
   const toast=useToast();
   const[perm,setPerm]=useState(owner?{view:true,edit:true}:null);
   const[d,setD]=useState(null);const[err,setErr]=useState(null);const[busy,setBusy]=useState(null);
@@ -37,8 +40,9 @@ export default function FleetRequests({owner}){
 
   const R=useMemo(()=>d?splitRequests(d.fr):null,[d]);
   const O=useMemo(()=>d?splitOil(d.mr):null,[d]);
-  const G=useMemo(()=>d?alertsByVehicle(d.al):[],[d]);
-  const C=useMemo(()=>d?monthlyCostPerKm(month,d.fr,d.fl):[],[d,month]);
+  const G=useMemo(()=>d?markTest(alertsByVehicle(d.al),tv):[],[d,tv]);
+  const C=useMemo(()=>d?markTest(monthlyCostPerKm(month,d.fr,d.fl),tv):[],[d,month,tv]);
+  const nr=a=>realBy(a,tv).length,tb=r=>tv&&tv.has(r.vehicle_id)&&<TestBadge/>;
   const fillsOf=id=>d?d.fl.filter(f=>f.request_id===id):[];
   const glob=k=>{const r=d&&d.st.find(s=>s.key===k&&!s.vehicle_id);return r?r.value:null;};
   const overrides=d?d.st.filter(s=>s.vehicle_id&&s.value!=null):[];
@@ -62,17 +66,17 @@ export default function FleetRequests({owner}){
     {err&&<div className="fq-msg err">{err}</div>}
     {!d?<div className="fq-empty">جارٍ التحميل…</div>:<>
     <div className="fq-kpis">
-      <div className={"fq-kpi"+(R.pending.length?" hot":"")}><b>{R.pending.length}</b><span>وقود بانتظار التحويل</span></div>
-      <div className="fq-kpi"><b>{O.requested.length}</b><span>زيت بانتظار الإرسال</span></div>
-      <div className="fq-kpi"><b>{O.done.length}</b><span>زيت بانتظار الاعتماد</span></div>
-      <div className="fq-kpi"><b>{d.al.filter(a=>a.severity==="warn").length}</b><span>تحذيرات</span></div>
+      <div className={"fq-kpi"+(nr(R.pending)?" hot":"")}><b>{nr(R.pending)}</b><span>وقود بانتظار التحويل</span></div>
+      <div className="fq-kpi"><b>{nr(O.requested)}</b><span>زيت بانتظار الإرسال</span></div>
+      <div className="fq-kpi"><b>{nr(O.done)}</b><span>زيت بانتظار الاعتماد</span></div>
+      <div className="fq-kpi"><b>{realBy(d.al,tv).filter(a=>a.severity==="warn").length}</b><span>تحذيرات</span></div>
     </div>
 
     {/* ١) الطلبات «المطلوبة» غير المحوَّلة: بارزة أعلى الصفحة — الطلب الجديد لا يغلقها */}
-    <section className={"fq-sec"+(R.pending.length?" hot":"")}>
-      <h3><Icon n="fuel" s={16}/> طلبات وقود بانتظار التحويل <span className="fq-c">{R.pending.length}</span></h3>
+    <section className={"fq-sec"+(nr(R.pending)?" hot":"")}>
+      <h3><Icon n="fuel" s={16}/> طلبات وقود بانتظار التحويل <span className="fq-c">{nr(R.pending)}</span></h3>
       {R.pending.length===0?<div className="fq-none">لا طلبات معلّقة.</div>:R.pending.map(r=><div className="fq-row" key={r.id}>
-        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id}</b>
+        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} {tb(r)}</b>
           <span>{r.amount}﷼ · العدّاد {r.odometer} · منذ {since(r.requested_at)} · {fmt(r.requested_at)}</span>
           <Ph u={r.odometer_photo_url} t="صورة العدّاد"/></div>
         {ed&&<div className="fq-act"><input className="g-input" placeholder="مرجع التحويل" value={refs[r.id]||""} onChange={e=>setRefs(p=>({...p,[r.id]:e.target.value}))} maxLength={200}/>
@@ -85,16 +89,16 @@ export default function FleetRequests({owner}){
       <h3><Icon n="bike" s={16}/> طلبات تغيير الزيت</h3>
       {O.requested.length+O.sent.length+O.done.length===0&&<div className="fq-none">لا طلبات زيت مفتوحة.</div>}
       {O.requested.map(r=><div className="fq-row" key={r.id}>
-        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/></b>
+        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/> {tb(r)}</b>
           <span>العدّاد {r.odometer} · منذ {since(r.requested_at)}</span><Ph u={r.odometer_photo_url} t="صورة العدّاد"/></div>
         {ed&&<div className="fq-act"><select className="g-input" value={chans[r.id]||""} onChange={e=>setChans(p=>({...p,[r.id]:e.target.value}))}><option value="">القناة…</option>{CHANNELS.map(c=><option key={c.k} value={c.k}>{c.ar}</option>)}</select>
           <button className="g-btn primary" disabled={busy==="se"+r.id} onClick={()=>send(r)}><Icon n="send" s={14}/> أُرسل لسويتر</button></div>}
       </div>)}
       {O.sent.map(r=><div className="fq-row" key={r.id}>
-        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/></b>
+        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/> {tb(r)}</b>
           <span>أُرسل {fmt(r.sent_at)} عبر {channelAr(r.sent_channel)} · بانتظار تأكيد الدرّاج</span></div></div>)}
       {O.done.map(r=><div className="fq-row" key={r.id}>
-        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/></b>
+        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/> {tb(r)}</b>
           <span>العدّاد بعد التغيير {r.done_odometer} · مسؤول سويتر: {r.sweater_tech_name||"—"} · {fmt(r.done_at)}</span>
           <span className="fq-phs"><Ph u={r.done_odometer_photo_url} t="العدّاد"/><Ph u={r.done_proof_url} t="الفاتورة/الملصق"/></span></div>
         {ed&&<div className="fq-act"><input className="g-input" placeholder="ملاحظة (اختياري)" value={notes[r.id]||""} onChange={e=>setNotes(p=>({...p,[r.id]:e.target.value}))} maxLength={1000}/>
@@ -104,9 +108,9 @@ export default function FleetRequests({owner}){
 
     {/* ٣) تنبيهات الأسطول — لكل دراجة */}
     <section className="fq-sec">
-      <h3><Icon n="alert" s={16}/> تنبيهات الأسطول <span className="fq-c">{d.al.length}</span></h3>
+      <h3><Icon n="alert" s={16}/> تنبيهات الأسطول <span className="fq-c">{nr(d.al)}</span></h3>
       {G.length===0?<div className="fq-none">لا تنبيهات مفتوحة.</div>:G.map(g=><div className="fq-veh" key={g.vehicle_id||g.plate}>
-        <div className="fq-vh"><Icon n="bike" s={14}/> {g.plate}</div>
+        <div className="fq-vh"><Icon n="bike" s={14}/> {g.plate} {g.test&&<TestBadge/>}</div>
         {g.items.map((a,i)=><div className={"fq-al "+a.severity} key={a.kind+a.ref_id+i}>
           <Icon n={(ALERT_KINDS[a.kind]||{}).ic||"alert"} s={13}/><div><b>{alertAr(a.kind)}</b><span>{a.detail}</span><small>{fmt(a.at)}</small></div></div>)}
       </div>)}
@@ -117,14 +121,14 @@ export default function FleetRequests({owner}){
       <h3><Icon n="cash" s={16}/> تكلفة الكيلو لكل دراجة
         <select className="g-input fq-mon" value={month} onChange={e=>setMonth(e.target.value)}>{[0,1,2,3].map(i=>{const[y,m]=riyadhMonth().split("-").map(Number);const x=new Date(Date.UTC(y,m-1-i,15));const k=x.toISOString().slice(0,7);return<option key={k} value={k}>{k}</option>;})}</select></h3>
       {C.length===0?<div className="fq-none">لا تحويلات أو قراءات في هذا الشهر.</div>:<div className="fq-tw"><table className="fq-t"><thead><tr><th>الدراجة</th><th>التحويلات</th><th>المسافة</th><th>﷼/كم</th></tr></thead>
-        <tbody>{C.map(r=><tr key={r.vehicle_id}><td>{r.plate}</td><td>{r.amount}﷼</td><td>{r.km} كم</td><td>{r.perKm==null?"—":r.perKm}</td></tr>)}</tbody></table></div>}
+        <tbody>{C.map(r=><tr key={r.vehicle_id}><td>{r.plate} {r.test&&<TestBadge/>}</td><td>{r.amount}﷼</td><td>{r.km} كم</td><td>{r.perKm==null?"—":r.perKm}</td></tr>)}</tbody></table></div>}
     </section>
 
     {/* ٥) آخر الطلبات المحوَّلة والمغلقة وتعبئاتها */}
     <section className="fq-sec">
       <h3><Icon n="doc" s={16}/> آخر الطلبات</h3>
       {[...R.transferred,...R.closed].slice(0,20).map(r=>{const fs=fillsOf(r.id);return<div className="fq-row" key={r.id}>
-        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(FUEL_STATUS,r.status)}/></b>
+        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(FUEL_STATUS,r.status)}/> {tb(r)}</b>
           <span>{r.amount}﷼ · {r.transfer_ref||"—"} · حُوِّل {fmt(r.transferred_at)} · {fs.length} تعبئة</span>
           {fs.length>0&&<span className="fq-phs">{fs.map(f=><Ph key={f.id} u={f.receipt_photo_url} t={"فاتورة "+(f.amount||"")+"﷼"}/>)}</span>}</div></div>;})}
       {R.transferred.length+R.closed.length===0&&<div className="fq-none">لا طلبات بعد.</div>}

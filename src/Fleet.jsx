@@ -3,6 +3,8 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import HandoverLog from"./HandoverLog";
+import TestBadge from"./TestBadge";
+import{realOnly,realBy,testLast}from"./testSandbox";
 // «الطلبات والتنبيهات»: طلبات الوقود والزيت من البوابة + fleet_alerts() — بصلاحية fleet_alerts، تُحمَّل عند فتح التبويب فقط
 const FleetRequests=lazy(()=>import("./FleetRequests"));
 
@@ -46,25 +48,30 @@ export default function Fleet({opId,owner}){
     const[v,i]=await Promise.all([vq,iq]);
     const vr=(v.data||[]).slice().sort((a,b)=>V_ORDER.indexOf(a.status)-V_ORDER.indexOf(b.status)||(a.plate||"").localeCompare(b.plate||""));
     const ir=(i.data||[]).slice().sort((a,b)=>String(b.occurred_on||"").localeCompare(String(a.occurred_on||"")));
-    setVeh(vr);setInc(ir);setLoading(false);
+    setVeh(testLast(vr));setInc(ir); /* الدراجة التجريبية آخر القائمة */setLoading(false);
   };
   useEffect(()=>{load();/*eslint-disable-next-line*/},[opId]);
-  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role").order("full_name").then(({data})=>setEmps(data||[]));},[]);
+  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role,is_test").order("full_name").then(({data})=>setEmps(data||[]));},[]);
 
+  // المؤشرات على الدراجات الحقيقية فقط: التجريبية تظهر بشارة وخارج كل عدّ ونسبة
+  // كل الدراجات التجريبية (بلا قيد النشاط أو المشغّل) لأن الطلبات والتنبيهات تشمل كل الدراجات
+  const[tv,setTv]=useState(()=>new Set());
+  useEffect(()=>{supabase.from("fleet_vehicles").select("id").eq("is_test",true).then(({data})=>setTv(new Set((data||[]).map(x=>x.id))));},[]);
   const k=useMemo(()=>{
-    const n=veh.length;
+    const rv=realOnly(veh),ri=realBy(inc,tv);
+    const n=rv.length;
     return{
       total:n,
-      active:veh.filter(v=>v.status==="active").length,
-      stolen:veh.filter(v=>v.status==="stolen").length,
-      maint:veh.filter(v=>v.status==="maintenance").length,
-      spare:veh.filter(v=>v.status==="spare").length,
-      gps:n?Math.round(veh.filter(v=>v.has_gps).length/n*100):0,
-      cam:n?Math.round(veh.filter(v=>v.has_camera).length/n*100):0,
-      openInc:inc.filter(x=>x.status==="open"||x.status==="investigating").length,
-      keyGaps:veh.filter(v=>KEY_BAD(v.key_status)).length,
+      active:rv.filter(v=>v.status==="active").length,
+      stolen:rv.filter(v=>v.status==="stolen").length,
+      maint:rv.filter(v=>v.status==="maintenance").length,
+      spare:rv.filter(v=>v.status==="spare").length,
+      gps:n?Math.round(rv.filter(v=>v.has_gps).length/n*100):0,
+      cam:n?Math.round(rv.filter(v=>v.has_camera).length/n*100):0,
+      openInc:ri.filter(x=>x.status==="open"||x.status==="investigating").length,
+      keyGaps:rv.filter(v=>KEY_BAD(v.key_status)).length,
     };
-  },[veh,inc]);
+  },[veh,inc,tv]);
 
   const saveV=async()=>{
     if(!vForm.plate||!vForm.plate.trim()){note(false,"أدخل رقم اللوحة");return;}
@@ -137,8 +144,8 @@ export default function Fleet({opId,owner}){
     </div>
 
     <div className="fl-tabs">
-      <button className={tab==="veh"?"on":""} onClick={()=>setTab("veh")}><Icon n="bike" s={16}/> المركبات <span>{veh.length}</span></button>
-      <button className={tab==="inc"?"on":""} onClick={()=>setTab("inc")}><Icon n="alert" s={16}/> الحوادث والأعطال <span>{inc.length}</span></button>
+      <button className={tab==="veh"?"on":""} onClick={()=>setTab("veh")}><Icon n="bike" s={16}/> المركبات <span>{k.total}</span></button>
+      <button className={tab==="inc"?"on":""} onClick={()=>setTab("inc")}><Icon n="alert" s={16}/> الحوادث والأعطال <span>{realBy(inc,tv).length}</span></button>
       <button className={tab==="key"?"on":""} onClick={()=>setTab("key")}><Icon n="key" s={16}/> المفاتيح</button>
       <button className={tab==="ho"?"on":""} onClick={()=>setTab("ho")}><Icon n="doc" s={16}/> سجل التسليم والاستلام</button>
       <button className={tab==="req"?"on":""} onClick={()=>setTab("req")}><Icon n="fuel" s={16}/> الطلبات والتنبيهات</button>
@@ -150,7 +157,7 @@ export default function Fleet({opId,owner}){
         {veh.map(v=>{const s=V_STATUS[v.status]||V_STATUS.active;return(
           <div key={v.id} className="fl-card">
             <div className="fl-crow">
-              <div className="fl-plate"><Icon n="bike" s={18}/><div><b>{v.plate}</b>{v.plate_en&&v.plate_en!=="—"&&<small>{v.plate_en}</small>}</div></div>
+              <div className="fl-plate"><Icon n="bike" s={18}/><div><b>{v.plate}</b>{v.plate_en&&v.plate_en!=="—"&&<small>{v.plate_en}</small>}</div>{v.is_test&&<TestBadge/>}</div>
               <span className="fl-badge" style={{color:s.c,background:s.bg}}>{s.ar}</span>
             </div>
             <div className="fl-meta">
@@ -219,7 +226,7 @@ export default function Fleet({opId,owner}){
         <tbody>
           {veh.map(v=>{const bad=KEY_BAD(v.key_status);return(
             <tr key={v.id}>
-              <td><b>{v.plate}</b></td>
+              <td><b>{v.plate}</b>{v.is_test&&<> <TestBadge/></>}</td>
               <td><span className={"fl-kdot"+(bad?" bad":" ok")}/>{v.key_status||"غير محدد"}</td>
               <td>{v.key_holder||"—"}</td>
               <td>{v.current_biker||"—"}</td>
@@ -230,7 +237,7 @@ export default function Fleet({opId,owner}){
       <div className="fl-recs"><b>توصيات تصحيحية:</b> نقطة مركزية واحدة لحفظ نُسخ المفاتيح مع نسخة احتياطية موثّقة · استرجاع المفاتيح بحوزة أطراف خارجية · دراسة الانتقال لأقفال بالكود لإنهاء مشكلة «المفتاح المفقود» نهائياً.</div>
     </div>}
 
-    {tab==="req"&&<Suspense fallback={<div className="fl-panel">…</div>}><FleetRequests owner={owner}/></Suspense>}
+    {tab==="req"&&<Suspense fallback={<div className="fl-panel">…</div>}><FleetRequests owner={owner} tv={tv}/></Suspense>}
     {tab==="ho"&&<div className="fl-panel">
       <div className="fl-ph"><b>سجل التسليم والاستلام</b><span className="fl-hint">من بوابة البايكر · اضغط السطر لعرض التفاصيل والصور</span></div>
       <HandoverLog veh={veh}/>
@@ -248,7 +255,7 @@ function CustodyModal({f,set,save,busy,emps}){
   return(<div className="fl-scrim" onClick={()=>set(null)}><div className="fl-modal" onClick={e=>e.stopPropagation()}>
     <div className="fl-mh"><b>نقل حيازة مؤقت — {v.plate}</b><button onClick={()=>set(null)}><Icon n="x" s={18}/></button></div>
     <div className="fl-mb">
-      <Fld l="البايكر البديل *"><select value={f.to_emp_id||""} onChange={e=>u("to_emp_id",e.target.value)}><option value="">— اختر البديل —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
+      <Fld l="البايكر البديل *"><select value={f.to_emp_id||""} onChange={e=>u("to_emp_id",e.target.value)}><option value="">— اختر البديل —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.is_test?" · 🧪 تجريبي":""}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
       <Fld l="حتى تاريخ (نهاية الحيازة)"><input type="date" value={f.end_date||""} onChange={e=>u("end_date",e.target.value)}/></Fld>
       <Fld l="السبب"><input value={f.reason||""} onChange={e=>u("reason",e.target.value)} placeholder="إجازة البايكر الأساسي"/></Fld>
       <Fld l="مرجع التفويض في «تم» (اختياري)"><input value={f.tam_ref||""} onChange={e=>u("tam_ref",e.target.value)} placeholder="رقم/مرجع تفويض المركبة"/></Fld>
@@ -290,7 +297,7 @@ function VehModal({f,set,save,busy,emps}){
       </div>
       <div className="fl-2">
         <Fld l="الحالة"><select value={f.status||"active"} onChange={e=>u("status",e.target.value)}>{Object.entries(V_STATUS).map(([k,v])=><option key={k} value={k}>{v.ar}</option>)}</select></Fld>
-        <Fld l="البايكر الحالي"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير معيّن —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
+        <Fld l="البايكر الحالي"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير معيّن —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.is_test?" · 🧪 تجريبي":""}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
       </div>
       <div className="fl-2">
         <Fld l="حالة المفتاح"><input value={f.key_status||""} onChange={e=>u("key_status",e.target.value)} placeholder="متوفر / مفقود / لا يوجد"/></Fld>
@@ -318,7 +325,7 @@ function IncModal({f,set,save,busy,veh,emps}){
       </div>
       <Fld l="العنوان"><input value={f.title||""} onChange={e=>u("title",e.target.value)} placeholder="وصف مختصر"/></Fld>
       <div className="fl-2">
-        <Fld l="البايكر"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير محدّد —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
+        <Fld l="البايكر"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير محدّد —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.is_test?" · 🧪 تجريبي":""}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
         <Fld l="الخطورة"><select value={f.severity||"high"} onChange={e=>u("severity",e.target.value)}>{Object.entries(SEV).map(([k,v])=><option key={k} value={k}>{v.ar}</option>)}</select></Fld>
       </div>
       <div className="fl-2">
