@@ -22,8 +22,8 @@ export default function Payroll({opId,owner}){
   const[bikers,setBikers]=useState([]);     // [{employee_id,name,biker_id,inp:{...}}]
   const[sup,setSup]=useState({name:"",team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""});
   const[unlinked,setUnlinked]=useState([]);   // صفوف عمليات بلا موظف مربوط (كانت تُستبعد بصمت)
-  const[stlTips,setStlTips]=useState(null);
-  const[supPay,setSupPay]=useState(null);   // حالة دفع سطر المشرف المحفوظ   // sweater_settlements.tip_amount للشهر
+  const[stlTips,setStlTips]=useState(null);   // sweater_settlements.tip_amount للشهر
+  const[supPay,setSupPay]=useState(null);   // حالة دفع سطر المشرف المحفوظ
   const[supAuto,setSupAuto]=useState(true);  // اشتقاق مدخلات الفريق تلقائياً
   const[runId,setRunId]=useState(null);
   const[status,setStatus]=useState("draft");

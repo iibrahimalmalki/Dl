@@ -494,12 +494,11 @@ function MyPerf({ me }) {
     ]);
     const scores = ops.map(o => bikerScore(o, { rounds: rounds.filter(r => String(r.round_date || "").slice(0, 7) <= o.period), violations: viol.filter(v => v.period === o.period) }));
     // المسير المعتمد (RLS payroll_lines_self: أسطر هذا البايكر من مسير غير مسودة فقط)
-    const pay = latestLines(await run("payroll_lines", supabase.from("payroll_lines").select("period,net_bonus,inputs,computed,payment_status,paid_at,paid_amount,payment_ref,base_paid").eq("role", "biker").eq("biker_id", sid).order("period", { ascending: false }).limit(6)), 3);
+    const pay = latestLines(await run("payroll_lines", supabase.from("payroll_lines").select("period,biker_id,net_bonus,inputs,computed,payment_status,paid_at,paid_amount,payment_ref,base_paid").eq("role", "biker").order("period", { ascending: false }).limit(12)).then(r => r.filter(l => String(l.biker_id || "").trim() === sid)), 3);
     if (denied.length) console.warn("BikerPortal/أدائي — رُفضت القراءة من:", denied.join(", "));
     setSt({ loading: false, scores, pay, denied });
   })(); }, [me.biker_employee_id]);
   if (st.loading) return <Skel rows={4} />;
-  if (st.denied.includes("ops_biker_month")) return <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>سيُفعَّل قريباً · <span className="bn">শীঘ্রই চালু হবে</span></b><p>صفحة أدائك قيد التفعيل. · আপনার কাজের পাতা শীঘ্রই চালু হবে।</p></div></div></div>;
   const payCard = st.pay.length > 0 && <div className="bp-card g-card"><div className="bp-sec">
     <label className="bp-lbl" style={{ marginTop: 0 }}>مسيري المعتمد · <span className="bn">আমার অনুমোদিত বেতন</span></label>
     {st.pay.map(p => { const L = pLabel(p.period); return (
@@ -511,6 +510,7 @@ function MyPerf({ me }) {
         {p.basePaid && <div className="bp-note">الراتب الأساسي مدفوع · <span className="bn">মূল বেতন পরিশোধিত</span></div>}
       </div>); })}
   </div></div>;
+  if (st.denied.includes("ops_biker_month")) return payCard || <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>سيُفعَّل قريباً · <span className="bn">শীঘ্রই চালু হবে</span></b><p>صفحة أدائك قيد التفعيل. · আপনার কাজের পাতা শীঘ্রই চালু হবে।</p></div></div></div>;
   if (!st.scores.length) return payCard || <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>لا بيانات أداء بعد · <span className="bn">এখনও কোনো তথ্য নেই</span></b><p>تظهر أرقامك بعد رفع تقرير سويتر الشهري. · মাসিক রিপোর্ট আপলোডের পর আপনার তথ্য দেখা যাবে।</p></div></div></div>;
   return (<>{payCard}{st.scores.map((s, i) => { const L = pLabel(s.period); const hAr = nextHints(s, "ar"), hBn = nextHints(s, "bn"); return (
     <div className="bp-card g-card" key={s.period}><div className="bp-sec">
