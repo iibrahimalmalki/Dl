@@ -60,7 +60,7 @@ const files=[
   {kind:'comp',filename:'c.csv',rows:comp},{kind:'tickets',filename:'t.xlsx',rows:tk},{kind:'maintenance',filename:'m.csv',rows:maint},
   {kind:'add',filename:'a.csv',rows:[adj('60','4 August, 2026'),adj('61','4 August, 2026'),adj('62','1 September, 2026')]},
   {kind:'deduct',filename:'d.csv',rows:[adj('70','6 August, 2026')]},
-  {kind:'tips',filename:'tips.csv',rows:[{'Company ID':'11','Biker Name':'A One','Bookings':'2','Total Tips':'5','Net Tips (After Bank Fees)':'4.6'},{'Company ID':'22','Bookings':'9','Net Tips (After Bank Fees)':'0'},{'Company ID':'99','Net Tips (After Bank Fees)':'3'}]},
+  {kind:'tips',filename:'tips.csv',rows:[{'Company ID':'11','Biker Name':'A One','Total Bookings':'2','Total Tips':'5','Net Tips (After Bank Fees)':'4.6'},{'Company ID':'22','Total Bookings':'9','Net Tips (After Bank Fees)':'0'},{'Company ID':'99','Net Tips (After Bank Fees)':'3'}]},
 ];
 const m=buildMonth(files,'2026-08');
 const a=m.bikers.find(b=>b.sweater_id==='11'),b2=m.bikers.find(b=>b.sweater_id==='22');
@@ -102,6 +102,15 @@ ok('التقييم من المكتملة فقط (الملغاة خارج الم�
 ok('التقييم 3.995 لا يُقرَّب إلى 4.00',R5.rating<4);
 ok('التقييم الفارغ null مع تحذير no_rating',E6.rating===null&&rm.warnings.some(w=>w.code==='no_rating'&&w.ar.includes('6'))&&!rm.warnings.some(w=>w.code==='no_rating'&&w.ar.includes('#5')));
 ok('detectKind: عمود Multiple لا يُصنَّف إكراميات، وعمود Net Tips يُصنَّف',detectKind('x.csv',['Multiple','Foo'])===null&&detectKind('x.csv',['Company ID','Net Tips (After Bank Fees)'])==='tips');
-const jt=parseTips([{'Company ID':'1700','Net Tips (After Bank Fees)':'39'},{'Company ID':'1648','Net Tips (After Bank Fees)':42.9},{'Company ID':'1624','Net Tips (After Bank Fees)':'0'}]);
+// ملف يوليو الحقيقي (biker_bookings_and_tips_report) — العناوين كما هي
+const TH=['Biker ID (Metabase)','Company ID','Biker Name','Total Bookings (Online) [Full Wash]','Total Bookings (Online) [Exterior Wash]','Total Bookings (Online) [Deep Cleaning]','Total Bookings (Online)','Total Bookings (Offline)','Total Bookings','Total Working Days','Total Tips','Net Tips (After Bank Fees)'];
+const TR=[['1065','1700','Mohamad Rakib (1700)','196','0','0','196','0','196','29','40','39'],['1019','1648','Midul Hassan (1648)','187','0','0','187','0','187','26','44','42.9'],['1000','1624','Ariful Islam (1624)','46','0','0','46','0','46','8','0','0']]
+  .map(r=>Object.fromEntries(TH.map((h,i)=>[h,r[i]])));
+const jt=parseTips(TR);
+ok('ملف يوليو: يُصنَّف tips من عناوينه',detectKind('x.csv',TH)==='tips');
+ok('ملف يوليو: عدد الحجوزات من «Total Bookings» (196/187/46) لا من [Full Wash]',jt['1700'].bookings===196&&jt['1648'].bookings===187&&jt['1624'].bookings===46);
+ok('ملف يوليو: «Total Tips» قبل الرسوم لا تُستخدم (44 ⇒ 42.9)',jt['1648'].tips===42.9);
+const tpx=parseTips([{'Company ID':'7','Total Bookings (Online) [Full Wash]':'3','Total Bookings (Online) [Exterior Wash]':'2','Total Bookings':'5','Net Tips (After Bank Fees)':'1'}]);
+ok('غسيل خارجي: العدد 5 (الإجمالي) لا 3',tpx['7'].bookings===5);
 ok('parseTips — يوليو: راكب 39.00، ميدول 42.90، عارف 0 (المجموع 81.90)',jt['1700'].tips===39&&jt['1648'].tips===42.9&&jt['1624'].tips===0&&Math.round((jt['1700'].tips+jt['1648'].tips+jt['1624'].tips)*100)===8190);
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

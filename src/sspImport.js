@@ -83,14 +83,15 @@ const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length*100)/100:null;
 // بلا تقريب: التقييم يحدد الشريحة (3.995 لا تصبح 4.00)، والتقريب في العرض فقط
 const avgExact=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
 
-// صفوف ملف الإكراميات → {sid:{tips,bookings}}؛ bookings = عمود عدد الحجوزات إن وُجد (للمطابقة مع المكتملة)
+// صفوف ملف الإكراميات → {sid:{tips,bookings}}؛ bookings = «Total Bookings» (أونلاين + أوفلاين) للمطابقة مع المكتملة.
+// الملف فيه أيضاً «Total Bookings (Online) [Full Wash]»… فلا يُؤخذ أول عمود فيه booking.
 export function parseTips(rows){
   const out={};
   (rows||[]).map(normRow).forEach(r=>{
     const keys=Object.keys(r);
     const sid=str(r["company id"]);const tk=keys.find(k=>TIP_COL.test(k));
     if(!sid||!tk)return;
-    const bk=keys.find(k=>/booking/.test(k)&&!/id$/.test(k)&&numOrNull(r[k])!=null);
+    const bk=["total bookings","total bookings (online)"].find(k=>k in r&&numOrNull(r[k])!=null);
     const o=out[sid]||(out[sid]={tips:0,bookings:null});
     o.tips=Math.round((o.tips+(numOrNull(r[tk])||0))*100)/100;
     if(bk)o.bookings=(o.bookings||0)+numOrNull(r[bk]);
