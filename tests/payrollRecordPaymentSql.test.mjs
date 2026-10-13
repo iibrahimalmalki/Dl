@@ -56,17 +56,19 @@ ps(F('payroll_migrate_2026_06_07.sql'));
 // كما في الإنتاج: سطر مشرف يونيو مربوط بسجل سلمان (يوليو يربطه الترحيل)
 ps(`update payroll_lines set employee_id='80d65b02-9428-4484-8b27-ffb0ad8a96a8' where id='e42eae8f-1558-49e3-92dd-da4b5d0c6c0a'`);
 const RP=F('payroll_record_payment.sql');ps(RP);ps(RP);
-ok('الملف آمن لإعادة التشغيل',true);
-ps(`update app_users set email='owner@dalu.sa' where id='${OWNER}'`);
-const SUPJ='e42eae8f-1558-49e3-92dd-da4b5d0c6c0a',SUPL='8019df96-d5f8-43f7-b228-89c2c368981f',ARIF='58865df7-ed94-4387-807f-93afefdb8a02',MIDJ='4893a638-85cb-43a2-91db-22b7da2482c5',ABEDL='509373ab-955b-4430-ac3e-5a3c9111231f';
+ok('الملف آمن لإعادة التشغيل (الدالة واحدة، security definer)',ps(`select count(*)||'|'||bool_and(prosecdef) from pg_proc where proname='record_payroll_payment'`)==='1|true');
+const EDITOR='00000000-0000-0000-0000-0000000000e1';
+ps(`update app_users set email='owner@dalu.sa' where id='${OWNER}'; insert into app_users (id,is_owner,active,email) values ('${EDITOR}',false,true,'hr@dalu.sa'); insert into user_permissions values ('${EDITOR}','payroll',true,true);`);
+const SUPJ='e42eae8f-1558-49e3-92dd-da4b5d0c6c0a',SUPL='8019df96-d5f8-43f7-b228-89c2c368981f',ARIF='58865df7-ed94-4387-807f-93afefdb8a02',MIDJ='4893a638-85cb-43a2-91db-22b7da2482c5',MIDL='700d065f-231f-4018-9141-9e2af9e9e2f6',ABEDL='509373ab-955b-4430-ac3e-5a3c9111231f';
 const call=(args)=>`select public.record_payroll_payment(${args})`;
-const run=(uid,args)=>as(uid,call(args));
+const run=(uid,args)=>JSON.parse(as(uid,call(args)));
 const rerr=(uid,args)=>asErr(uid,call(args))||'';
 const L=id=>ps(`select payment_status||'|'||coalesce(paid_at::text,'-')||'|'||coalesce(paid_amount::text,'-')||'|'||coalesce(payment_ref,'-')||'|'||bank_fee||'|'||coalesce(pay_note,'-')||'|'||coalesce(base_paid::text,'-')||'|'||coalesce(base_paid_at::text,'-') from payroll_lines where id='${id}'`);
-const audits=()=>+ps(`select count(*) from audit_log where table_name='payroll_lines' and action='PAYMENT'`);
+const audits=()=>+ps(`select count(*) from audit_log where table_name='payroll_lines'`);
 
 // ── الصلاحية ──
 ok('غير المالك (بايكر) ⇒ «تسجيل الدفع للمالك فقط»',rerr(MIDUL,`'${SUPJ}','paid','2026-10-05',533.52`).includes('للمالك فقط'));
+ok('محرّر رواتب غير المالك (has_perm payroll edit) ⇒ مرفوض أيضاً',rerr(EDITOR,`'${SUPJ}','paid','2026-10-05',533.52`).includes('للمالك فقط'));
 ok('anon لا يملك تنفيذ الدالة',(err(`begin; set local role anon; ${call(`'${SUPJ}','paid','2026-10-05',533.52`)}; commit;`)||'').includes('permission denied'));
 ok('التحديث المباشر من الواجهة ما زال مقفلاً حتى للمالك',(asErr(OWNER,`update payroll_lines set payment_status='paid' where id='${SUPJ}'`)||'').includes('مقفل'));
 const D=ps(`insert into payroll_runs (operator_id,period,status) values ('${OP}','2026-08','draft') returning id`).split('\n').pop();
@@ -76,44 +78,53 @@ ok('حالة غير معروفة ⇒ مرفوضة',rerr(OWNER,`'${SUPJ}','final'
 ok('لا تغيير ولا تدقيق بعد المرفوضات',L(SUPJ).startsWith('deferred|-|-|-|0|')&&audits()===0);
 
 // ── قواعد «مدفوع» ──
-ok('بلا تاريخ ⇒ «تاريخ الدفع إلزامي»',rerr(OWNER,`'${SUPJ}','paid',null,533.52`).includes('تاريخ الدفع إلزامي'));
+ok('أول تسجيل بلا تاريخ ⇒ «تاريخ الدفع إلزامي»',rerr(OWNER,`'${SUPJ}','paid',null,533.52`).includes('تاريخ الدفع إلزامي'));
 ok('تاريخ مستقبلي ⇒ خارج المدى',rerr(OWNER,`'${SUPJ}','paid',(now() at time zone 'Asia/Riyadh')::date+1,533.52`).includes('خارج المدى'));
 ok('تاريخ قبل شهر المسير ⇒ خارج المدى',rerr(OWNER,`'${SUPJ}','paid','2026-05-31',533.52`).includes('خارج المدى'));
-ok('بلا مبلغ ⇒ «المبلغ المدفوع إلزامي»',rerr(OWNER,`'${SUPJ}','paid','2026-10-05'`).includes('المبلغ المدفوع إلزامي'));
+ok('أول تسجيل بلا مبلغ ⇒ «المبلغ المدفوع إلزامي»',rerr(OWNER,`'${SUPJ}','paid','2026-10-05'`).includes('المبلغ المدفوع إلزامي'));
 ok('أكثر من المكافأة ⇒ خارج المدى',rerr(OWNER,`'${SUPJ}','paid','2026-10-05',533.53`).includes('خارج المدى'));
 ok('صفر والمكافأة موجبة ⇒ «سجّلها مؤجَّلة»',rerr(OWNER,`'${SUPJ}','paid','2026-10-05',0`).includes('مؤجَّلة'));
-ok('دفع جزئي بلا ملاحظة ⇒ «اكتب السبب»',rerr(OWNER,`'${SUPJ}','paid','2026-10-05',500`).includes('دفع جزئي'));
+// ملاحظة السطر المسجّلة («مؤجَّل مع عمولات المشرف (P5)») تبقى إن لم تُرسل جديدة؛ فلفحص الجزئي نمسحها بـ''
+ok('دفع جزئي بلا ملاحظة ⇒ «اكتب السبب»',rerr(OWNER,`'${SUPJ}','paid','2026-10-05',500,null,null,''`).includes('دفع جزئي'));
 ok('رسوم 60 ⇒ خارج المدى',rerr(OWNER,`'${SUPJ}','paid','2026-10-05',533.52,null,60`).includes('رسوم الحوالة'));
-ok('مرجع حوالة ميدول على سطر سلمان ⇒ «مسجّل لـMidul Hassan»',rerr(OWNER,`'${SUPJ}','paid','2026-10-05',533.52,'9113102600103372'`).includes('مسجّل لـMidul Hassan'));
+ok('مؤجَّل مع مبلغ ⇒ خطأ لا إهمال صامت',rerr(OWNER,`'${SUPJ}','deferred',null,500,null,null,'x'`).includes('لا تُرسل'));
+ok('تاريخ أساس مع «غير مدفوع» ⇒ خطأ',rerr(OWNER,`'${MIDJ}','paid',null,null,null,null,null,false,'2026-07-05'`).includes('الأساس مدفوع» فقط'));
 
 // ── تسجيل ناجح: مشرف يونيو 533.52 ⇒ يونيو «مدفوع» ──
-const r1=JSON.parse(run(OWNER,`'${SUPJ}','paid','2026-10-05',533.52,' 9113102600109999 ',0.58,'عمولات المشرف P5'`));
-ok('مشرف يونيو: مدفوع 2026-10-05 بالمرجع (مقصوص) والرسوم والملاحظة',L(SUPJ)==='paid|2026-10-05|533.52|9113102600109999|0.58|عمولات المشرف P5|-|-'&&r1.payment_status==='paid');
+const r1=run(OWNER,`'${SUPJ}','paid','2026-10-05',533.52,' 9113102600109999 ',0.58,'عمولات المشرف P5'`);
+ok('مشرف يونيو: مدفوع 2026-10-05 بالمرجع (مقصوص) والرسوم والملاحظة',L(SUPJ)==='paid|2026-10-05|533.52|9113102600109999|0.58|عمولات المشرف P5|-|-'&&r1.payment_status==='paid'&&r1.changed===true);
 ok('يونيو: كل الأسطر مدفوعة ⇒ المسير «paid» (في الرد وفي القاعدة)',r1.run_status==='paid'&&ps(`select status from payroll_runs where id='${JUN}'`)==='paid');
-const a1=JSON.parse(ps(`select json_build_object('a',actor,'e',actor_email,'o',old_data->>'payment_status','n',new_data->>'payment_status','amt',new_data->>'paid_amount','p',new_data->>'period') from audit_log where row_id='${SUPJ}' and action='PAYMENT'`));
-ok('سطر تدقيق: الفاعل والبريد، والقديم deferred والجديد paid 533.52 ليونيو',a1.a===OWNER&&a1.e==='owner@dalu.sa'&&a1.o==='deferred'&&a1.n==='paid'&&+a1.amt===533.52&&a1.p==='2026-06');
+const a1=JSON.parse(ps(`select json_build_object('act',action,'a',actor,'e',actor_email,'o',old_data->>'payment_status','n',new_data->>'payment_status','amt',new_data->>'paid_amount','p',new_data->>'period') from audit_log where row_id='${SUPJ}'`));
+ok('سطر تدقيق UPDATE: الفاعل والبريد، والقديم deferred والجديد paid 533.52 ليونيو',a1.act==='UPDATE'&&a1.a===OWNER&&a1.e==='owner@dalu.sa'&&a1.o==='deferred'&&a1.n==='paid'&&+a1.amt===533.52&&a1.p==='2026-06');
 ok('لا تغيير في المكافأة ولا الإجمالي',ps(`select net_bonus||'|'||total from payroll_lines where id='${SUPJ}'`)==='533.52|2033.52');
-ok('المرجع نفسه لنفس الشخص في شهر آخر مقبول',!!run(OWNER,`'${SUPL}','paid','2026-10-06',623.38,'9113102600109999'`)&&L(SUPL).startsWith('paid|2026-10-06|623.38|9113102600109999'));
+const n0=audits(),r2=run(OWNER,`'${SUPJ}','paid','2026-10-05',533.52,'9113102600109999',0.58,'عمولات المشرف P5'`);
+ok('إعادة الإرسال نفسه ⇒ changed=false بلا سطر تدقيق جديد',r2.changed===false&&audits()===n0);
+const r3=run(OWNER,`'${SUPL}','paid','2026-10-06',623.38,'9113102600109999'`);
+ok('المرجع نفسه على سطر آخر مقبول مع تنبيه بالأسطر الأخرى',L(SUPL).startsWith('paid|2026-10-06|623.38|9113102600109999')&&r3.ref_also_on.some(x=>x.includes('2026-06'))&&r3.ref_also_on.length===1);
 ok('يوليو صار «paid» بعد دفع سلمان',ps(`select status from payroll_runs where id='${JUL}'`)==='paid');
 
+// ── null = بلا تغيير: تحديث الأساس وحده لا يمسح بيانات الدفع ──
+const before=L(MIDL);
+run(OWNER,`'${MIDL}','paid',null,null,null,null,null,true,'2026-07-31'`);
+ok('ميدول يوليو: الأساس وحده ⇒ التاريخ والمبلغ والمرجع والرسوم كما هي',L(MIDL)===before.replace(/\|-\|-$/,'|true|2026-07-31')&&before.startsWith('paid|2026-10-13|565.40|9113102600103372|0.58'));
+const mj=L(MIDJ);
+run(OWNER,`'${MIDJ}','paid',null,null,null,null,null,true,'2026-07-01'`);
+ok('ميدول يونيو: ملاحظة الترحيل باقية بعد تسجيل الأساس',L(MIDJ)===mj.replace(/\|-\|-$/,'|true|2026-07-01')&&mj.includes('مرجع الحوالة غير مسجّل'));
+run(OWNER,`'${MIDJ}','paid'`);
+ok('بلا وسائط ⇒ لا تغيير (والأساس باقٍ)',L(MIDJ).endsWith('|true|2026-07-01'));
+run(OWNER,`'${MIDJ}','paid',null,null,null,null,null,false`);
+ok('الأساس false ⇒ يُفرَّغ تاريخه',L(MIDJ).endsWith('|false|-'));
+run(OWNER,`'${MIDJ}','paid',null,null,'',null,''`);
+ok('النص الفارغ يمسح المرجع والملاحظة فقط',L(MIDJ).startsWith('paid|2026-10-04|800.13|-|0|-|false'));
+ok('تاريخ أساس مستقبلي ⇒ مرفوض',rerr(OWNER,`'${MIDJ}','paid',null,null,null,null,null,true,(now() at time zone 'Asia/Riyadh')::date+3`).includes('تاريخ صرف الأساس'));
+
 // ── المؤجَّل والتراجع ──
-ok('تأجيل بلا سبب ⇒ مرفوض',rerr(OWNER,`'${SUPL}','deferred'`).includes('سبب التأجيل'));
+ok('تأجيل بلا سبب ⇒ مرفوض (بعد مسح الملاحظة)',rerr(OWNER,`'${SUPL}','deferred',null,null,null,null,''`).includes('سبب التأجيل'));
 run(OWNER,`'${SUPL}','deferred',null,null,null,null,'مؤجَّل مع عمولات المشرف (P5)'`);
 ok('التأجيل يفرّغ حقول الدفع، ويوليو يعود «partially_paid»',L(SUPL)==='deferred|-|-|-|0|مؤجَّل مع عمولات المشرف (P5)|-|-'&&ps(`select status from payroll_runs where id='${JUL}'`)==='partially_paid');
-ok('تراجع إلى «بانتظار» بلا سبب ⇒ مرفوض',rerr(OWNER,`'${ARIF}','pending'`).includes('سبب التراجع'));
+ok('تراجع إلى «بانتظار» بلا سبب جديد ⇒ مرفوض',rerr(OWNER,`'${ARIF}','pending'`).includes('سبب التراجع'));
 run(OWNER,`'${ARIF}','pending',null,null,null,null,'إدخال خاطئ'`);
 ok('التراجع يفرّغ الدفع ويُبقي السبب',L(ARIF)==='pending|-|-|-|0|إدخال خاطئ|-|-');
-
-// ── الأساس ──
-ok('تاريخ أساس مستقبلي ⇒ مرفوض',rerr(OWNER,`'${MIDJ}','paid','2026-10-04',800.13,null,null,null,true,(now() at time zone 'Asia/Riyadh')::date+3`).includes('تاريخ صرف الأساس'));
-run(OWNER,`'${MIDJ}','paid','2026-10-04',800.13,null,null,null,true,'2026-07-01'`);
-ok('الأساس مدفوع بتاريخه مع بقاء الدفع',L(MIDJ)==='paid|2026-10-04|800.13|-|0|-|true|2026-07-01');
-run(OWNER,`'${MIDJ}','paid','2026-10-04',800.13`);
-ok('p_base_paid فارغ ⇒ الأساس بلا تغيير',L(MIDJ).endsWith('|true|2026-07-01'));
-run(OWNER,`'${MIDJ}','paid','2026-10-04',800.13,null,null,null,false`);
-ok('الأساس false ⇒ يُفرَّغ تاريخه',L(MIDJ).endsWith('|false|-'));
-ok('عابد: مكافأة صفر ⇒ دفع بصفر مقبول',!!run(OWNER,`'${ABEDL}','paid','2026-08-01',0,null,null,null,true`)&&L(ABEDL).startsWith('paid|2026-08-01|0.00|'));
-ok('كل تسجيل ناجح له سطر تدقيق (8)',audits()===8);
-// البايكر يرى نتيجة التسجيل عبر RLS
-ok('ميدول يرى سطر يونيو مدفوعاً بأساسه',as(MIDUL,`select payment_status||':'||base_paid from payroll_lines where period='2026-06'`)==='paid:false');
+ok('عابد: مكافأة صفر ⇒ دفع بصفر مقبول',run(OWNER,`'${ABEDL}','paid','2026-08-01',0`).changed===true&&L(ABEDL).startsWith('paid|2026-08-01|0.00|'));
+ok('البايكر يرى نتيجة التسجيل عبر RLS (ميدول يونيو: مدفوع، الأساس غير مدفوع)',as(MIDUL,`select payment_status||':'||base_paid from payroll_lines where period='2026-06'`)==='paid:false');
 }finally{ps(`drop database if exists ${db} with (force)`,'postgres');}
