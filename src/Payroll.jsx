@@ -4,10 +4,11 @@ import Icon from"./Icon";
 import{useToast}from"./ui";
 import{LEVELS,computeBiker,computeSupervisor,summarize,complaintPct,complaintRatio,IN_KIND_TOTAL}from"./payrollEngine";
 import{payrollRoster,tipsCheck}from"./payrollRoster";
+import{PAY_ST,capOf,payFormInit,payFormError,payArgs,payTotals,statusPatch}from"./payrollPayForm";
 
 const PAY_STATUS={paid:{ar:"مدفوعة"},deferred:{ar:"مؤجَّلة"},pending:{ar:"بانتظار الدفع"}}; // كما في payrollLine.js (بلا استيراد حتى لا تنشأ حزمة مشتركة)
 const RUN_ST={approved:"معتمد",partially_paid:"مدفوع جزئياً",paid:"مدفوع"};
-// حالة دفع السطر (للعرض فقط — التسجيل من القاعدة حالياً)
+// حالة دفع السطر للعرض؛ التسجيل من قسم «الدفع» للمالك (record_payroll_payment)
 const payOf=l=>l&&l.payment_status?{st:l.payment_status,at:l.paid_at,amt:l.paid_amount,ref:l.payment_ref,fee:Number(l.bank_fee)||0,base:l.base_paid,note:l.pay_note}:null;
 const AR=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 // الافتراضي الشهر السابق (كالإقفال الشهري): مسير الشهر يُعدّ بعد انتهائه
@@ -24,6 +25,8 @@ export default function Payroll({opId,owner}){
   const[unlinked,setUnlinked]=useState([]);   // صفوف عمليات بلا موظف مربوط (كانت تُستبعد بصمت)
   const[stlTips,setStlTips]=useState(null);   // sweater_settlements.tip_amount للشهر
   const[supPay,setSupPay]=useState(null);   // حالة دفع سطر المشرف المحفوظ
+  const[payLines,setPayLines]=useState([]); // أسطر المسير المحفوظة (بمعرّفاتها) لقسم «الدفع»
+  const[rev,setRev]=useState(0);             // إعادة التحميل بعد تسجيل دفع
   const[supAuto,setSupAuto]=useState(true);  // اشتقاق مدخلات الفريق تلقائياً
   const[runId,setRunId]=useState(null);
   const[status,setStatus]=useState("draft");
@@ -75,13 +78,13 @@ export default function Payroll({opId,owner}){
           tips:inp.tips??(useOps&&o.tips!=null?o.tips:""),qd:inp.qd??"",dmg:inp.dmg??"",abs:inp.abs??"",mat:inp.mat??"",trn:inp.trn??""}};
     });
     setBikers(rows);setFromOps(usedOps&&!hasRun);
-    const supLine=lines.find(l=>l.role==="supervisor");setSupPay(payOf(supLine));
+    const supLine=lines.find(l=>l.role==="supervisor");setSupPay(payOf(supLine));setPayLines(lines);
     const supName=R.supervisor?R.supervisor.full_name:"";
     if(supLine){const i=supLine.inputs||{};setSup({name:supLine.name||supName,team_orders:i.team_orders??"",team_rating:i.team_rating??"",team_complaint_approved:i.team_complaint_approved??"",deductions:i.deductions??""});setSupAuto(!!i.auto);}
     else setSup({name:supName,team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""});
     setRunId(run?.id||null);setStatus(run?.status||"draft");
     setLoading(false);
-  })();},[period,opId]);
+  })();},[period,opId,rev]);
 
   const setB=(i,k,v)=>setBikers(p=>p.map((b,j)=>j===i?{...b,inp:{...b.inp,[k]:v}}:b));
   const syncFromOps=()=>{setBikers(p=>p.map(b=>{const o=ops[String(b.biker_id).trim()];if(!o)return b;return{...b,inp:{...b.inp,net_washes:o.net_washes??b.inp.net_washes,rating:o.rating!=null?o.rating:b.inp.rating,complaint_approved:o.approved_complaints??b.inp.complaint_approved,tips:o.tips!=null?o.tips:b.inp.tips}};}));setFromOps(true);setMsg({ok:true,t:"تم سحب الغسلات والتقييم والشكاوى والإكراميات من العمليات"});};
@@ -263,6 +266,8 @@ export default function Payroll({opId,owner}){
 
     </fieldset>
 
+    {!allOps&&locked&&owner&&payLines.length>0&&<PaySection lines={payLines} period={period} onSaved={()=>setRev(v=>v+1)}/>}
+
     <div className="pr-grand">
       <div><span>مسير {periodLabel(period)}</span><small>{computed.sum.count} أفراد · إجمالي الحزمة</small></div>
       <b>{AR(computed.sum.total)} <i>ريال</i></b>
@@ -275,6 +280,58 @@ function PayRow({p}){if(!p)return null;const S=PAY_STATUS[p.st]||PAY_STATUS.pend
   return(<div className="pr-chips pr-pay"><span className={"pr-chip "+(p.st==="paid"?"good":"caut")}>{S.ar}{p.amt!=null&&<b> {AR(p.amt)} ر</b>}</span>
     {p.at&&<span className="pr-chip">{p.at}</span>}{p.ref&&<span className="pr-chip" dir="ltr">{p.ref}</span>}{p.fee>0&&<span className="pr-chip">رسوم التحويل {AR(p.fee)} (على المؤسسة)</span>}
     {p.base===true&&<span className="pr-chip good">الأساس مدفوع</span>}{p.note&&<span className="pr-chip">{p.note}</span>}</div>);}
+// قسم «الدفع» (للمالك، المسير المعتمد): ملخص + سطر لكل فرد + نموذج تسجيل عبر record_payroll_payment.
+// خارج fieldset المسير لأنه معطّل في المسير المقفل؛ القاعدة تفرض الصلاحية والقواعد، والنموذج يعرض رفضها كما هو.
+const riyadhToday=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
+function PaySection({lines,period,onSaved}){
+  const[open,setOpen]=useState(null);const T=payTotals(lines);
+  return(<div className="pr-paysec">
+    <div className="pr-sec-h"><Icon n="payroll" s={16}/> الدفع <span>({lines.length})</span></div>
+    <div className="pr-chips">
+      <span className="pr-chip">المستحق <b>{AR(T.due)}</b></span>
+      <span className="pr-chip good">مدفوع <b>{AR(T.paid)}</b> ({T.n.paid})</span>
+      {T.n.deferred>0&&<span className="pr-chip caut">مؤجَّل <b>{AR(T.deferred)}</b> ({T.n.deferred})</span>}
+      {T.n.pending>0&&<span className="pr-chip caut">بانتظار الدفع <b>{AR(T.pending)}</b> ({T.n.pending})</span>}
+      {T.fees>0&&<span className="pr-chip">رسوم التحويل {AR(T.fees)} (على المؤسسة)</span>}
+    </div>
+    {lines.map(l=><div className="pr-payl" key={l.id}>
+      <div className="pr-payl-h"><b>{l.name||"—"}</b><span>{l.role==="supervisor"?"المشرف":"#"+(l.biker_id||"—")} · المكافأة {AR(capOf(l))} ر</span>
+        <div style={{flex:1}}/>{open!==l.id&&<button className="pr-btn ghost" onClick={()=>setOpen(l.id)}><Icon n="edit" s={13}/> تسجيل الدفع</button>}</div>
+      <PayRow p={payOf(l)}/>
+      {open===l.id&&<PayForm line={l} period={period} onClose={()=>setOpen(null)} onSaved={()=>{setOpen(null);onSaved();}}/>}
+    </div>)}
+  </div>);
+}
+function PayForm({line,period,onClose,onSaved}){
+  const toast=useToast();const today=riyadhToday();
+  const[f,setF]=useState(()=>payFormInit(line,today));const[fe,setFe]=useState(null);const[err,setErr]=useState(null);const[busy,setBusy]=useState(false);
+  const set=p=>{setF(x=>({...x,...p}));setFe(null);setErr(null);};
+  const inv=k=>fe&&fe.field===k?" inv":"";const paid=f.status==="paid";
+  const submit=async()=>{
+    const e=payFormError(f,line,{period,today});if(e){setFe(e);return;}
+    setBusy(true);const{data,error}=await supabase.rpc("record_payroll_payment",payArgs(f,line));setBusy(false);
+    if(error){setErr(error.message);return;}
+    if(data&&data.changed===false)toast.ok("لا تغيير — البيانات كما هي");else toast.ok(`سُجّل الدفع ✓ — حالة المسير: ${RUN_ST[data&&data.run_status]||data&&data.run_status||"—"}`);
+    if(data&&Array.isArray(data.ref_also_on)&&data.ref_also_on.length)toast.ok(`تنبيه: المرجع نفسه مسجّل أيضاً على: ${data.ref_also_on.join("، ")}`,undefined,9000);
+    onSaved();
+  };
+  return(<div className="pr-payf">
+    <div className="pr-payst">{PAY_ST.map(o=><label key={o.v} className={f.status===o.v?"on":""}><input type="radio" name={"pst_"+line.id} checked={f.status===o.v} onChange={()=>set(statusPatch(f,line,o.v))}/>{o.ar}</label>)}</div>
+    {paid&&<div className="pr-inputs">
+      <Fld l="تاريخ الدفع"><input className={inv("paid_at")} type="date" value={f.paid_at} max={today} onChange={e=>set({paid_at:e.target.value})}/></Fld>
+      <Fld l={`المبلغ (حتى ${AR(capOf(line))})`}><input className={inv("amount")} type="number" step="0.01" min="0" value={f.amount} onChange={e=>set({amount:e.target.value})}/></Fld>
+      <Fld l="مرجع الحوالة"><input className={inv("ref")} dir="ltr" maxLength={40} value={f.ref} onChange={e=>set({ref:e.target.value})}/></Fld>
+      <Fld l="رسوم التحويل"><input className={inv("fee")} type="number" step="0.01" min="0" value={f.fee} onChange={e=>set({fee:e.target.value})}/></Fld>
+    </div>}
+    <div className="pr-inputs">
+      <Fld l={f.status==="deferred"?"سبب التأجيل (إلزامي)":f.status==="pending"&&line.payment_status!=="pending"?"سبب التراجع (إلزامي)":"ملاحظة"}><input className={inv("note")} value={f.note} onChange={e=>set({note:e.target.value})}/></Fld>
+      <Fld l="الراتب الأساسي"><select value={f.base} onChange={e=>set({base:e.target.value,base_at:e.target.value==="yes"?f.base_at:""})}><option value="">بلا تغيير</option><option value="yes">مدفوع</option><option value="no">غير مدفوع</option></select></Fld>
+      {f.base==="yes"&&<Fld l="تاريخ صرف الأساس (اختياري)"><input className={inv("base_at")} type="date" value={f.base_at} max={today} onChange={e=>set({base_at:e.target.value})}/></Fld>}
+    </div>
+    {fe&&<div className="pr-msg err">{fe.ar}</div>}{err&&<div className="pr-msg err">{err}</div>}
+    <div className="pr-payact"><button className="pr-btn ok" onClick={submit} disabled={busy}><Icon n="check" s={14}/> {busy?"جارٍ التسجيل…":"تسجيل"}</button><button className="pr-btn ghost" onClick={onClose} disabled={busy}>إلغاء</button></div>
+  </div>);
+}
 function Fld({l,children}){return(<label className="pr-fld"><span>{l}</span>{children}</label>);}
 
 const CSS=`
@@ -312,14 +369,22 @@ const CSS=`
 .pr-inputs{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
 .pr-fld{display:flex;flex-direction:column;gap:4px}
 .pr-fld span{font-size:10.5px;color:var(--mut);font-weight:600}
-.pr-fld input{border:1px solid var(--line-2);border-radius:10px;padding:9px 10px;font-family:inherit;font-size:13.5px;font-weight:700;color:var(--ink);outline:none;width:100%;box-sizing:border-box;text-align:center}
-.pr-fld input:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(232,113,43,.1)}
+.pr-fld input,.pr-fld select{border:1px solid var(--line-2);border-radius:10px;padding:9px 10px;font-family:inherit;font-size:13.5px;font-weight:700;color:var(--ink);outline:none;width:100%;box-sizing:border-box;text-align:center}
+.pr-fld input:focus,.pr-fld select:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(232,113,43,.1)}
 .pr-fld input:disabled{background:var(--soft);color:var(--mut)}
 .pr-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
 .pr-chip{display:inline-flex;align-items:center;gap:5px;background:var(--soft);border:1px solid var(--line-2);border-radius:9px;padding:4px 9px;font-size:11px;color:var(--mut);font-weight:600}
 .pr-chip b{color:var(--ink)}
 .pr-chip.hot{background:var(--p-100);border-color:rgba(var(--p-rgb),.35);color:var(--warn-ink)}.pr-chip.hot b{color:var(--warn-ink)}
 .pr-chip.caut{background:var(--warn-bg);color:var(--warn-ink)}.pr-chip.bad{background:var(--bad-bg);color:var(--bad-ink)}
+.pr-paysec{margin-top:14px}.pr-paysec>.pr-chips{margin-bottom:10px}
+.pr-payl{background:var(--glass);border:1px solid var(--line);border-radius:13px;padding:10px 12px;margin-bottom:8px;min-width:0}
+.pr-payl-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px}.pr-payl-h span{color:var(--mut);font-size:11.5px;font-weight:600}
+.pr-payf{margin-top:9px;padding-top:9px;border-top:1px dashed var(--line)}
+.pr-payst{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.pr-payst label{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:20px;border:1px solid var(--line-2);font-size:12px;font-weight:700;cursor:pointer}
+.pr-payst label.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}.pr-payst input{display:none}
+.pr-payf .inv{border-color:var(--bad)!important;outline:2px solid color-mix(in srgb,var(--bad) 30%,transparent)}
+.pr-payact{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
 .pr-chip.good{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok-ink)}.pr-chip.good b{color:var(--ok-ink)}
 .pr-chip.warn{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent);color:var(--bad-ink)}
 .pr-deduct-t{display:flex;align-items:center;gap:7px;margin-top:11px;padding-top:11px;border-top:1px dashed var(--line);font-size:12px;font-weight:700;color:var(--mut);cursor:pointer}
