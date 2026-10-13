@@ -2,11 +2,14 @@
 // الحالات (CONDITIONS في BikerPortal): good جيدة · fair متوسطة · poor سيئة · damaged تالفة.
 // السيئة والتالفة ⇒ الملاحظة إلزامية، ويُرفع لها طلب استبدال تلقائياً (المشغّل biker_assets_replace في docs/sql/custody_replacement.sql).
 
+import { PHONE_KEY, phoneError } from "./custodyPhone";
+
 export const BAD_CONDITIONS = ["poor", "damaged"];
 export const isBad = c => BAD_CONDITIONS.includes(c);
 
-// chosen: [{key, ar, bn}] الأصناف المحدّدة بترتيب العرض · rows: {[key]: {photo, condition, note}}
-// ⇒ أول خطأ {key, field: "photo"|"note", ar, bn} أو null
+// chosen: [{key, ar, bn}] الأصناف المحدّدة بترتيب العرض · rows: {[key]: {photo, condition, note, phone?}}
+// ⇒ أول خطأ {key, field: "photo"|"note"|"imei"|"imei_photo"|"brand"|"sim", ar, bn} أو null
+//    الجوال: بعد صورة الجهاز تُفحص بياناته (src/custodyPhone.js: IMEI بفحص القاعدة نفسه، وصورة شاشة IMEI، والماركة، والخط)
 export function declarationError(chosen = [], rows = {}) {
   for (const it of chosen) {
     const r = rows[it.key] || {};
@@ -16,6 +19,7 @@ export function declarationError(chosen = [], rows = {}) {
     if (isBad(r.condition) && !String(r.note || "").trim()) return { key: it.key, field: "note",
       ar: `اكتب وش التالف بالضبط في «${it.ar}» — إلزامي للحالة السيئة أو التالفة.`,
       bn: `«${it.bn || it.ar}» এ ঠিক কী নষ্ট লিখুন — খারাপ বা ক্ষতিগ্রস্ত অবস্থায় বাধ্যতামূলক।` };
+    if (it.key === PHONE_KEY) { const pe = phoneError(r.phone || {}); if (pe) return { key: it.key, ...pe }; }
   }
   return null;
 }

@@ -22,6 +22,11 @@ const decl=(kind,status,extra={})=>({id:'30000000-0000-0000-0000-00000000000'+(k
 const SCEN={
   baseline:{label:'العهدة — نموذج التسجيل الأول',biker_assets:[],custody_assets:[]},
   pending:{label:'العهدة — بانتظار الاعتماد',biker_assets:[decl('baseline','declared')],custody_assets:[]},
+  // الجوال في التسجيل الأول: حقول IMEI (فحص فوري بلغتين) وصورة الشاشة والماركة والخط والملحقات
+  phone:{label:'العهدة — الجوال في التسجيل الأول',biker_assets:[],custody_assets:[]},
+  // الجوال المعتمد في «عهدتي الحالية»: آخر 4 أرقام من IMEI فقط
+  phonepiece:{label:'العهدة — الجوال في «عهدتي الحالية»',biker_assets:[decl('baseline','approved',{reviewed_at:'2026-10-09T12:00:00Z'})],
+    custody_assets:[{...asset('20000000-0000-0000-0000-000000000009','الجوال','Mobile Phone','2026-10-14','2028-10-14',24),item_type:'device',category:'أجهزة',serial_no:'490154203237518',specs:{brand_model:'Samsung A15',acc:{charger:true,holder:true,case:false}}}]},
   rejected:{label:'العهدة — مرفوض (السبب ظاهر)',biker_assets:[decl('baseline','rejected',{reject_reason:'أعد التسجيل مع صورة لكل قطعة'})],custody_assets:[]},
   // الوقود والزيت: طلب «مطلوب» وآخر «حُوِّل» وتعبئة، وطلب زيت «أُرسل لسويتر» ⇒ نموذج تأكيد التنفيذ ظاهر
   fuel:{label:'الوقود والزيت — طلبات وتعبئة وتأكيد الزيت',tabs:[['fuel','الوقود']],biker_assets:[],custody_assets:[],
@@ -109,6 +114,26 @@ try{
       const o=await page.evaluate(overflow);
       await page.screenshot({path:path.join(OUT,`${key}-${k}.png`),fullPage:true});
       ok(`${key==='baseline'?'':scen.label+' · '}${ar} @360: لا تمرير أفقي (${o.doc}px) ولا عنصر خارج الشاشة${o.bad.length?' — '+o.bad.join(', '):''}`,o.doc<=o.w&&o.bad.length===0);
+    }
+    if(key==='phone'){
+      await page.locator('label[for="as_phone"]').click();await page.waitForTimeout(200);
+      ok('الجوال أول الأصناف، وحقوله ظاهرة بعد تحديده (IMEI وتلميح *#06# بلغتين، صورة الشاشة، الماركة، الخط، 3 ملحقات)',
+        await page.locator('.bp-aitem').first().getAttribute('id')==='asi_phone'&&await page.locator('#asp_imei').count()===1&&await page.getByText('*#06#',{exact:false}).count()>=1
+        &&await page.locator('.bp-hint .bn').count()===1&&await page.locator('#asp_imei_photo').count()===1&&await page.locator('#asp_brand').count()===1&&await page.locator('#asp_sim').count()===1&&await page.locator('.bp-accs input').count()===3);
+      await page.fill('#asp_imei','490154203237519');await page.waitForTimeout(150);
+      const bad=await page.locator('.bp-imei-st').innerText();
+      await page.fill('#asp_imei','٤٩٠١٥٤ ٢٠٣ ٢٣٧ ٥١٨');await page.waitForTimeout(150);
+      const good=await page.locator('.bp-imei-st').innerText();
+      ok('فحص IMEI فوري: رقم خاطئ ⇒ «الرقم غير صحيح» بلغتين، وأرقام عربية صحيحة ⇒ «رقم صحيح ✓»',/غير صحيح/.test(bad)&&/সঠিক নয়/.test(bad)&&/رقم صحيح/.test(good)&&/সঠিক নম্বর/.test(good));
+      await page.fill('#asp_imei','4901');await page.locator('#as_pledge').check();await page.getByRole('button',{name:'حفظ إقرار العهدة'}).click();await page.waitForTimeout(300);
+      const t=await page.locator('#asi_phone').innerText();
+      ok('الإرسال بلا صورة جهاز ⇒ يتوقف عند الجوال بخطأ بلغتين ولا يُرسل',/صوّر الصنف «الجوال»/.test(t)&&/ছবি তুলুন/.test(t));
+      const o=await page.evaluate(overflow);await page.screenshot({path:path.join(OUT,'phone-form.png'),fullPage:true});
+      ok('نموذج الجوال مفتوح @360 بلا تجاوز',o.doc<=o.w&&o.bad.length===0);
+    }
+    if(key==='phonepiece'){
+      const t=await page.locator('.bp-piece').innerText();
+      ok('«عهدتي الحالية»: الجوال بآخر 4 أرقام من IMEI فقط، والماركة، والملحقات بلغتين',/IMEI …7518/.test(t)&&!t.includes('490154203237518')&&/Samsung A15/.test(t)&&/شاحن، حامل/.test(t)&&/চার্জার, হোল্ডার/.test(t));
     }
     if(key==='mine'){
       ok('«عهدتي الحالية»: 3 قطع، والخوذة «بانتظار الاستبدال» وتحديثها معلّق، والمكنسة لها زر «تحديث الحالة»',

@@ -5,6 +5,7 @@ import{useToast}from"./ui";
 import ActivityLog from"./ActivityLog";
 import CustodyDeclarations from"./CustodyDeclarations";
 import{timeline,replacementRow}from"./custodyLifecycle";
+import{ACCESSORIES,blankPhone,imeiDigits,imeiError,brandError,simError,phoneSpecs,maskImei,accLabels,isDevice,imeiServerError}from"./custodyPhone";
 const CU_FL={name:"العهدة",status:"الحالة",start_date:"البداية",end_date:"النهاية",biker_name:"البايكر",sweater_id:"رقم البايكر",life_months:"العمر (شهر)",category:"الفئة"};
 const CU_DV={active:"نشطة",due:"مستحقة",replaced:"مُستبدلة",returned:"مُرجعة",planned:"مخطّطة"};
 
@@ -15,6 +16,9 @@ const MODE_OF=t=>t==="motorcycle"?"buy":["cleaning","sponge","towel","consumable
 const addMonths=(iso,m)=>{const d=new Date(iso);d.setMonth(d.getMonth()+Math.round(m));return d.toISOString().slice(0,10);};
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
 const today=()=>new Date().toISOString().slice(0,10);
+// الجوال (device): IMEI إلزامي بفحص القاعدة نفسه، والماركة إلزامية، والخط اختياري ⇒ أول خطأ نصاً أو null
+const phoneFormError=p=>{const e=imeiError(p.imei)||brandError(p.brand_model)||simError(p.sim);return e?e.ar:null;};
+const errText=e=>imeiServerError(e&&e.message)||(e&&e.message)||"لا صلاحية";
 
 export default function Custody({opId,owner,onGo}){
   const[rows,setRows]=useState([]);const[emps,setEmps]=useState([]);const[loading,setLoading]=useState(true);
@@ -24,7 +28,8 @@ export default function Custody({opId,owner,onGo}){
   const[showAdd,setShowAdd]=useState(false);const[showExtract,setShowExtract]=useState(false);
   const[rounds,setRounds]=useState([]);const[exRound,setExRound]=useState("");
   const[decls,setDecls]=useState([]);const[tlOpen,setTlOpen]=useState(null);const[rev,setRev]=useState(0);
-  const[f,setF]=useState({sweater_id:"",catKey:"moto",name:"",start_date:today(),life_months:36,lead_days:90,cost:""});
+  const[f,setF]=useState({sweater_id:"",catKey:"moto",name:"",start_date:today(),life_months:36,lead_days:90,cost:"",ph:blankPhone()});
+  const[repl,setRepl]=useState(null); // استبدال جوال: {id, ...بيانات الجهاز البديل}
 
   useEffect(()=>{(async()=>{
     setLoading(true);
@@ -55,12 +60,15 @@ export default function Custody({opId,owner,onGo}){
   const addCustody=async()=>{
     if(!f.sweater_id){setMsg({ok:false,t:"اختر البايكر"});return;}
     const c=CATALOG.find(x=>x.key===f.catKey);const emp=empBySid[String(f.sweater_id).trim()];
+    const dev=c&&c.type==="device";if(dev){const pe=phoneFormError(f.ph);if(pe){setMsg({ok:false,t:pe});return;}}
     const row={operator_id:(opId&&opId!=="all")?opId:null,employee_id:emp?.id||null,biker_name:emp?.full_name||"",sweater_id:f.sweater_id,
       item_type:c?.type||"other",category:c?.category||null,name:f.name||c?.name||"عُهدة",name_en:c?.en||null,
       start_date:f.start_date,life_months:Number(f.life_months||12),end_date:addMonths(f.start_date,Number(f.life_months||12)),
-      lead_days:Number(f.lead_days||60),cost:f.cost?Number(f.cost):null,source:"manual"};
+      lead_days:Number(f.lead_days||60),cost:f.cost?Number(f.cost):null,source:"manual",
+      ...(dev?{serial_no:imeiDigits(f.ph.imei),specs:phoneSpecs(f.ph)}:{})};
     const{data,error}=await supabase.from("custody_assets").insert(row).select().single();
-    if(error){setMsg({ok:false,t:"خطأ: "+error.message});return;}
+    if(error){setMsg({ok:false,t:"خطأ: "+errText(error)});return;}
+    if(dev)setF(p=>({...p,ph:blankPhone()}));
     setRows(p=>[...p,data].sort((a,b)=>(a.end_date||"")<(b.end_date||"")?-1:1));setShowAdd(false);setMsg({ok:true,t:"تمت إضافة العُهدة"});
   };
 
@@ -68,7 +76,8 @@ export default function Custody({opId,owner,onGo}){
     const r=rounds.find(x=>x.id===exRound);if(!r){setMsg({ok:false,t:"اختر جولة"});return;}
     const emp=empBySid[String(r.sweater_id).trim()];
     const existing=new Set(rows.filter(x=>String(x.sweater_id)===String(r.sweater_id)&&x.status!=="replaced"&&x.status!=="returned").map(x=>x.name));
-    const toAdd=CATALOG.filter(c=>!existing.has(c.name)).map(c=>({operator_id:(opId&&opId!=="all")?opId:null,employee_id:emp?.id||null,biker_name:emp?.full_name||r.biker_name||"",sweater_id:r.sweater_id,
+    // الجوال لا يُستخرج من جولة: يحتاج IMEI الجهاز (يُضاف من «إضافة عُهدة» أو من إقرار البايكر)
+    const toAdd=CATALOG.filter(c=>c.type!=="device"&&!existing.has(c.name)).map(c=>({operator_id:(opId&&opId!=="all")?opId:null,employee_id:emp?.id||null,biker_name:emp?.full_name||r.biker_name||"",sweater_id:r.sweater_id,
       item_type:c.type,category:c.category,name:c.name,name_en:c.en,start_date:r.round_date,life_months:c.life,end_date:addMonths(r.round_date,c.life),lead_days:c.lead,source:"round",round_id:r.id}));
     if(!toAdd.length){setMsg({ok:false,t:"كل عُهد الكتالوج مسجّلة لهذا البايكر"});setShowExtract(false);return;}
     const{data,error}=await supabase.from("custody_assets").insert(toAdd).select();
@@ -102,6 +111,7 @@ export default function Custody({opId,owner,onGo}){
   };
   // الاستبدال الفعلي: القديمة «مُستبدلة»، وقطعة جديدة من نفس الصنف تبدأ اليوم بعمر كامل
   const markReplaced=async(r)=>{
+    if(isDevice(r)){setRepl({id:r.id,...blankPhone(),brand_model:(r.specs&&r.specs.brand_model)||""});return;}
     if(!confirm(`تأكيد استبدال «${r.name}» لـ ${r.biker_name||"—"}؟ تبدأ قطعة جديدة اليوم بعمر كامل.`))return;
     const t=today();
     const{data:old,error}=await supabase.from("custody_assets").update({status:"replaced",notes:(r.notes?r.notes+" · ":"")+`استُبدلت ${t}`}).eq("id",r.id).select().single();
@@ -109,6 +119,18 @@ export default function Custody({opId,owner,onGo}){
     const{data:nw,error:e2}=await supabase.from("custody_assets").insert(replacementRow(r,t)).select().single();
     setRows(p=>[...p.map(x=>x.id===r.id?old:x),...(nw?[nw]:[])]);
     setMsg(e2?{ok:false,t:"استُبدلت القديمة لكن تعذّر إنشاء البديلة: "+e2.message}:{ok:true,t:`استُبدلت ✓ — بدأت «${r.name}» جديدة اليوم حتى ${nw.end_date}`});
+  };
+  // استبدال الجوال: IMEI الجهاز البديل إلزامي. البديل يُنشأ أولاً (إن رُفض الـIMEI لا يتغيّر شيء) ثم تُوسم القديمة «مُستبدلة»
+  const replaceDevice=async(r)=>{
+    const pe=phoneFormError(repl);if(pe){setMsg({ok:false,t:pe});return;}
+    const imei=imeiDigits(repl.imei);
+    if(imei===imeiDigits(r.serial_no)){setMsg({ok:false,t:"IMEI البديل نفس IMEI الجهاز الحالي — أدخل رقم الجهاز الجديد."});return;}
+    const t=today();
+    const{data:nw,error:e1}=await supabase.from("custody_assets").insert(replacementRow(r,t,{serial_no:imei,specs:phoneSpecs(repl)})).select().single();
+    if(e1||!nw){setMsg({ok:false,t:"تعذّر الاستبدال: "+errText(e1)});return;}
+    const{data:old,error:e2}=await supabase.from("custody_assets").update({status:"replaced",notes:(r.notes?r.notes+" · ":"")+`استُبدلت ${t}`}).eq("id",r.id).select().single();
+    setRows(p=>[...p.map(x=>x.id===r.id&&old?old:x),nw]);setRepl(null);
+    setMsg(e2||!old?{ok:false,t:"أُنشئ الجهاز البديل لكن تعذّر وسم القديم «مُستبدلاً»: "+errText(e2)}:{ok:true,t:`استُبدل الجوال ✓ — الجديد IMEI ${maskImei(imei)} حتى ${nw.end_date}`});
   };
   const del=async(r)=>{if(!confirm("حذف العُهدة؟"))return;const{error}=await supabase.from("custody_assets").delete().eq("id",r.id);if(!error)setRows(p=>p.filter(x=>x.id!==r.id));};
 
@@ -132,6 +154,7 @@ export default function Custody({opId,owner,onGo}){
         <label><span>مهلة التخطيط (يوم)</span><input type="number" min="1" value={f.lead_days} onChange={e=>setF({...f,lead_days:e.target.value})}/></label>
         <label><span>التكلفة (اختياري)</span><input type="number" value={f.cost} onChange={e=>setF({...f,cost:e.target.value})}/></label>
       </div>
+      {f.catKey==="phone"&&<PhoneForm p={f.ph} set={ph=>setF(x=>({...x,ph:{...x.ph,...ph}}))}/>}
       <div className="cu-endhint">تاريخ الانتهاء المتوقّع: <b>{f.start_date?addMonths(f.start_date,Number(f.life_months||12)):"—"}</b></div>
       <button className="cu-btn ok" style={{width:"100%",marginTop:10}} onClick={addCustody}><Icon n="save" s={15}/> حفظ العُهدة</button>
     </div>}
@@ -164,6 +187,8 @@ export default function Custody({opId,owner,onGo}){
             <div className="cu-sub">{r.biker_name||"—"} · #{r.sweater_id||"—"} · {r.name_en||""}</div></div>
           <div className="cu-rem" style={{color:col}}>{r.status==="replaced"?"—":d.rem>=0?`${d.rem} يوم`:`متأخر ${Math.abs(d.rem)} يوم`}</div>
         </div>
+        {isDevice(r)&&<div className="cu-dev"><span dir="ltr" title={r.serial_no||""}>IMEI {maskImei(r.serial_no)||"—"}</span>{r.specs&&r.specs.brand_model&&<span dir="ltr">{r.specs.brand_model}</span>}
+          {r.specs&&r.specs.sim&&<span dir="ltr">☎ {r.specs.sim}</span>}{accLabels(r.specs&&r.specs.acc).map(a=><span key={a} className="cu-cat">{a}</span>)}</div>}
         <div className="cu-dates">🗓️ البداية: <b>{r.start_date}</b> · الانتهاء المتوقّع: <b>{d.end}</b> · العمر: {r.life_months} شهر</div>
         <div className="cu-bar-t"><div style={{width:d.used+"%",background:col}}/></div>
         <div className="cu-used">استُهلك {d.used}% من العمر الافتراضي</div>
@@ -178,8 +203,25 @@ export default function Custody({opId,owner,onGo}){
           <div style={{flex:1}}/>
           {owner&&<button className="cu-b del" onClick={()=>del(r)}><Icon n="trash" s={12}/></button>}
         </div>
+        {repl&&repl.id===r.id&&<div className="cu-form" style={{marginTop:10,marginBottom:0}}>
+          <div className="cu-fh"><Icon n="refresh" s={15}/> استبدال الجوال — بيانات الجهاز البديل (IMEI إلزامي)</div>
+          <PhoneForm p={repl} set={ph=>setRepl(x=>({...x,...ph}))}/>
+          <div className="cu-actions"><button className="cu-b done" onClick={()=>replaceDevice(r)}><Icon n="check" s={13}/> تأكيد الاستبدال</button><button className="cu-b" onClick={()=>setRepl(null)}>إلغاء</button></div>
+        </div>}
+        {tlOpen===r.id&&isDevice(r)&&<div className="cu-notes" dir="ltr" style={{marginTop:8}}>IMEI: {r.serial_no||"—"}</div>}
         {tlOpen===r.id&&<ol className="cu-tl">{timeline(r,decls).map((ev,i)=><li key={i} className={"cu-tl-"+ev.type}><span className="cu-tl-at">{String(ev.at||"").slice(0,10)||"—"}</span><span>{ev.ar}</span>{ev.photo&&<a href={ev.photo} target="_blank" rel="noreferrer">صورة</a>}</li>)}</ol>}
       </div>);})}
+  </div>);
+}
+// حقول الجوال في «إضافة عُهدة» و«استبدال»: IMEI بفحص فوري، الماركة والموديل، الخط، الملحقات
+function PhoneForm({p,set}){
+  const e=p.imei?imeiError(p.imei):null;
+  return(<div className="cu-grid" style={{marginTop:10}}>
+    <label><span>IMEI (إلزامي — ⁦*#06#⁩ على الجوال)</span><input dir="ltr" inputMode="numeric" autoComplete="off" value={p.imei} onChange={x=>set({imei:x.target.value})} placeholder="15 رقماً"/>
+      {p.imei&&<em className={"cu-imei "+(e?"bad":"ok")}>{e?e.ar:"رقم صحيح ✓"}</em>}</label>
+    <label><span>الماركة والموديل (إلزامي)</span><input dir="ltr" maxLength={60} value={p.brand_model} onChange={x=>set({brand_model:x.target.value})} placeholder="Samsung A15"/></label>
+    <label><span>رقم الخط (اختياري)</span><input dir="ltr" inputMode="tel" value={p.sim} onChange={x=>set({sim:x.target.value})} placeholder="05xxxxxxxx"/></label>
+    <div className="cu-accs">{ACCESSORIES.map(a=><label key={a.k}><input type="checkbox" checked={!!p.acc[a.k]} onChange={x=>set({acc:{...p.acc,[a.k]:x.target.checked}})}/>{a.ar}</label>)}</div>
   </div>);
 }
 function K({ic,c,bg,t,v}){return(<div className="cu-kpi"><span className="cu-ki" style={{background:bg,color:c}}><Icon n={ic} s={17}/></span><div><div className="cu-kv">{v}</div><div className="cu-kl">{t}</div></div></div>);}
@@ -201,6 +243,10 @@ const CSS=`
 .cu-grid label{display:flex;flex-direction:column;gap:4px}
 .cu-grid span{font-size:11px;color:var(--mut);font-weight:600}
 .cu-grid select,.cu-grid input{border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);outline:none;background:var(--glass-3);width:100%;box-sizing:border-box}
+.cu-dev{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:11.5px;font-weight:700;color:var(--ink-2);margin-top:6px}
+.cu-imei{font-style:normal;font-size:11px;font-weight:700}.cu-imei.ok{color:var(--ok-ink)}.cu-imei.bad{color:var(--bad-ink)}
+.cu-accs{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;grid-column:1/-1}.cu-accs label{flex-direction:row!important;align-items:center;gap:6px!important;font-size:12.5px;font-weight:700}
+.cu-grid .cu-accs input{width:18px;height:18px;padding:0}
 .cu-endhint{font-size:11.5px;color:var(--mut);margin-top:9px}.cu-endhint b{color:var(--ink)}
 .cu-exrow{display:flex;gap:8px;flex-wrap:wrap}
 .cu-exrow select{flex:1;min-width:180px;border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none;background:var(--glass-3)}

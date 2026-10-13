@@ -20,6 +20,7 @@ import { checkPhoto } from "./photoQuality";
 import { declarationError, declarationItem, isBad } from "./custodyDeclare";
 import { baselineState, myPieces, pieceState, remainingDays, updateError } from "./custodyLifecycle";
 import { catalogOfAsset } from "./custodyCatalog";
+import { PHONE_KEY, ACCESSORIES, IMEI_HINT, blankPhone, imeiStatus, phoneItem, maskImei, accLabels, isDevice } from "./custodyPhone";
 import { STATES as H_STATES, handoverState, fixInfo, latestRow } from "./handoverStatus";
 // الأكاديمية وصورها تُحمَّل عند فتح تبويبها فقط
 const Academy = lazy(() => import("./academy/Academy"));
@@ -154,6 +155,12 @@ const CSS = `
 .bp-asrej{background:var(--bad-bg);color:var(--bad-ink);border-radius:11px;padding:10px 12px;margin:6px 0 10px;font-size:12.5px;line-height:1.7;overflow-wrap:anywhere}
 .bp-aspend{background:var(--info-bg);color:var(--info-ink);border-radius:10px;padding:8px 11px;font-size:12px;line-height:1.7;margin-top:4px}
 .bp-piece .t .bn{color:var(--mut);font-size:11px}.bp-piece.due{border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.bp-phone{margin-top:10px;padding:10px 11px;border:1px solid var(--line-2);border-radius:12px;background:var(--glass-2);min-width:0}
+.bp-phone .bp-in{direction:ltr;text-align:left;letter-spacing:.5px}
+.bp-imei-st{font-size:11.5px;font-weight:700;margin-top:4px;line-height:1.6}.bp-imei-st.ok{color:var(--ok-ink)}.bp-imei-st.bad{color:var(--bad-ink)}.bp-imei-st.typing{color:var(--mut)}
+.bp-hint{font-size:11.5px;color:var(--ink-2);background:var(--info-bg);border-radius:9px;padding:6px 9px;margin:4px 0;line-height:1.7;overflow-wrap:anywhere}
+.bp-accs{display:flex;flex-wrap:wrap;gap:6px 14px}.bp-accs label{display:inline-flex;align-items:center;gap:6px;min-height:40px;font-size:12.5px;font-weight:700;color:var(--ink-2);cursor:pointer}
+.bp-accs input{width:20px;height:20px;accent-color:var(--ok)}.bp-accs .bn{font-weight:600;color:var(--mut);font-size:11px}
 .bp-pupd{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);min-width:0}.bp-pupd .bp-acap{max-width:100%}
 .bp-pf-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
 .bp-pf-grid div{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:9px 4px;text-align:center}
@@ -230,6 +237,8 @@ const Chrome = () => <><Orbs /><div className="g-corner"><ThemeToggle /></div></
 
 /* عناصر العهدة (الأدوات والمواد) — مطابقة لملف الأدوات، مع صورة مرجعية لكل صنف */
 const ASSET_ITEMS = [
+  // الأجهزة — الجوال ببيانات إضافية (IMEI والماركة والخط والملحقات): src/custodyPhone.js
+  { key: "phone", ar: "الجوال", bn: "মোবাইল ফোন", img: null, ico: "📱" },
   // السلامة والملابس
   { key: "uniform", ar: "الزي (ملابس العمل)", bn: "ইউনিফর্ম", img: null },
   { key: "helmet", ar: "الخوذة", bn: "হেলমেট", img: "helmet" },
@@ -992,10 +1001,9 @@ function Handover({ me, myBike, onDirty }) {
 /* ================= العهدة (الأدوات والمواد) ================= */
 const condAr = (v) => (CONDITIONS.find(c => c.v === v) || {}).ar || v;
 const condBn = (v) => (CONDITIONS.find(c => c.v === v) || {}).bn || "";
+const blankAssetRow = key => ({ present: false, qty: 1, condition: "good", photo: null, note: "", ...(key === PHONE_KEY ? { phone: blankPhone() } : {}) });
 function BaselineForm({ me, rejection, onSaved }) {
-  const [rows, setRows] = useState(() => Object.fromEntries(
-    ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null, note: "" }])
-  ));
+  const [rows, setRows] = useState(() => Object.fromEntries(ASSET_ITEMS.map(it => [it.key, blankAssetRow(it.key)])));
   const [notes, setNotes] = useState("");
   const [pledge, setPledge] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1004,7 +1012,8 @@ function BaselineForm({ me, rejection, onSaved }) {
   const [fe, setFe] = useState(null), [err, setErr] = useState(null);
 
   function setItem(key, patch) { setRows(s => ({ ...s, [key]: { ...s[key], ...patch } })); }
-  const reset = () => setRows(Object.fromEntries(ASSET_ITEMS.map(it => [it.key, { present: false, qty: 1, condition: "good", photo: null, note: "" }])));
+  const setPhone = patch => setRows(s => ({ ...s, [PHONE_KEY]: { ...s[PHONE_KEY], phone: { ...s[PHONE_KEY].phone, ...patch } } }));
+  const reset = () => setRows(Object.fromEntries(ASSET_ITEMS.map(it => [it.key, blankAssetRow(it.key)])));
 
   const focusField = id => setTimeout(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); try { el.focus({ preventScroll: true }); } catch (e) { /* */ } } }, 30);
   async function submit() {
@@ -1013,7 +1022,7 @@ function BaselineForm({ me, rejection, onSaved }) {
     if (chosen.length === 0) { setFe({ field: "as_list", ar: "حدّد العناصر التي استلمتها أولاً.", bn: "অন্তত একটি সরঞ্জাম নির্বাচন করুন।" }); focusField("as_list"); return; }
     // صورة إلزامية لكل صنف، وملاحظة إلزامية للحالة السيئة/التالفة — التوجيه إلى أول صنف ناقص
     const de = declarationError(chosen, rows);
-    if (de) { setFe({ field: "as_item", key: de.key, kind: de.field, ar: de.ar, bn: de.bn }); focusField((de.field === "note" ? "asnt_" : "asi_") + de.key); return; }
+    if (de) { setFe({ field: "as_item", key: de.key, kind: de.field, ar: de.ar, bn: de.bn }); focusField(de.field === "note" ? "asnt_" + de.key : de.field === "photo" ? "asi_" + de.key : "asp_" + de.field); return; }
     if (!pledge) { setFe({ field: "as_pledge", ar: "وافق على التعهّد قبل الحفظ.", bn: "সংরক্ষণের আগে অঙ্গীকারে সম্মতি দিন।" }); focusField("as_pledge"); return; }
     setBusy(true);
     try {
@@ -1023,7 +1032,10 @@ function BaselineForm({ me, rejection, onSaved }) {
         const r = rows[it.key];
         // الصورة إلزامية: فشل الرفع يوقف الحفظ (لا يُحفظ صنف بلا صورة)
         const photoUrl = await uploadPhoto(r.photo, "asset-" + it.key, bid);
-        items.push(declarationItem(it, r, photoUrl));
+        const item = declarationItem(it, r, photoUrl);
+        // الجوال: صورة شاشة IMEI + بياناته (IMEI والخط بأرقام لاتينية) — تنسخها custody_review إلى القطعة عند الاعتماد
+        if (it.key === PHONE_KEY) item.phone = phoneItem(r.phone, await uploadPhoto(r.phone.imeiPhoto, "asset-phone-imei", bid));
+        items.push(item);
       }
       // التسجيل الأول ينتظر الاعتماد؛ طلب الاستبدال يُرفع عند الاعتماد لا عند الحفظ (custody_review)
       const { error } = await supabase.from("biker_assets").insert({
@@ -1051,18 +1063,18 @@ function BaselineForm({ me, rejection, onSaved }) {
           return (
             <div className={"bp-aitem" + (r.present ? " on" : "") + (fe && fe.field === "as_item" && fe.key === it.key ? " k-inv" : "")} key={it.key} id={"asi_" + it.key} tabIndex={-1}>
               <label className="bp-arow" htmlFor={"as_" + it.key}>
-                {ref ? <img className="bp-aref" src={ref} alt="" /> : <div className="bp-aref ph">🧰</div>}
+                {ref ? <img className="bp-aref" src={ref} alt="" /> : <div className="bp-aref ph">{it.ico || "🧰"}</div>}
                 <input id={"as_" + it.key} type="checkbox" checked={r.present} onChange={e => { setItem(it.key, { present: e.target.checked }); setFe(null); }} />
                 <span className="tx">{it.ar} <span className="bn">/ {it.bn}</span></span>
               </label>
               {r.present && (
                 <div style={{ padding: "0 13px 12px" }}>
                   <div className="bp-row" style={{ gap: 8 }}>
-                    <div style={{ flex: "0 0 32%" }}>
+                    {it.key !== PHONE_KEY && <div style={{ flex: "0 0 32%" }}>
                       <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الكمية <span className="bn">/ পরিমাণ</span></label>
                       <input className="g-input bp-in" type="number" inputMode="numeric" min="1" value={r.qty}
                         onChange={e => setItem(it.key, { qty: e.target.value })} style={{ padding: "9px 11px" }} />
-                    </div>
+                    </div>}
                     <div>
                       <label className="bp-lbl" style={{ margin: "0 0 4px", fontSize: 11.5 }}>الحالة <span className="bn">/ অবস্থা</span></label>
                       <select className="g-select bp-sel" value={r.condition} onChange={e => { setItem(it.key, { condition: e.target.value }); setFe(null); }} style={{ padding: "9px 11px" }}>
@@ -1070,13 +1082,14 @@ function BaselineForm({ me, rejection, onSaved }) {
                       </select>
                     </div>
                   </div>
-                  <label className="bp-lbl" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>صورة الصنف (إلزامي) · <span className="bn">ছবি (বাধ্যতামূলক)</span></label>
+                  <label className="bp-lbl" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>{it.key === PHONE_KEY ? <>صورة الجهاز (إلزامي) · <span className="bn">ফোনের ছবি (বাধ্যতামূলক)</span></> : <>صورة الصنف (إلزامي) · <span className="bn">ছবি (বাধ্যতামূলক)</span></>}</label>
                   <label className="bp-acap" htmlFor={"asph_" + it.key}>
                     {r.photo ? <img className="bp-athumb" src={URL.createObjectURL(r.photo)} alt="" /> : <>📷 تصوير الصنف · ছবি তুলুন</>}
                     {r.photo && <span className="bp-done">✓ تم · হয়েছে</span>}
                     <input id={"asph_" + it.key} type="file" accept="image/*" capture="environment"
                       onChange={e => { setItem(it.key, { photo: (e.target.files || [])[0] || null }); setFe(null); }} />
                   </label>
+                  {it.key === PHONE_KEY && <PhoneFields p={r.phone} set={p => { setPhone(p); setFe(null); }} fe={fe && fe.field === "as_item" && fe.key === PHONE_KEY ? fe.kind : null} />}
                   <label className="bp-lbl" htmlFor={"asnt_" + it.key} style={{ margin: "8px 0 4px", fontSize: 11.5 }}>
                     وش التالف بالضبط؟ · <span className="bn">ঠিক কী নষ্ট?</span>{isBad(r.condition) ? <b style={{ color: "var(--bad-ink)" }}> *</b> : <span style={{ fontWeight: 500 }}> (اختياري · ঐচ্ছিক)</span>}
                   </label>
@@ -1112,6 +1125,31 @@ function BaselineForm({ me, rejection, onSaved }) {
     </div></div></>
   );
 }
+/* بيانات الجوال في إقرار العهدة: IMEI (فحص فوري بنفس فحص القاعدة) وصورة شاشته، والماركة والموديل، والخط، والملحقات — src/custodyPhone.js */
+function PhoneFields({ p, set, fe }) {
+  const st = imeiStatus(p.imei);
+  const inv = k => fe === k ? " k-inv" : "";
+  return (<div className="bp-phone">
+    <label className="bp-lbl" htmlFor="asp_imei" style={{ margin: "0 0 4px", fontSize: 11.5 }}>رقم IMEI (إلزامي) · <span className="bn">IMEI নম্বর (বাধ্যতামূলক)</span></label>
+    <div className="bp-hint">📞 {IMEI_HINT.ar} · <span className="bn">{IMEI_HINT.bn}</span></div>
+    <input id="asp_imei" className={"g-input bp-in" + inv("imei")} inputMode="numeric" autoComplete="off" autoCorrect="off" spellCheck={false} maxLength={24}
+      value={p.imei} onChange={e => set({ imei: e.target.value })} placeholder="35xxxxxxxxxxxxx" dir="ltr" />
+    {st.state !== "empty" && <div className={"bp-imei-st " + st.state} aria-live="polite">{st.ar} · <span className="bn">{st.bn}</span></div>}
+    <label className="bp-lbl" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>صورة شاشة IMEI (إلزامي) · <span className="bn">IMEI স্ক্রিনের ছবি (বাধ্যতামূলক)</span></label>
+    <label className={"bp-acap" + inv("imei_photo")} htmlFor="asp_imei_photo_in" id="asp_imei_photo" tabIndex={-1}>
+      {p.imeiPhoto ? <img className="bp-athumb" src={URL.createObjectURL(p.imeiPhoto)} alt="" /> : <>📷 تصوير شاشة IMEI · <span className="bn">স্ক্রিনের ছবি</span></>}
+      {p.imeiPhoto && <span className="bp-done">✓ تم · হয়েছে</span>}
+      <input id="asp_imei_photo_in" type="file" accept="image/*" capture="environment" onChange={e => set({ imeiPhoto: (e.target.files || [])[0] || null })} />
+    </label>
+    <label className="bp-lbl" htmlFor="asp_brand" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>الماركة والموديل (إلزامي) · <span className="bn">ব্র্যান্ড ও মডেল (বাধ্যতামূলক)</span></label>
+    <input id="asp_brand" className={"g-input bp-in" + inv("brand")} maxLength={60} value={p.brand_model} onChange={e => set({ brand_model: e.target.value })} placeholder="Samsung A15" dir="ltr" />
+    <label className="bp-lbl" htmlFor="asp_sim" style={{ margin: "8px 0 4px", fontSize: 11.5 }}>رقم الخط · <span className="bn">সিম নম্বর</span><span style={{ fontWeight: 500 }}> (اختياري · ঐচ্ছিক)</span></label>
+    <input id="asp_sim" className={"g-input bp-in" + inv("sim")} inputMode="tel" autoComplete="off" maxLength={20} value={p.sim} onChange={e => set({ sim: e.target.value })} placeholder="05xxxxxxxx" dir="ltr" />
+    <label className="bp-lbl" style={{ margin: "8px 0 2px", fontSize: 11.5 }}>الملحقات المستلمة · <span className="bn">সাথে যা পেয়েছেন</span></label>
+    <div className="bp-accs">{ACCESSORIES.map(a => <label key={a.k} htmlFor={"asp_acc_" + a.k}>
+      <input id={"asp_acc_" + a.k} type="checkbox" checked={!!p.acc[a.k]} onChange={e => set({ acc: { ...p.acc, [a.k]: e.target.checked } })} />{a.ar} <span className="bn">/ {a.bn}</span></label>)}</div>
+  </div>);
+}
 /* تبويب «العهدة»: تسجيل أول مرة (بانتظار الاعتماد) ثم «عهدتي الحالية» وتحديث حالة كل قطعة باعتماد — docs/sql/custody_lifecycle.sql */
 function Assets({ me }) {
   const bid = me.biker_employee_id;
@@ -1122,7 +1160,7 @@ function Assets({ me }) {
       supabase.from("biker_assets").select("id,kind,asset_id,items,notes,status,reject_reason,reviewed_at,request_id,created_at")
         .eq("biker_employee_id", bid).order("created_at", { ascending: false }).limit(300),
       // RLS (ca_biker_sel) يقصرها على قطع البايكر؛ sweater_id = رقمه في كل السجلات
-      supabase.from("custody_assets").select("id,item_type,category,name,name_en,start_date,end_date,life_months,status,reorder_request_id,source,created_at")
+      supabase.from("custody_assets").select("id,item_type,category,name,name_en,start_date,end_date,life_months,status,reorder_request_id,source,created_at,serial_no,specs")
         .eq("sweater_id", bid).order("name"),
     ]);
     if (a.error || b.error) { setLoadErr(a.error || b.error); setDecls(d => d || []); setPieces(p => p || []); return; }
@@ -1138,7 +1176,7 @@ function Assets({ me }) {
     return (<div className="bp-card g-card"><div className="bp-sec">
       <h2 className="bp-wiz-h" style={{ marginTop: 0 }}>تسجيل العهدة بانتظار الاعتماد<span className="bn">নিবন্ধন অনুমোদনের অপেক্ষায়</span></h2>
       <div className="bp-aspend">⏳ أُرسل {new Date(bs.row.created_at).toLocaleDateString("ar")} · {its.length} صنف — يراجعه المسؤول ويصلك إشعار. · <span className="bn">পাঠানো হয়েছে — অনুমোদন হলে জানানো হবে।</span></div>
-      <div className="bp-list" style={{ marginTop: 10 }}>{its.map((x, i) => <div className="bp-item" key={i}><div className="t">{x.name_ar || x.key}{x.qty > 1 ? " ×" + x.qty : ""}</div><div className="m">{condAr(x.condition)}{x.note ? " — " + x.note : ""}</div></div>)}</div>
+      <div className="bp-list" style={{ marginTop: 10 }}>{its.map((x, i) => <div className="bp-item" key={i}><div className="t">{x.name_ar || x.key}{x.qty > 1 ? " ×" + x.qty : ""}</div><div className="m">{condAr(x.condition)}{x.note ? " — " + x.note : ""}{x.phone ? <span dir="ltr"> · IMEI {maskImei(x.phone.imei)}</span> : null}</div></div>)}</div>
     </div></div>);
   }
   return <MyCustody me={me} pieces={myPieces(pieces)} decls={decls} onSaved={load} />;
@@ -1155,6 +1193,8 @@ function MyCustody({ me, pieces, decls, onSaved }) {
         const st = pieceState(p, decls), left = remainingDays(p, today);
         return (<div className={"bp-item bp-piece" + (p.status === "due" ? " due" : "")} key={p.id}>
           <div className="t">{p.name}<span className="bn" style={{ fontWeight: 600 }}>{p.name_en || ""}</span></div>
+          {isDevice(p) && <div className="m"><span dir="ltr">IMEI {maskImei(p.serial_no)}</span>{p.specs && p.specs.brand_model ? <> · <span dir="ltr">{p.specs.brand_model}</span></> : null}
+            {accLabels(p.specs && p.specs.acc).length > 0 && <> · {accLabels(p.specs.acc).join("، ")} · <span className="bn">{accLabels(p.specs.acc, "bn").join(", ")}</span></>}</div>}
           <div className="m">الحالة · <span className="bn">অবস্থা</span>: <b>{st.condition ? condAr(st.condition) + " / " + condBn(st.condition) : "—"}</b>
             {left !== null && <> · {left >= 0 ? `متبقٍ ${left} يوم · ${left} দিন বাকি` : `انتهى عمرها منذ ${-left} يوم · মেয়াদ শেষ`}</>}</div>
           {p.status === "due" && <div className="m" style={{ color: "var(--bad-ink)", fontWeight: 700 }}>🔁 بانتظار الاستبدال · বদলের অপেক্ষায়</div>}
