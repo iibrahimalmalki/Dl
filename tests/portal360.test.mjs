@@ -30,6 +30,11 @@ const SCEN={
     fuel_logs:[{id:'60000000-0000-0000-0000-000000000001',plate:'5531 BG',odometer:13420,amount:25,fill_at:'2026-10-05T12:00:00Z',request_id:'50000000-0000-0000-0000-000000000002'}],
     maintenance_requests:[{id:'70000000-0000-0000-0000-000000000001',plate:'5531 BG',status:'sent',odometer:14100,requested_at:'2026-10-10T08:00:00Z',sent_at:'2026-10-10T09:00:00Z',done_at:null,approved_at:null}]},
   // الحساب التجريبي (is_test): سطر «حساب تجريبي» في الرأس وشارة على الدراجة، بلغتين وبلا تجاوز
+  // «أدائي» بعد ترحيل يوليو: بطاقة «مسيري المعتمد» (565.40 مدفوعة بتاريخ ومرجع مختصر) + يونيو، بجانب أداء الشهر
+  pay:{label:'أدائي — المسير المعتمد',tabs:[['perf','أدائي']],biker_assets:[],custody_assets:[],
+    ops_biker_month:[{period:'2026-09',sweater_id:'1648',biker_name:'Midul Hassan',net_washes:83,rating:4.65,approved_complaints:0,complaint_pct:0,daily:{}}],
+    payroll_lines:[{period:'2026-07',net_bonus:565.4,inputs:{net_washes:190,tips:42.9},computed:{net_washes:190,rate_per_wash:2.75,tips:42.9,production:0},payment_status:'paid',paid_at:'2026-10-13',paid_amount:565.4,payment_ref:'9113102600103372',base_paid:null},
+      {period:'2026-06',net_bonus:800.13,inputs:{},computed:{net_washes:203,rate_per_wash:3.75,tips:0,production:25},payment_status:'paid',paid_at:'2026-10-04',paid_amount:800.13,payment_ref:null,base_paid:true}]},
   test:{label:'الحساب التجريبي — الشارة',tabs:[['profile','ملفي']],biker_assets:[],custody_assets:[],test:true},
   mine:{label:'العهدة — «عهدتي الحالية» وتحديث الحالة',biker_assets:[decl('baseline','approved',{reviewed_at:'2026-10-09T12:00:00Z'}),{...decl('update','declared'),asset_id:HELM,items:[{key:'helmet',condition:'poor',photo:'p',note:'شرخ'}]}],
     custody_assets:[asset(VAC,'المكنسة','Vacuum Cleaner','2026-08-07','2028-02-07',18),asset(HELM,'الخوذة','Helmet','2026-08-07','2028-08-07',24,'due'),asset('20000000-0000-0000-0000-000000000003','الفرش (إطارات/مكيّف/أرضية/صغيرة)','Brushes set','2026-04-01','2026-10-01',6)]},
@@ -46,6 +51,7 @@ function restReply(url,headers,scen){
     operators:[{id:OP,name:'دلو ورغوة'}],
     fleet_vehicles:[{id:'40000000-0000-0000-0000-000000000001',plate:'5531 BG',make:'Honda',biker_employee_id:EMP,held_by:null,held_until:null,held_reason:null,needs_receipt_update:false,is_test:!!scen.test}],
     biker_assets:scen.biker_assets,custody_assets:scen.custody_assets,
+    ops_biker_month:scen.ops_biker_month||[],payroll_lines:scen.payroll_lines||[],
     fuel_requests:scen.fuel_requests||[],fuel_logs:scen.fuel_logs||[],maintenance_requests:scen.maintenance_requests||[],
   }[table]||[];
   const body=single?(rows[0]||null):rows;
@@ -126,6 +132,10 @@ try{
     }
     if(key==='test')ok('الحساب التجريبي: «🧪 حساب تجريبي» في الرأس وعلى الدراجة، بالعربي والبنغالي',
       await page.getByText('🧪 حساب تجريبي',{exact:false}).count()===1&&await page.locator('.bp-pcell .k',{hasText:'🧪 تجريبي'}).count()===1&&await page.locator('.bn',{hasText:'পরীক্ষামূলক অ্যাকাউন্ট'}).count()===1&&await page.locator('.bn',{hasText:/^পরীক্ষামূলক$/}).count()===1);
+    if(key==='pay'){const t=await page.locator('.bp-content').innerText();
+      ok('«مسيري المعتمد»: يوليو 565.40 «مدفوعة» بتاريخ 2026-10-13 ومرجع مختصر …3372 (بلغتين)، ويونيو 800.13 والأساس مدفوع',
+        t.includes('مسيري المعتمد')&&t.includes('565.40')&&t.includes('2026-10-13')&&t.includes('…3372')&&!t.includes('9113102600103372')
+        &&t.includes('800.13')&&t.includes('الراتب الأساسي مدفوع')&&await page.locator('.bp-pay .g-badge .bn',{hasText:'পরিশোধিত'}).count()===2);}
     if(key==='baseline')ok('الحساب الحقيقي: لا شارة «تجريبي»',await page.getByText('🧪',{exact:false}).count()===0);
     if(key==='pending')ok('بطاقة الانتظار تعرض صنفَي التسجيل',await page.getByText('بانتظار الاعتماد').count()>=1&&await page.locator('.bp-item').count()===2);
     if(key==='rejected')ok('سبب الرفض ظاهر بالعربي والبنغالي',await page.getByText('أعد التسجيل مع صورة لكل قطعة').count()===1&&await page.locator('.bp-asrej .bn').count()>=1);

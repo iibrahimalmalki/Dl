@@ -5,6 +5,10 @@ import{useToast}from"./ui";
 import{LEVELS,computeBiker,computeSupervisor,summarize,complaintPct,complaintRatio,IN_KIND_TOTAL}from"./payrollEngine";
 import{payrollRoster,tipsCheck}from"./payrollRoster";
 
+const PAY_STATUS={paid:{ar:"مدفوعة"},deferred:{ar:"مؤجَّلة"},pending:{ar:"بانتظار الدفع"}}; // كما في payrollLine.js (بلا استيراد حتى لا تنشأ حزمة مشتركة)
+const RUN_ST={approved:"معتمد",partially_paid:"مدفوع جزئياً",paid:"مدفوع"};
+// حالة دفع السطر (للعرض فقط — التسجيل من القاعدة حالياً)
+const payOf=l=>l&&l.payment_status?{st:l.payment_status,at:l.paid_at,amt:l.paid_amount,ref:l.payment_ref,fee:Number(l.bank_fee)||0,base:l.base_paid,note:l.pay_note}:null;
 const AR=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 // الافتراضي الشهر السابق (كالإقفال الشهري): مسير الشهر يُعدّ بعد انتهائه
 const prevPeriod=()=>{const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
@@ -18,7 +22,8 @@ export default function Payroll({opId,owner}){
   const[bikers,setBikers]=useState([]);     // [{employee_id,name,biker_id,inp:{...}}]
   const[sup,setSup]=useState({name:"",team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""});
   const[unlinked,setUnlinked]=useState([]);   // صفوف عمليات بلا موظف مربوط (كانت تُستبعد بصمت)
-  const[stlTips,setStlTips]=useState(null);   // sweater_settlements.tip_amount للشهر
+  const[stlTips,setStlTips]=useState(null);
+  const[supPay,setSupPay]=useState(null);   // حالة دفع سطر المشرف المحفوظ   // sweater_settlements.tip_amount للشهر
   const[supAuto,setSupAuto]=useState(true);  // اشتقاق مدخلات الفريق تلقائياً
   const[runId,setRunId]=useState(null);
   const[status,setStatus]=useState("draft");
@@ -62,7 +67,7 @@ export default function Payroll({opId,owner}){
       const o=opsMap[String(e.employee_id).trim()];
       // إن لم يوجد كشف محفوظ لكن توجد بيانات عمليات → عبّئ منها
       const useOps=!s&&o;if(useOps)usedOps=true;
-      return{employee_id:e.id,name:e.full_name||s?.name||"—",biker_id:e.employee_id,noStart:!e.start_date,
+      return{employee_id:e.id,name:e.full_name||s?.name||"—",biker_id:e.employee_id,noStart:!e.start_date,pay:payOf(s),
         inp:{level:inp.level||"M1",
           net_washes:inp.net_washes??(useOps?o.net_washes:""),
           rating:inp.rating??(useOps&&o.rating!=null?o.rating:""),
@@ -70,7 +75,7 @@ export default function Payroll({opId,owner}){
           tips:inp.tips??(useOps&&o.tips!=null?o.tips:""),qd:inp.qd??"",dmg:inp.dmg??"",abs:inp.abs??"",mat:inp.mat??"",trn:inp.trn??""}};
     });
     setBikers(rows);setFromOps(usedOps&&!hasRun);
-    const supLine=lines.find(l=>l.role==="supervisor");
+    const supLine=lines.find(l=>l.role==="supervisor");setSupPay(payOf(supLine));
     const supName=R.supervisor?R.supervisor.full_name:"";
     if(supLine){const i=supLine.inputs||{};setSup({name:supLine.name||supName,team_orders:i.team_orders??"",team_rating:i.team_rating??"",team_complaint_approved:i.team_complaint_approved??"",deductions:i.deductions??""});setSupAuto(!!i.auto);}
     else setSup({name:supName,team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""});
@@ -155,7 +160,7 @@ export default function Payroll({opId,owner}){
         <Icon n="calendar" s={16}/>
         <input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/>
       </div>
-      {!allOps&&<span className={"pr-status "+(locked?"ap":"df")}><span className="pr-dot"/>{locked?"معتمد":"مسودة"}</span>}
+      {!allOps&&<span className={"pr-status "+(locked?"ap":"df")}><span className="pr-dot"/>{locked?(RUN_ST[status]||"معتمد"):"مسودة"}</span>}
       <div style={{flex:1}}/>
       {!ro&&opsCount>0&&<button className="pr-btn ghost" onClick={syncFromOps} title="سحب الغسلات والتقييم والشكاوى من تقارير سويتر المرفوعة في العمليات"><Icon n="refresh" s={15}/> سحب من العمليات</button>}
       {!allOps&&<button className="pr-btn ghost" onClick={exportCSV}><Icon n="download" s={15}/> تصدير</button>}
@@ -227,6 +232,7 @@ export default function Payroll({opId,owner}){
           <div className="pr-res-x"><span>الأساسي {r.level}</span><b>{AR(r.base)}</b></div>
           <div className="pr-res-t"><span>إجمالي الحزمة</span><b>{AR(r.total)}<i>ر</i></b></div>
         </div>
+        {locked&&<PayRow p={b.pay}/>}
       </div>);})}
 
     {/* المشرف */}
@@ -252,6 +258,7 @@ export default function Payroll({opId,owner}){
         <div className="pr-res-x"><span>الراتب الثابت</span><b>{AR(computed.supRes.base)}</b></div>
         <div className="pr-res-t"><span>إجمالي المشرف</span><b>{AR(computed.supRes.total)}<i>ر</i></b></div>
       </div>
+      {locked&&<PayRow p={supPay}/>}
     </div>
 
     </fieldset>
@@ -264,6 +271,10 @@ export default function Payroll({opId,owner}){
 }
 
 function Sum({ic,c,bg,t,v,sar}){return(<div className="pr-kpi"><span className="pr-ki" style={{background:bg,color:c}}><Icon n={ic} s={17}/></span><div><div className="pr-kv">{v}{sar&&<i> ر</i>}</div><div className="pr-kl">{t}</div></div></div>);}
+function PayRow({p}){if(!p)return null;const S=PAY_STATUS[p.st]||PAY_STATUS.pending;
+  return(<div className="pr-chips pr-pay"><span className={"pr-chip "+(p.st==="paid"?"good":"caut")}>{S.ar}{p.amt!=null&&<b> {AR(p.amt)} ر</b>}</span>
+    {p.at&&<span className="pr-chip">{p.at}</span>}{p.ref&&<span className="pr-chip" dir="ltr">{p.ref}</span>}{p.fee>0&&<span className="pr-chip">رسوم التحويل {AR(p.fee)} (على المؤسسة)</span>}
+    {p.base===true&&<span className="pr-chip good">الأساس مدفوع</span>}{p.note&&<span className="pr-chip">{p.note}</span>}</div>);}
 function Fld({l,children}){return(<label className="pr-fld"><span>{l}</span>{children}</label>);}
 
 const CSS=`

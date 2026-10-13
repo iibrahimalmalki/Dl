@@ -4,6 +4,7 @@ import TOOLREFS from "./toolRefs";
 import { ThemeToggle, Orbs, useToast } from "./ui";
 import { daysLeft, docStatus, docBn, dayText, dayTextBn, pickContact } from "./renewalsLib";
 import { bikerScore, nextHints } from "./scorecard";
+import { latestLines, money } from "./payrollLine";
 import { dailySVG } from "./perfCharts";
 import ChartTip from "./ChartTip";
 import GlassSidebar from "./GlassSidebar";
@@ -159,6 +160,8 @@ const CSS = `
 .bp-pf-grid b{display:block;font-size:19px;font-weight:900;color:var(--ink)}.bp-pf-grid b.o{color:var(--p-ink)}
 .bp-pf-grid span{font-size:10.5px;color:var(--mut);font-weight:700}.bp-pf-grid .bn,.bp-pf-row .bn,.bp-pf-total .bn{font-size:inherit}
 .bp-pf-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.bp-pay{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-bottom:1px solid var(--line)}.bp-pay:last-child{border-bottom:none;padding-bottom:0}
+.bp-pay-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
 .bp-pf-total{display:flex;justify-content:space-between;align-items:center;background:var(--p-50);border:1px solid rgba(var(--p-rgb),.3);border-radius:12px;padding:10px 13px;font-size:12.5px;font-weight:700;color:var(--ink-2)}
 .bp-pf-total b{font-size:18px;color:var(--p-ink)}
 .bp-pf-chart{margin-top:12px;overflow:hidden}
@@ -490,13 +493,26 @@ function MyPerf({ me }) {
       periods.length ? run("violations", supabase.from("violations").select("period,status,fine_applied,code").eq("sweater_id", sid).in("period", periods).eq("status", "confirmed")) : [],
     ]);
     const scores = ops.map(o => bikerScore(o, { rounds: rounds.filter(r => String(r.round_date || "").slice(0, 7) <= o.period), violations: viol.filter(v => v.period === o.period) }));
+    // المسير المعتمد (RLS payroll_lines_self: أسطر هذا البايكر من مسير غير مسودة فقط)
+    const pay = latestLines(await run("payroll_lines", supabase.from("payroll_lines").select("period,net_bonus,inputs,computed,payment_status,paid_at,paid_amount,payment_ref,base_paid").eq("role", "biker").eq("biker_id", sid).order("period", { ascending: false }).limit(6)), 3);
     if (denied.length) console.warn("BikerPortal/أدائي — رُفضت القراءة من:", denied.join(", "));
-    setSt({ loading: false, scores, denied });
+    setSt({ loading: false, scores, pay, denied });
   })(); }, [me.biker_employee_id]);
   if (st.loading) return <Skel rows={4} />;
   if (st.denied.includes("ops_biker_month")) return <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>سيُفعَّل قريباً · <span className="bn">শীঘ্রই চালু হবে</span></b><p>صفحة أدائك قيد التفعيل. · আপনার কাজের পাতা শীঘ্রই চালু হবে।</p></div></div></div>;
-  if (!st.scores.length) return <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>لا بيانات أداء بعد · <span className="bn">এখনও কোনো তথ্য নেই</span></b><p>تظهر أرقامك بعد رفع تقرير سويتر الشهري. · মাসিক রিপোর্ট আপলোডের পর আপনার তথ্য দেখা যাবে।</p></div></div></div>;
-  return (<>{st.scores.map((s, i) => { const L = pLabel(s.period); const hAr = nextHints(s, "ar"), hBn = nextHints(s, "bn"); return (
+  const payCard = st.pay.length > 0 && <div className="bp-card g-card"><div className="bp-sec">
+    <label className="bp-lbl" style={{ marginTop: 0 }}>مسيري المعتمد · <span className="bn">আমার অনুমোদিত বেতন</span></label>
+    {st.pay.map(p => { const L = pLabel(p.period); return (
+      <div className="bp-pay" key={p.period}>
+        <div className="bp-pay-h"><b>{L.ar} <span className="bn">/ {L.bn}</span></b><span className={"g-badge " + p.tone}>{p.statusAr} · <span className="bn">{p.statusBn}</span></span></div>
+        <div className="bp-pf-total"><span>المكافأة · <span className="bn">কমিশন</span></span><b>{money(p.bonus)} ﷼</b></div>
+        {p.washes > 0 && <div className="bp-note">{p.washes} غسلة · <span className="bn">ওয়াশ</span>{p.rate != null ? ` × ${p.rate.toFixed(2)}` : ""}{p.tips ? <> · إكراميات <span className="bn">টিপস</span> {money(p.tips)}</> : null}{p.production ? <> · إنتاج <span className="bn">বোনাস</span> +{p.production}</> : null}</div>}
+        {p.paidAt && <div className="bp-note">التحويل · <span className="bn">স্থানান্তর</span>: {p.paidAt}{p.ref ? ` · ${p.ref}` : ""}</div>}
+        {p.basePaid && <div className="bp-note">الراتب الأساسي مدفوع · <span className="bn">মূল বেতন পরিশোধিত</span></div>}
+      </div>); })}
+  </div></div>;
+  if (!st.scores.length) return payCard || <div className="bp-card g-card"><div className="bp-sec"><div className="g-empty" style={{ padding: "22px 10px" }}><b>لا بيانات أداء بعد · <span className="bn">এখনও কোনো তথ্য নেই</span></b><p>تظهر أرقامك بعد رفع تقرير سويتر الشهري. · মাসিক রিপোর্ট আপলোডের পর আপনার তথ্য দেখা যাবে।</p></div></div></div>;
+  return (<>{payCard}{st.scores.map((s, i) => { const L = pLabel(s.period); const hAr = nextHints(s, "ar"), hBn = nextHints(s, "bn"); return (
     <div className="bp-card g-card" key={s.period}><div className="bp-sec">
       <label className="bp-lbl" style={{ marginTop: 0 }}>{i === 0 ? "آخر شهر" : "الشهر الذي قبله"} · {L.ar} <span className="bn">/ {L.bn}</span></label>
       <div className="bp-pf-grid">
