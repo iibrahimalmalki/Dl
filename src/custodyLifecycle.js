@@ -100,10 +100,11 @@ export function timeline(asset,rows=[]){
 }
 
 // قطعة بديلة عند الاستبدال الفعلي: نفس الصنف، تبدأ اليوم بعمر كامل
-export function replacementRow(old,today){
+// extra: للجوال (device) serial_no + specs الجهاز البديل — القاعدة ترفض device بلا IMEI صالح
+export function replacementRow(old,today,extra={}){
   const c=catalogOfAsset(old);const life=c?c.life:(old.life_months||12),lead=c?c.lead:(old.lead_days||30);
   return{operator_id:old.operator_id||null,employee_id:old.employee_id||null,biker_name:old.biker_name,sweater_id:old.sweater_id,
     item_type:old.item_type,category:old.category,name:old.name,name_en:old.name_en||null,
-    start_date:today,life_months:life,lead_days:lead,end_date:addMonths(today,life),status:"active",source:"replacement",notes:`بديل عن ${old.id}`};
+    start_date:today,life_months:life,lead_days:lead,end_date:addMonths(today,life),status:"active",source:"replacement",notes:`بديل عن ${old.id}`,...extra};
 }
 export{CATALOG};

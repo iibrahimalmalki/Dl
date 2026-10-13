@@ -24,6 +24,8 @@ export const CATALOG=[
   {key:"glass",name:"منظّف الزجاج",en:"Glass Cleaner",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
   {key:"soap",name:"صابون/شامبو",en:"Soap/Shampoo",type:"cleaning",category:"مواد تنظيف",life:1,lead:7,mode:"reorder"},
   {key:"sponge",name:"إسفنجات (بودي/إطارات)",en:"Sponges",type:"sponge",category:"مستهلكات",life:2,lead:7,mode:"reorder"},
+  // الجوال: اعتمده المالك 2026-10-12 (docs/design/custody_phone.md) — device يتطلب IMEI صالحاً في القاعدة (custody_phone.sql)
+  {key:"phone",name:"الجوال",en:"Mobile Phone",type:"device",category:"أجهزة",life:24,lead:45,mode:"replace"},
   {key:"towels",name:"مناشف ميكروفايبر (4 ألوان)",en:"Microfiber towels",type:"towel",category:"مستهلكات",life:2,lead:7,mode:"reorder"},
 ];
 
@@ -34,7 +36,7 @@ export const ASSET_TO_CATALOG={
   floor_brush:"brushes",tyre_brush:"brushes",small_brush:"brushes",ac_brush:"brushes",
   sponge_body:"sponge",sponge_tyre:"sponge",vacuum:"vacuum",
   dashboard_polish:"dash",tyre_polish:"tyrepol",stain_remover:"stain",last_touch:"lasttouch",glass_cleaner:"glass",
-  service_box:"servicebox",soap_bottle:"soap",
+  service_box:"servicebox",soap_bottle:"soap",phone:"phone",
 };
 export const catalogByKey=k=>CATALOG.find(c=>c.key===k)||null;
 export const catalogForItem=itemKey=>catalogByKey(ASSET_TO_CATALOG[itemKey]);

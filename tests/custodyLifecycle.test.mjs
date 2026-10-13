@@ -13,7 +13,7 @@ const L=await import(`${tmp}/t.mjs`);
 const portal=fs.readFileSync('src/BikerPortal.jsx','utf8');
 const block=portal.slice(portal.indexOf('const ASSET_ITEMS'),portal.indexOf('];',portal.indexOf('const ASSET_ITEMS')));
 const keys=[...block.matchAll(/key:\s*"([a-z_]+)"/g)].map(m=>m[1]);
-ok('أصناف البوابة 23 صنفاً',keys.length===23);
+ok('أصناف البوابة 24 صنفاً (مع الجوال)',keys.length===24&&keys[0]==='phone');
 ok('كل صنف في البوابة له مفتاح كتالوج',keys.every(k=>L.ASSET_TO_CATALOG[k]));
 ok('كل هدف في الخريطة موجود في الكتالوج',Object.values(L.ASSET_TO_CATALOG).every(k=>L.CATALOG.some(c=>c.key===k)));
 ok('لا مفاتيح زائدة في الخريطة',Object.keys(L.ASSET_TO_CATALOG).every(k=>keys.includes(k)));

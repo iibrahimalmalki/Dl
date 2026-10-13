@@ -7,6 +7,19 @@ import{signedUrls}from"./storageUrl";
 import{groupByBiker,isBad}from"./custodyDeclare";
 import{isPending,kindOf,baselineLines}from"./custodyLifecycle";
 import{useToast}from"./ui";
+import{imeiOk,imeiError,maskImei,accLabels,imeiServerError}from"./custodyPhone";
+
+// بيانات الجوال في صنف الإقرار (items[].phone): IMEI كاملاً للإدارة مع حكم الفحص، والماركة، والخط، والملحقات، وصورة شاشة IMEI
+function PhoneInfo({ph,urls,onZoom}){
+  if(!ph)return null;const ok=imeiOk(ph.imei);const src=ph.imei_photo?(urls[ph.imei_photo]||ph.imei_photo):null;
+  return(<div className="cd-phn">
+    <div><span dir="ltr">IMEI {ph.imei||"—"}</span> <span className={"cd-b "+(ok?"ok":"bad")}>{ok?"صحيح":"غير صحيح"}</span></div>
+    {ph.brand_model&&<div dir="ltr">{ph.brand_model}</div>}
+    {ph.sim&&<div><span dir="ltr">☎ {ph.sim}</span></div>}
+    {accLabels(ph.acc).length>0&&<div>الملحقات: {accLabels(ph.acc).join("، ")}</div>}
+    {src&&<button className="cd-ln" onClick={()=>onZoom(src)}>صورة شاشة IMEI</button>}
+  </div>);
+}
 
 const COND={good:["جيدة","ok"],fair:["متوسطة","info"],poor:["سيئة","warn"],damaged:["تالفة","bad"]};
 const fmtDT=iso=>{const d=new Date(iso);if(isNaN(d))return"—";const p=n=>String(n).padStart(2,"0");return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
@@ -22,7 +35,7 @@ export default function CustodyDeclarations({opId,onGo,onChanged}){
     const[{data},ca]=await Promise.all([q,supabase.from("custody_assets").select("id,sweater_id,name,name_en,start_date,end_date,life_months,status")]);
     const list=data||[];setRows(list);setAssets(ca.data||[]);
     // الصور في field-evidence: رابط موقّع إن أمكن، وإلا الرابط المحفوظ كما هو
-    const all=list.flatMap(r=>(Array.isArray(r.items)?r.items:[]).map(x=>x&&x.photo).filter(Boolean));
+    const all=list.flatMap(r=>(Array.isArray(r.items)?r.items:[]).flatMap(x=>[x&&x.photo,x&&x.phone&&x.phone.imei_photo])).filter(Boolean);
     if(all.length)setUrls(await signedUrls(all).catch(()=>({})));
   })();},[opId,rev]);
   const goReq=ref=>{if(typeof window!=="undefined")window.__lastSupplyRef=ref;if(onGo)onGo("supply_requests");};
@@ -54,6 +67,7 @@ export default function CustodyDeclarations({opId,onGo,onChanged}){
                   <div className="cd-st"><span className={"cd-b "+c[1]}>{c[0]}</span>
                     {bad&&<span className="cd-b bad">يحتاج استبدال</span>}</div>
                   {x.note&&<div className="cd-nt">{x.note}</div>}
+                  {x.phone&&<div className="cd-nt" dir="ltr">IMEI {maskImei(x.phone.imei)}{x.phone.brand_model?" · "+x.phone.brand_model:""}</div>}
                   {bad&&(x.replace_ref?<button className="cd-ln" onClick={()=>goReq(x.replace_ref)}><Icon n="link" s={12}/> طلب {x.replace_ref}</button>
                     :r.request_id&&r.status==="approved"?<button className="cd-ln" onClick={()=>goReq(null)}><Icon n="link" s={12}/> رُفع طلب استبدال عند الاعتماد</button>
                     :<div className="cd-nt mut">{isPending(r.status)?"يُرفع طلب الاستبدال عند الاعتماد":"لا طلب استبدال مرتبط"}</div>)}
@@ -72,13 +86,15 @@ function Review({r,assets,urls,onZoom,onDone}){
   const[start,setStart]=useState(riyadhDate(r.created_at));const[reason,setReason]=useState("");const[rej,setRej]=useState(false);const[busy,setBusy]=useState(false);const[err,setErr]=useState(null);
   const{lines,unmapped}=isUpd?{lines:[],unmapped:[]}:baselineLines(its,assets,start);
   const piece=isUpd?assets.find(a=>a.id===r.asset_id):null;
+  // جوال بـIMEI غير صحيح ⇒ لا اعتماد (القاعدة ترفضه أيضاً)؛ يُرفض بسبب ليصحّحه البايكر
+  const badPhone=its.find(x=>x&&x.phone&&!imeiOk(x.phone.imei));
   const run=async(approve)=>{
     setErr(null);
     if(!approve&&!reason.trim()){setErr("اكتب سبب الرفض — يظهر للبايكر.");return;}
     setBusy(true);
     const{data,error}=await supabase.rpc("custody_review",{p_id:r.id,p_approve:approve,p_reason:approve?null:reason.trim(),p_start:isUpd?null:start,p_lines:lines});
     setBusy(false);
-    if(error){setErr(error.message);return;}
+    if(error){setErr(imeiServerError(error.message)||error.message);return;}
     if(approve)toast.ok(data&&data.ref?`اعتُمد ✓ — رُفع طلب استبدال ${data.ref}`:"اعتُمد ✓",undefined,data&&data.ref?7000:undefined);else toast.ok("رُفض وأُبلغ البايكر بالسبب");
     if(data&&data.ref&&typeof window!=="undefined")window.__lastSupplyRef=data.ref;
     onDone();
@@ -91,7 +107,8 @@ function Review({r,assets,urls,onZoom,onDone}){
         {src?<button className="cd-ph" onClick={()=>onZoom(src)} aria-label={"صورة "+(x.name_ar||"")}><img src={src} alt="" loading="lazy"/></button>:<div className="cd-ph none">بلا صورة</div>}
         <div className="cd-tx"><div className="cd-nm">{x.name_ar||x.key}{Number(x.qty)>1?` ×${x.qty}`:""}</div>
           <div className="cd-st"><span className={"cd-b "+c[1]}>{c[0]}</span>{isBad(x.condition)&&<span className="cd-b bad">يُطلب استبداله عند الاعتماد</span>}</div>
-          {x.note&&<div className="cd-nt">{x.note}</div>}</div>
+          {x.note&&<div className="cd-nt">{x.note}</div>}
+          <PhoneInfo ph={x.phone} urls={urls} onZoom={onZoom}/></div>
       </div>);})}</div>
     {!isUpd&&<div className="cd-lines">
       <label className="cd-dt">تاريخ بداية القطع الجديدة <input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label>
@@ -99,10 +116,11 @@ function Review({r,assets,urls,onZoom,onDone}){
       <ul>{lines.map(l=><li key={l.catalog_key}><b>{l.name}</b> — {l.asset_id?<span className="cd-b info">ربط بقطعة قائمة · {l.start_date}</span>:<span className="cd-b ok">قطعة جديدة · {l.start_date} ← {l.end_date}</span>}</li>)}</ul>
       {unmapped.length>0&&<div className="cd-err">أصناف بلا مقابل في الكتالوج: {unmapped.join("، ")} — لا يمكن الاعتماد.</div>}
     </div>}
+    {badPhone&&<div className="cd-err">{imeiError(badPhone.phone.imei).ar} — لا يمكن الاعتماد؛ ارفض بالسبب ليصحّحه البايكر.</div>}
     {rej&&<textarea className="cd-rs" rows={2} value={reason} onChange={e=>setReason(e.target.value)} placeholder="سبب الرفض (يظهر للبايكر)…"/>}
     {err&&<div className="cd-err">{err}</div>}
     <div className="cd-act">
-      {!rej&&<button className="cd-bt ok" disabled={busy||unmapped.length>0} onClick={()=>run(true)}><Icon n="check" s={13}/> اعتماد</button>}
+      {!rej&&<button className="cd-bt ok" disabled={busy||unmapped.length>0||!!badPhone} onClick={()=>run(true)}><Icon n="check" s={13}/> اعتماد</button>}
       {!rej?<button className="cd-bt bad" disabled={busy} onClick={()=>setRej(true)}>رفض…</button>
         :<><button className="cd-bt bad" disabled={busy} onClick={()=>run(false)}>تأكيد الرفض</button><button className="cd-bt" disabled={busy} onClick={()=>{setRej(false);setReason("");setErr(null);}}>إلغاء</button></>}
     </div>
@@ -142,6 +160,7 @@ const CSS=`
 .cd-st{display:flex;gap:5px;flex-wrap:wrap;margin:4px 0}
 .cd-nt{font-size:11.5px;color:var(--ink-2);line-height:1.6;overflow-wrap:anywhere}.cd-nt.mut{color:var(--mut)}
 .cd-ln{display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:3px 8px;border-radius:8px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--b);font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;max-width:100%;overflow-wrap:anywhere}
+.cd-phn{margin-top:5px;padding:6px 8px;border-radius:8px;background:var(--glass);border:1px solid var(--line);font-size:11.5px;color:var(--ink-2);display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}
 .cd-zoom{position:fixed;inset:0;background:rgba(15,23,42,.75);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;cursor:zoom-out}
 .cd-zoom img{max-width:100%;max-height:100%;border-radius:12px}
 `;
