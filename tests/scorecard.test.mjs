@@ -20,6 +20,8 @@ ok('شكاوى 1% ← سلامة 0.75',S(100,4.75,1).sR===0.75&&S(100,4.75,1).ra
 ok('شكاوى 1.5% ← سلامة 0.50',S(100,4.75,1.5).sR===0.5);
 ok('شكاوى 2% ← سلامة 0.25',S(100,4.75,2).sR===0.25);
 ok('شكاوى 3% ← سلامة 0.25 و3.01% ← 0',S(100,4.75,3).sR===0.25&&S(100,4.75,3.01).sR===0);
+ok('الشريحة من العدد/الصافي بلا تقريب: 2/201 ⇒ سلامة 1.00 والعرض 1.00%',(()=>{const x=L.bikerScore({net_washes:201,rating:4.5,approved_complaints:2,complaint_pct:1.00});return x.sR===1&&x.complaintPct===1;})());
+ok('7/233 ⇒ سلامة 0 (العرض 3.00%)',(()=>{const x=L.bikerScore({net_washes:233,rating:4.5,approved_complaints:7,complaint_pct:3.00});return x.sR===0&&x.complaintPct===3;})());
 ok('الحد الأدنى للأجر 2 ريال',S(100,3,9).ratePerWash===2);
 ok('العمولة = الغسلات × الأجر',S(212,4.6,0.9).bonusBase===212*3.75);
 

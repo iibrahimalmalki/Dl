@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CFG, MODS, WASH, PATH, allSteps, modName, curIdx, doneCount, certified, stateFrom, missFrom, topMiss, wrongsOf, evalResult, CLIPS, VIDEO_FILES, fmtTime } from "./engine";
 import { loadAll, savePractical, listVideos, uploadVideo } from "./store";
+import { isManagerial } from "../testSandbox";
 
 const MAX_MB = 100; // حد bucket training في docs/sql/academy.sql
 const fmtDate = d => { try { return new Date(d).toLocaleDateString("ar-SA-u-nu-latn-ca-gregory", { day: "numeric", month: "short", year: "numeric" }); } catch { return "—"; } };
@@ -68,7 +69,7 @@ export default function AcademyAdmin({ me, owner }) {
 
   const rows = useMemo(() => {
     if (!d) return [];
-    return d.employees.filter(e => e.staff_role !== "manager").map(e => {
+    return d.employees.filter(e => !isManagerial(e)).map(e => {
       const at = d.attempts.filter(a => a.employee_id === e.id), pr = d.practicals.filter(p => p.employee_id === e.id), st = stateFrom(at, pr);
       const last = [...at, ...pr].map(x => x.created_at).sort().pop() || null, ci = curIdx(st);
       const prac = k => { const sup = pr.filter(p => p.kind === k && p.mode === "sup"); return sup.some(p => p.pass) ? "pass" : sup.length ? "fail" : pr.some(p => p.kind === k) ? "self" : "none"; };

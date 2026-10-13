@@ -12,3 +12,7 @@ export const markTest = (rows, ids, key = "vehicle_id") =>
   testLast((rows || []).map(r => ({ ...r, test: !!(ids && ids.has(r[key])) })), r => r.test);
 // للعدّادات: الصفوف غير التجريبية فقط
 export const realBy = (rows, ids, key = "vehicle_id") => (rows || []).filter(r => !(ids && ids.has(r[key])));
+
+// أدوار الإدارة في employees.staff_role: المدير والمشرف خارج قوائم البايكرز (null/biker = بايكر)
+export const MANAGERIAL=["manager","supervisor"];
+export const isManagerial=e=>MANAGERIAL.includes(e&&e.staff_role);

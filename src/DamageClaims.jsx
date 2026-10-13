@@ -3,6 +3,7 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import ActivityLog from"./ActivityLog";
+import{isManagerial}from"./testSandbox";
 const DC_FL={status:"الحالة",biker_name:"البايكر",biker_share:"حصة البايكر",company_share:"حصة الشركة",recovered_amount:"المُحصّل",resolution_method:"طريقة التسوية",booking_ref:"مرجع الحجز",complaint_ref:"مرجع الشكوى",investigation_notes:"ملاحظات التحقيق",evidence:"الإثبات"};
 const DC_DV={investigating:"قيد التحقيق",charged:"محمّلة",recovering:"قيد التحصيل",closed:"مغلقة",dismissed:"مرفوضة",cash:"نقدي",salary:"خصم راتب",center:"مركز معتمد"};
 
@@ -48,7 +49,7 @@ export default function DamageClaims({owner,opId}){
     setRows(data||[]);setLoading(false);
   };
   useEffect(()=>{load();},[]);
-  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role").order("full_name").then(({data})=>setEmps((data||[]).filter(e=>e.staff_role!=="manager")));},[]);
+  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role").order("full_name").then(({data})=>setEmps((data||[]).filter(e=>!isManagerial(e))));},[]);
 
   const tot=useMemo(()=>rows.reduce((a,r)=>{
     const charged=Number(r.biker_share||0),rec=Number(r.recovered_amount||0);
