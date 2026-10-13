@@ -55,6 +55,7 @@ export default function SweaterTickets({opId,me,owner}){
   const[lightbox,setLightbox]=useState(null);
   const[edit,setEdit]=useState(null);   // تعديل الشكوى
   const[hist,setHist]=useState({});     // id -> {open,loading,rows}
+  const[rep,setRep]=useState(null);     // تقرير الشكاوى للطباعة: {period,sid,list}
   const fileRef=useRef(null);const upTarget=useRef(null);
 
   const load=useCallback(async()=>{
@@ -218,11 +219,11 @@ export default function SweaterTickets({opId,me,owner}){
   };
 
   // تحرير الشكوى
-  const openEdit=(t)=>setEdit({id:t.id,sweater_ticket_no:t.sweater_ticket_no||"",sub_category:t.sub_category||"",description:t.description||"",biker_name:t.biker_name||"",sweater_id:t.sweater_id||"",sweater_decision:t.sweater_decision||"",compensation:t.compensation||"",qc_notes:t.qc_notes||""});
+  const openEdit=(t)=>setEdit({id:t.id,sweater_ticket_no:t.sweater_ticket_no||"",sub_category:t.sub_category||"",description:t.description||"",biker_name:t.biker_name||"",sweater_id:t.sweater_id||"",sweater_decision:t.sweater_decision||"",compensation:t.compensation||"",qc_notes:t.qc_notes||"",reason_ar:t.reason_ar||"",desc_bn:t.desc_bn||"",reason_bn:t.reason_bn||""});
   const saveEdit=async()=>{
     const e=edit;if(!e)return;setB(e.id,true);setMsg(null);
     try{
-      const patch={sweater_ticket_no:e.sweater_ticket_no||null,sub_category:e.sub_category||null,description:e.description||null,biker_name:e.biker_name||null,sweater_id:e.sweater_id||null,sweater_decision:e.sweater_decision||null,compensation:e.compensation||null,qc_notes:e.qc_notes||null};
+      const patch={sweater_ticket_no:e.sweater_ticket_no||null,sub_category:e.sub_category||null,description:e.description||null,biker_name:e.biker_name||null,sweater_id:e.sweater_id||null,sweater_decision:e.sweater_decision||null,compensation:e.compensation||null,qc_notes:e.qc_notes||null,reason_ar:e.reason_ar||null,desc_bn:e.desc_bn||null,reason_bn:e.reason_bn||null};
       const{data,error}=await supabase.from("ops_tickets").update(patch).eq("id",e.id).select().single();
       if(error)throw error;
       patchRow(e.id,data);
@@ -268,6 +269,34 @@ export default function SweaterTickets({opId,me,owner}){
 
   if(loading&&!rows.length)return <div className="g-skel" style={{height:280}}/>;
 
+  // تقرير شكاوى البايكر الشهري (عربي + বাংলা) — صفحة طباعة A4؛ المنطق في complaintsReport.js (يُحمَّل عند الطلب)
+  const repList=async p=>{
+    if(!p){setRep(r=>r&&{...r,list:[]});return;}
+    let qq=supabase.from("ops_tickets").select("sweater_id,biker_name").eq("period",p);if(opId&&opId!=="all")qq=qq.eq("operator_id",opId);
+    const{data,error}=await qq;if(error)setMsg({ok:false,t:"تعذّر تحميل البايكرز: "+error.message});
+    setRep(r=>r&&r.period===p?{...r,list:bikerOptions(data||[]).filter(x=>x.id).map(x=>({...x,id:String(x.id).trim()}))}:r);
+  };
+  const openRep=()=>{const p=period!=="all"&&periods.some(x=>x.p===period)?period:((periods[0]||{}).p||"");const b=bikers.find(x=>x.key===biker);
+    setRep({period:p,sid:String((b&&b.id)||"").trim(),list:null});repList(p);};
+  const goRep=async()=>{
+    const{period:p,sid}=rep;if(!p||!sid||rep.busy)return;setRep({...rep,busy:true});
+    const w=window.open("","_blank");if(!w){setMsg({ok:false,t:"اسمح بالنوافذ المنبثقة لفتح التقرير"});return;}
+    try{w.document.write('<!doctype html><meta charset="utf-8"><div style="font-family:Tahoma;padding:40px;text-align:center;color:#475569">جارٍ تجهيز التقرير… · রিপোর্ট তৈরি হচ্ছে…</div>');}catch(_){}
+    try{
+      // تصفية في الخادم (sweater_id قد يحمل مسافات) ثم مطابقة دقيقة بعد btrim
+      const like=`%${sid.replace(/[%_\\]/g,"")}%`;
+      let tq=supabase.from("ops_tickets").select("*").eq("period",p).ilike("sweater_id",like),oq=supabase.from("ops_biker_month").select("*").eq("period",p).ilike("sweater_id",like);
+      if(opId&&opId!=="all"){tq=tq.eq("operator_id",opId);oq=oq.eq("operator_id",opId);}
+      const[t,o,M]=await Promise.all([tq,oq,import("./complaintsReport")]);
+      if(t.error)throw t.error;if(o.error)throw o.error;
+      const same=x=>String(x.sweater_id||"").trim()===sid;
+      const D=M.reportData({tickets:(t.data||[]).filter(same),ops:(o.data||[]).find(same)||null,period:p,sid},publicUrl);
+      w.document.open();w.document.write(M.buildReportHTML(D,{site:location.origin,issued:new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})}));w.document.close();
+      setRep(null);
+      if(D.missingBn.length)setMsg({ok:false,t:`تنبيه: ${D.missingBn.length} شكوى ينقصها نص بنغالي (الوصف أو السبب) (${D.missingBn.map(n=>"#"+n).join("، ")}) — أضفها من «تعديل الشكوى» ثم أعد الطباعة.`});
+    }catch(err){try{w.close();}catch(_){}setRep(r=>r&&{...r,busy:false});setMsg({ok:false,t:"تعذّر تجهيز التقرير: "+(err.message||err)});}
+  };
+
   return(<div className="st">
     <style>{CSS}</style><KitStyle/>
     <div className="st-search">
@@ -288,6 +317,7 @@ export default function SweaterTickets({opId,me,owner}){
           {bikers.map(x=><option key={x.key} value={x.key}>{x.name}{x.id&&x.id!==x.name?" · "+x.id:""} ({x.n})</option>)}
         </select></label>
       <div style={{flex:1}}/>
+      <button className="st-refresh" onClick={openRep}><Icon n="print" s={14}/> طباعة تقرير الشكاوى</button>
       <button className="st-refresh" onClick={()=>{load();if(searchOn)runSearch(q);}}><Icon n="refresh" s={14}/> تحديث</button>
     </div>
     {(searchOn||biker||filter!=="all")&&<div className="st-chips">
@@ -415,9 +445,26 @@ export default function SweaterTickets({opId,me,owner}){
           <label className="st-fl">قرار سويتر<input value={edit.sweater_decision} onChange={e=>setEdit({...edit,sweater_decision:e.target.value})}/></label>
           <label className="st-fl">التعويض<input value={edit.compensation} onChange={e=>setEdit({...edit,compensation:e.target.value})}/></label>
         </div>
-        <label className="st-fl">ملاحظة الجودة<textarea value={edit.qc_notes} onChange={e=>setEdit({...edit,qc_notes:e.target.value})}/></label>
+        <label className="st-fl">ملاحظة الجودة (داخلية — لا تظهر للبايكر)<textarea value={edit.qc_notes} onChange={e=>setEdit({...edit,qc_notes:e.target.value})}/></label>
+        <div className="st-mnote2">تظهر للبايكر في «تقرير الشكاوى» المطبوع:</div>
+        <label className="st-fl">سبب الاحتساب/الرفض (عربي)<textarea value={edit.reason_ar} onChange={e=>setEdit({...edit,reason_ar:e.target.value})} placeholder="فارغ ⇒ نص ثابت حسب القرار"/></label>
+        <label className="st-fl">الوصف بالبنغالي<textarea dir="ltr" value={edit.desc_bn} onChange={e=>setEdit({...edit,desc_bn:e.target.value})}/></label>
+        <label className="st-fl">السبب بالبنغالي<textarea dir="ltr" value={edit.reason_bn} onChange={e=>setEdit({...edit,reason_bn:e.target.value})}/></label>
         <div className="st-mact"><button className="st-save" onClick={saveEdit} disabled={!!busy[edit.id]}><Icon n="save" s={14}/> {busy[edit.id]?"جارٍ الحفظ…":"حفظ"}</button><button className="st-cancel" onClick={()=>setEdit(null)}>إلغاء</button></div>
         <div className="st-mnote2">كل تعديل يُسجَّل تلقائياً في «سجل الحركات» باسمك ووقته.</div>
+      </div>
+    </div>}
+
+    {rep&&<div className="st-ov" onClick={()=>setRep(null)}>
+      <div className="st-modal" onClick={e=>e.stopPropagation()}>
+        <div className="st-mh"><b>تقرير شكاوى البايكر (PDF)</b><button className="st-x" onClick={()=>setRep(null)}><Icon n="x" s={15}/></button></div>
+        <label className="st-fl">الشهر<select value={rep.period} onChange={e=>{const p=e.target.value;setRep({period:p,sid:"",list:null});repList(p);}}>
+          {periods.map(x=><option key={x.p} value={x.p}>{periodLabel(x.p)} ({x.n})</option>)}</select></label>
+        <label className="st-fl">البايكر<select value={rep.sid} onChange={e=>setRep({...rep,sid:e.target.value})} disabled={!rep.list}>
+          <option value="">{rep.list?"— اختر —":"جارٍ التحميل…"}</option>
+          {(rep.list||[]).map(x=><option key={x.id} value={x.id}>{x.name}{x.id!==x.name?" · "+x.id:""} ({x.n})</option>)}</select></label>
+        <div className="st-mnote2">يفتح صفحة A4 بالعربي والبنغالية: الأرقام، وكلفة الشكاوى على المكافأة، والشكاوى المحسوبة والمرفوضة بالصور. لا تظهر توصية المراجعة ولا ملاحظة الجودة ولا من اتخذ القرار.</div>
+        <div className="st-mact"><button className="st-save" onClick={goRep} disabled={!rep.period||!rep.sid||rep.busy}><Icon n="print" s={14}/> {rep.busy?"جارٍ التجهيز…":"فتح التقرير"}</button><button className="st-cancel" onClick={()=>setRep(null)}>إلغاء</button></div>
       </div>
     </div>}
 
