@@ -26,10 +26,10 @@ ok('9 شكاوى: 4 محسوبة (118، 129، 133، 136) و5 مرفوضة (122،
 ok('الصافي = المدفوعة + إلغاء العميل = 190، والنسبة 4 ÷ 190 = 2.11%',D.base===190&&D.pct===2.11);
 ok('20 صورة',D.picCount===20);
 const S=D.scenarios;
-ok('الوضع الفعلي: ريال السلامة 0.25 (2–3%) + الجودة 0.50 (4.48) ⇒ 2.75 × 187 = 514.25',S[0].actual&&S[0].sR===0.25&&S[0].qR===0.5&&S[0].rate===2.75&&S[0].bonus===514.25);
-ok('سطور الشرائح الأعلى: 3 ⇒ 3.00 (+46.75)، 2 ⇒ 3.25 (+93.50)، 1 ⇒ 3.50 (+140.25)، بلا سطر مكرر للصفر',S.length===4&&S.map(s=>s.count+':'+s.rate+':'+s.diff).join()==='4:2.75:0,3:3:46.75,2:3.25:93.5,1:3.5:140.25');
-ok('هدف الشهر القادم: شكوى واحدة أو أقل (أقل من 1% من 190) ⇒ +140.25',D.target.max===1&&!D.target.done&&D.target.gain===140.25);
-ok('بلا شكاوى ⇒ الهدف «حافظ»',R.nextTarget({approved:0,base:190,washes:187,rating:4.48}).done===true);
+ok('الوضع الفعلي (نموذج المالك): ريال السلامة 0.25 + الجودة 0.50 (4.48) ⇒ 2.75 × 190 = 522.50',S[0].actual&&S[0].sR===0.25&&S[0].qR===0.5&&S[0].rate===2.75&&S[0].bonus===522.5);
+ok('سطور الشرائح الأعلى (نموذج المالك): 3 ⇒ 570.00 (+47.50)، 2 ⇒ 617.50 (+95.00)، 1 ⇒ 665.00 (+142.50)',S.length===4&&S.map(s=>s.count+':'+s.rate+':'+s.bonus+':'+s.diff).join()==='4:2.75:522.5:0,3:3:570:47.5,2:3.25:617.5:95,1:3.5:665:142.5');
+ok('هدف أغسطس (نموذج المالك): شكوى واحدة أو أقل + تقييم 4.50 ⇒ 3.75 بدل 2.75 (+190 على 190 غسلة)',D.target.max===1&&D.target.ratingTarget===4.5&&D.target.rate===3.75&&D.target.curRate===2.75&&D.target.gain===190);
+ok('أعلى شريحتين محققتان ⇒ «حافظ»',R.nextTarget({approved:0,base:190,washes:190,rating:4.8}).done===true&&R.nextTarget({approved:0,base:190,washes:190,rating:4.48}).done===false);
 ok('أقل من 100 غسلة ⇒ الهدف صفر شكاوى',R.nextTarget({approved:2,base:80,washes:80,rating:4.6}).max===0);
 ok('حدّ التقريب: 10050 غسلة ⇒ 99 لا 100 (100 تقرّب إلى 1.00% فتنزل لريال 0.75)',R.nextTarget({approved:150,base:10050,washes:10050,rating:4.6}).max===99);
 const half=R.ticketCard({ticket_no:1,decision:'approved',reason_ar:'سبب عربي فقط',coach:null});
@@ -49,9 +49,11 @@ ok('الصور روابط كاملة من bucket',c118.pics[0]==='https://x/2026
 const H=R.buildReportHTML(D,{site:'https://s',fontBase:'https://s'});
 ok('لا يظهر للبايكر: qc_notes ولا qc_recommendation ولا decided_by',!/ملاحظة-داخلية|accept|0000000000aa|qc_|decided/.test(H));
 ok('أرقام إنجليزية فقط (لا أرقام عربية/بنغالية في الصفحة)',!/[٠-٩۰-۹০-৯]/.test(H));
-ok('القسم الأحمر قبل الأخضر، والبطاقات لا تنقسم بين صفحتين',H.indexOf('الشكاوى المحسوبة عليك (4)')<H.indexOf('الشكاوى المرفوضة لصالحك (5)')&&/\.card\{[^}]*break-inside:avoid/.test(H)&&/@page\{size:A4/.test(H));
+ok('القسم الأحمر قبل الأخضر، والبطاقات لا تنقسم بين صفحتين',H.indexOf('الشكاوى المحسوبة عليك<span class="cnt">4</span>')>0&&H.indexOf('الشكاوى المحسوبة عليك<span class="cnt">4</span>')<H.indexOf('الشكاوى المرفوضة لصالحك<span class="cnt">5</span>')&&/\.card\{[^}]*break-inside:avoid/.test(H)&&/@page\{size:A4/.test(H));
 ok('20 صورة في الصفحة، object-fit: contain وارتفاع 60mm',(H.match(/<img src="https:\/\/x\//g)||[]).length===20&&/object-fit:contain/.test(H)&&/height:60mm/.test(H));
-ok('الترويسة بالعربي والبنغالي والاسم والرقم والشعار',H.includes('تقرير شكاوى العملاء — يوليو 2026')&&H.includes('গ্রাহক অভিযোগ রিপোর্ট — জুলাই 2026')&&H.includes('Midul Hassan')&&H.includes('>1648<')&&H.includes('brand-mark.png'));
+ok('الترويسة بالعربي والبنغالي والاسم والرقم والشعار والاسم الإنجليزي للمؤسسة',H.includes('تقرير شكاوى العملاء — يوليو 2026')&&H.includes('গ্রাহক অভিযোগ রিপোর্ট — জুলাই 2026')&&H.includes('Midul Hassan')&&H.includes('>1648<')&&H.includes('brand-mark.png')&&H.includes('Dalu Warghwah Est.'));
+ok('رسالة شخصية «أخي Midul» و«ভাই Midul»، وهدف أغسطس بلغتين، ونقاط من «المطلوب منك»',H.includes('أخي Midul')&&H.includes('ভাই Midul')&&H.includes('هدف أغسطس')&&H.includes('আগস্টের লক্ষ্য')&&H.includes('+190.00 ريال على 190 غسلة'));
+ok('أرقام الصفحات في الطباعة («1 من 10» لتبقى صحيحة في اتجاه RTL)',/counter\(page\) " من " counter\(pages\)/.test(H));
 ok('بطاقات الأرقام والنسبة 2.11%',H.includes('>9<')&&H.includes('>2.11%<'));
 ok('كل نص بنغالي dir=ltr',(H.match(/class="bn"(?! dir="ltr")/g)||[]).length===0);
 ok('Noto Sans Bengali مضمّن',/Noto Sans Bengali/.test(H));

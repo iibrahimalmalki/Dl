@@ -291,7 +291,7 @@ export default function SweaterTickets({opId,me,owner}){
       if(t.error)throw t.error;if(o.error)throw o.error;
       const same=x=>String(x.sweater_id||"").trim()===sid;
       const D=M.reportData({tickets:(t.data||[]).filter(same),ops:(o.data||[]).find(same)||null,period:p,sid},publicUrl);
-      w.document.open();w.document.write(M.buildReportHTML(D,{site:location.origin}));w.document.close();
+      w.document.open();w.document.write(M.buildReportHTML(D,{site:location.origin,issued:new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})}));w.document.close();
       setRep(null);
       if(D.missingBn.length)setMsg({ok:false,t:`تنبيه: ${D.missingBn.length} شكوى ينقصها نص بنغالي (الوصف أو السبب) (${D.missingBn.map(n=>"#"+n).join("، ")}) — أضفها من «تعديل الشكوى» ثم أعد الطباعة.`});
     }catch(err){try{w.close();}catch(_){}setRep(r=>r&&{...r,busy:false});setMsg({ok:false,t:"تعذّر تجهيز التقرير: "+(err.message||err)});}
