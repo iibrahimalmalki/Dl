@@ -31,6 +31,10 @@ ok('سطور الشرائح الأعلى: 3 ⇒ 3.00 (+46.75)، 2 ⇒ 3.25 (+93.
 ok('هدف الشهر القادم: شكوى واحدة أو أقل (أقل من 1% من 190) ⇒ +140.25',D.target.max===1&&!D.target.done&&D.target.gain===140.25);
 ok('بلا شكاوى ⇒ الهدف «حافظ»',R.nextTarget({approved:0,base:190,washes:187,rating:4.48}).done===true);
 ok('أقل من 100 غسلة ⇒ الهدف صفر شكاوى',R.nextTarget({approved:2,base:80,washes:80,rating:4.6}).max===0);
+ok('حدّ التقريب: 10050 غسلة ⇒ 99 لا 100 (100 تقرّب إلى 1.00% فتنزل لريال 0.75)',R.nextTarget({approved:150,base:10050,washes:10050,rating:4.6}).max===99);
+const half=R.ticketCard({ticket_no:1,decision:'approved',reason_ar:'سبب عربي فقط',coach:null});
+ok('سبب عربي بلا بنغالي ⇒ عبارة «لم يُترجم» ويظهر في تنبيه المشرف',half.reasonBn===R.NO_BN&&half.reasonBnMissing===true);
+ok('اقتباس مفرد في نص العميل يُهرَّب',R.buildReportHTML(R.reportData({tickets:[{ticket_no:5,decision:'approved',description:"x' onerror='a",coach:null}],ops:null,period:'2026-07',sid:'1'})).includes('x&#39; onerror=&#39;a'));
 
 const c118=D.approvedCards[0],c124=D.rejectedCards[1];
 ok('السبب والترجمة من reason_ar/reason_bn/desc_bn إن عبّأها المشرف',c118.reasonAr==='ترك النفايات عند الباب'&&c118.reasonBn==='দরজার সামনে ময়লা ফেলে গেছেন'&&c118.descBn==='অভিযোগ ১১৮');

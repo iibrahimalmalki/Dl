@@ -273,25 +273,28 @@ export default function SweaterTickets({opId,me,owner}){
   const repList=async p=>{
     if(!p){setRep(r=>r&&{...r,list:[]});return;}
     let qq=supabase.from("ops_tickets").select("sweater_id,biker_name").eq("period",p);if(opId&&opId!=="all")qq=qq.eq("operator_id",opId);
-    const{data}=await qq;setRep(r=>r&&r.period===p?{...r,list:bikerOptions(data||[]).filter(x=>x.id)}:r);
+    const{data,error}=await qq;if(error)setMsg({ok:false,t:"تعذّر تحميل البايكرز: "+error.message});
+    setRep(r=>r&&r.period===p?{...r,list:bikerOptions(data||[]).filter(x=>x.id).map(x=>({...x,id:String(x.id).trim()}))}:r);
   };
-  const openRep=()=>{const p=period!=="all"?period:((periods[0]||{}).p||"");const b=bikers.find(x=>x.key===biker);
-    setRep({period:p,sid:(b&&b.id)||"",list:null});repList(p);};
+  const openRep=()=>{const p=period!=="all"&&periods.some(x=>x.p===period)?period:((periods[0]||{}).p||"");const b=bikers.find(x=>x.key===biker);
+    setRep({period:p,sid:String((b&&b.id)||"").trim(),list:null});repList(p);};
   const goRep=async()=>{
-    const{period:p,sid}=rep;if(!p||!sid)return;
+    const{period:p,sid}=rep;if(!p||!sid||rep.busy)return;setRep({...rep,busy:true});
     const w=window.open("","_blank");if(!w){setMsg({ok:false,t:"اسمح بالنوافذ المنبثقة لفتح التقرير"});return;}
     try{w.document.write('<!doctype html><meta charset="utf-8"><div style="font-family:Tahoma;padding:40px;text-align:center;color:#475569">جارٍ تجهيز التقرير… · রিপোর্ট তৈরি হচ্ছে…</div>');}catch(_){}
     try{
-      let tq=supabase.from("ops_tickets").select("*").eq("period",p),oq=supabase.from("ops_biker_month").select("*").eq("period",p);
+      // تصفية في الخادم (sweater_id قد يحمل مسافات) ثم مطابقة دقيقة بعد btrim
+      const like=`%${sid.replace(/[%_\\]/g,"")}%`;
+      let tq=supabase.from("ops_tickets").select("*").eq("period",p).ilike("sweater_id",like),oq=supabase.from("ops_biker_month").select("*").eq("period",p).ilike("sweater_id",like);
       if(opId&&opId!=="all"){tq=tq.eq("operator_id",opId);oq=oq.eq("operator_id",opId);}
       const[t,o,M]=await Promise.all([tq,oq,import("./complaintsReport")]);
-      if(t.error)throw t.error;
+      if(t.error)throw t.error;if(o.error)throw o.error;
       const same=x=>String(x.sweater_id||"").trim()===sid;
       const D=M.reportData({tickets:(t.data||[]).filter(same),ops:(o.data||[]).find(same)||null,period:p,sid},publicUrl);
       w.document.open();w.document.write(M.buildReportHTML(D,{site:location.origin}));w.document.close();
       setRep(null);
-      if(D.missingBn.length)setMsg({ok:false,t:`تنبيه: ${D.missingBn.length} شكوى بلا ترجمة بنغالية للوصف (${D.missingBn.map(n=>"#"+n).join("، ")}) — أضفها من «تعديل الشكوى» ثم أعد الطباعة.`});
-    }catch(err){try{w.close();}catch(_){}setMsg({ok:false,t:"تعذّر تجهيز التقرير: "+(err.message||err)});}
+      if(D.missingBn.length)setMsg({ok:false,t:`تنبيه: ${D.missingBn.length} شكوى ينقصها نص بنغالي (الوصف أو السبب) (${D.missingBn.map(n=>"#"+n).join("، ")}) — أضفها من «تعديل الشكوى» ثم أعد الطباعة.`});
+    }catch(err){try{w.close();}catch(_){}setRep(r=>r&&{...r,busy:false});setMsg({ok:false,t:"تعذّر تجهيز التقرير: "+(err.message||err)});}
   };
 
   return(<div className="st">
@@ -461,7 +464,7 @@ export default function SweaterTickets({opId,me,owner}){
           <option value="">{rep.list?"— اختر —":"جارٍ التحميل…"}</option>
           {(rep.list||[]).map(x=><option key={x.id} value={x.id}>{x.name}{x.id!==x.name?" · "+x.id:""} ({x.n})</option>)}</select></label>
         <div className="st-mnote2">يفتح صفحة A4 بالعربي والبنغالية: الأرقام، وكلفة الشكاوى على المكافأة، والشكاوى المحسوبة والمرفوضة بالصور. لا تظهر توصية المراجعة ولا ملاحظة الجودة ولا من اتخذ القرار.</div>
-        <div className="st-mact"><button className="st-save" onClick={goRep} disabled={!rep.period||!rep.sid}><Icon n="print" s={14}/> فتح التقرير</button><button className="st-cancel" onClick={()=>setRep(null)}>إلغاء</button></div>
+        <div className="st-mact"><button className="st-save" onClick={goRep} disabled={!rep.period||!rep.sid||rep.busy}><Icon n="print" s={14}/> {rep.busy?"جارٍ التجهيز…":"فتح التقرير"}</button><button className="st-cancel" onClick={()=>setRep(null)}>إلغاء</button></div>
       </div>
     </div>}
 

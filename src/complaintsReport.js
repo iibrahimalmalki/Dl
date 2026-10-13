@@ -8,7 +8,7 @@ import { fontFaces, FONT_STACK } from "./fonts";
 const DIG = { "٠": 0, "١": 1, "٢": 2, "٣": 3, "٤": 4, "٥": 5, "٦": 6, "٧": 7, "٨": 8, "٩": 9, "۰": 0, "۱": 1, "۲": 2, "۳": 3, "۴": 4, "۵": 5, "۶": 6, "۷": 7, "۸": 8, "۹": 9,
   "০": 0, "১": 1, "২": 2, "৩": 3, "৪": 4, "৫": 5, "৬": 6, "৭": 7, "৮": 8, "৯": 9 };
 export const latinDigits = s => String(s == null ? "" : s).replace(/[٠-٩۰-۹০-৯]/g, d => DIG[d]);
-const esc = s => latinDigits(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = s => latinDigits(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const n2 = v => Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const MON_AR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
@@ -38,7 +38,9 @@ export function costScenarios({ approved, base, washes, rating }) {
 
 // هدف الشهر القادم: أكبر عدد شكاوى يبقي النسبة دون 1% (ريال السلامة كامل) على أساس غسلات هذا الشهر
 export function nextTarget({ approved, base, washes, rating }) {
-  const max = base > 0 ? Math.ceil(base / 100) - 1 : 0;
+  // أكبر عدد تبقى نسبته (مقرّبة كما في الحساب) في شريحة ريال السلامة الكاملة 1.00
+  let max = 0;
+  while (base > 0 && bikerSafetyRiyal(pctOf(max + 1, base)) === 1) max++;
   const full = costScenarios({ approved: Math.min(approved, max), base, washes, rating })[0];
   const cur = costScenarios({ approved, base, washes, rating })[0];
   return { max, done: approved <= max, gain: Math.max(0, Math.round((full.bonus - cur.bonus) * 100) / 100) };
@@ -121,7 +123,8 @@ export function ticketCard(t, picUrl = p => p) {
   return {
     no: t.ticket_no, sweaterNo: t.sweater_ticket_no || null, date: t.ticket_date || "", booking: t.booking_ref || "",
     descAr: String(t.description || "").trim(), descBn: String(t.desc_bn || "").trim(),
-    reasonAr: reasonAr || DEFAULT_REASON[d].ar, reasonBn: reasonBn || (reasonAr ? "" : DEFAULT_REASON[d].bn),
+    reasonAr: reasonAr || DEFAULT_REASON[d].ar, reasonBn: reasonBn || (reasonAr ? NO_BN : DEFAULT_REASON[d].bn),
+    reasonBnMissing: !!reasonAr && !reasonBn,
     coach: coachLines(t.coach, d), pics: picsOf(t).map(picUrl),
   };
 }
@@ -140,7 +143,7 @@ export function reportData({ tickets = [], ops = null, period, sid, name }, picU
     scenarios: ops ? costScenarios({ approved: approved.length, base, washes, rating }) : [],
     target: ops ? nextTarget({ approved: approved.length, base, washes, rating }) : null,
     approvedCards: a, rejectedCards: r, picCount: [...a, ...r].reduce((s, c) => s + c.pics.length, 0),
-    missingBn: [...a, ...r].filter(c => !c.descBn && c.descAr).map(c => c.no),
+    missingBn: [...a, ...r].filter(c => (!c.descBn && c.descAr) || c.reasonBnMissing).map(c => c.no),
   };
 }
 
@@ -232,8 +235,9 @@ ${d.rejectedCards.length ? d.rejectedCards.map(c => cardHTML(c, "green")).join("
 <script>(function(){var b=document.getElementById("pr"),s=document.getElementById("st");
 var imgs=[].slice.call(document.images),wait=imgs.map(function(i){return i.complete?Promise.resolve():new Promise(function(r){i.onload=i.onerror=r;});});
 var f=(document.fonts&&document.fonts.ready)?document.fonts.ready:Promise.resolve();
-Promise.all([f].concat(wait)).then(function(){var bad=imgs.filter(function(i){return !i.naturalWidth;}).length;
-s.textContent=bad?("تعذّر تحميل "+bad+" صورة — راجعها قبل الطباعة"):"جاهز للطباعة · প্রিন্টের জন্য প্রস্তুত";b.disabled=false;});
+var done=false;function ready(){if(done)return;done=true;var bad=imgs.filter(function(i){return !i.naturalWidth;}).length;
+s.textContent=bad?("تعذّر تحميل "+bad+" صورة — راجعها قبل الطباعة"):"جاهز للطباعة · প্রিন্টের জন্য প্রস্তুত";b.disabled=false;}
+Promise.all([f].concat(wait)).then(ready);setTimeout(ready,15000);
 b.addEventListener("click",function(){window.print();});})();</script>
 </body></html>`;
 }
