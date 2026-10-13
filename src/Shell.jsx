@@ -169,7 +169,7 @@ export default function Shell({onLogout,me}){
         {view==="users"&&owner&&<Suspense fallback={<Sk/>}><UserManagement/></Suspense>}
         {view==="biker_tabs"&&owner&&<Suspense fallback={<Sk/>}><BikerTabsAdmin/></Suspense>}
         {view==="close"&&<Suspense fallback={<Sk/>}><MonthClose opId={op} ops={activeOps} onOp={setOp} me={me} owner={owner} onNav={go}/></Suspense>}
-        {view==="payroll"&&<Suspense fallback={<Sk/>}><Payroll opId={op}/></Suspense>}
+        {view==="payroll"&&<Suspense fallback={<Sk/>}><Payroll opId={op} owner={owner}/></Suspense>}
         {view==="pricing"&&<Suspense fallback={<Sk/>}><SweaterPricing/></Suspense>}
         {view==="settlement"&&<Suspense fallback={<Sk/>}><Settlement opId={op} me={me} owner={owner}/></Suspense>}
         {view==="reconciliation"&&<Suspense fallback={<Sk/>}><SweaterReconciliation owner={owner}/></Suspense>}

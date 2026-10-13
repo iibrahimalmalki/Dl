@@ -9,7 +9,9 @@ const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.get
 const periodLabel=p=>{const[y,m]=p.split("-");const mn=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m;return`${mn} ${y}`;};
 const BLANK_B=()=>({level:"M1",net_washes:"",rating:"",complaint_approved:"",tips:"",dmg:"",abs:"",mat:"",trn:""});
 
-export default function Payroll({opId}){
+// القفل: المسير غير «draft» لا يُحفظ ولا يُعدَّل ولا يُسحب إليه (التصحيح بسطر تسوية لاحقاً)، والاعتماد للمالك فقط
+// (يفرضهما أيضاً payroll_runs_guard/payroll_lines_guard في القاعدة). وضع «الكل» للعرض فقط.
+export default function Payroll({opId,owner}){
   const[period,setPeriod]=useState(nowPeriod());
   const[loading,setLoading]=useState(true);
   const[bikers,setBikers]=useState([]);     // [{employee_id,name,biker_id,inp:{...}}]
@@ -32,10 +34,9 @@ export default function Payroll({opId}){
     if(opId&&opId!=="all")q=q.eq("operator_id",opId);
     const{data:emps}=await q;
     // كشف محفوظ؟
-    let runQ=supabase.from("payroll_runs").select("*").eq("period",period);
-    if(opId&&opId!=="all")runQ=runQ.eq("operator_id",opId);
-    const{data:runs}=await runQ.limit(1);
-    const run=runs&&runs[0];
+    // وضع «الكل»: لا يُحمَّل مسير مشغّل بعينه (كان يأخذ مسيراً عشوائياً ثم يكتب فوقه)
+    let run=null;
+    if(opId&&opId!=="all"){const{data:runs}=await supabase.from("payroll_runs").select("*").eq("period",period).eq("operator_id",opId).limit(1);run=runs&&runs[0];}
     let lines=[];
     if(run){const{data:l}=await supabase.from("payroll_lines").select("*").eq("run_id",run.id).order("sort");lines=l||[];}
     // بيانات العمليات لهذا الشهر (المشتقّة من تقارير سويتر)
@@ -70,6 +71,9 @@ export default function Payroll({opId}){
   const setB=(i,k,v)=>setBikers(p=>p.map((b,j)=>j===i?{...b,inp:{...b.inp,[k]:v}}:b));
   const syncFromOps=()=>{setBikers(p=>p.map(b=>{const o=ops[String(b.biker_id).trim()];if(!o)return b;return{...b,inp:{...b.inp,net_washes:o.net_washes??b.inp.net_washes,rating:o.rating!=null?o.rating:b.inp.rating,complaint_approved:o.approved_complaints??b.inp.complaint_approved}};}));setFromOps(true);setMsg({ok:true,t:"تم سحب الغسلات والتقييم والشكاوى من العمليات"});};
   const opsCount=Object.keys(ops).length;
+  const allOps=!opId||opId==="all";
+  const locked=status!=="draft";   // approved / final وما بعدهما
+  const ro=locked||allOps;
 
   // حساب حي
   const computed=useMemo(()=>{
@@ -92,21 +96,24 @@ export default function Payroll({opId}){
   },[bikers,sup,supAuto]);
 
   const save=async(approve)=>{
+    if(ro||(approve&&!owner))return;
+    if(approve&&!window.confirm(`اعتماد مسير ${periodLabel(period)} نهائي: لا تعديل بعده إلا بسطر تسوية. متابعة؟`))return;
     setSaving(true);setMsg(null);
     try{
-      const opv=(opId&&opId!=="all")?opId:null;
+      const opv=opId;
       // upsert run
       let rid=runId;
-      const runPayload={operator_id:opv,period,status:approve?"approved":status,updated_at:new Date().toISOString()};
-      if(rid){await supabase.from("payroll_runs").update(runPayload).eq("id",rid);}
+      // المسير يبقى draft أثناء استبدال الأسطر (الحارس يرفض تعديل أسطر مسير معتمد)، ثم يُعتمد في الخطوة الأخيرة
+      const runPayload={operator_id:opv,period,status:"draft",updated_at:new Date().toISOString()};
+      if(rid){const{data:u,error}=await supabase.from("payroll_runs").update(runPayload).eq("id",rid).select("id");if(error)throw error;if(!u||!u.length)throw new Error("لم يُحدَّث المسير — تحقّق من الصلاحية أو حالة المسير");}
       else{const{data,error}=await supabase.from("payroll_runs").insert(runPayload).select().single();if(error)throw error;rid=data.id;setRunId(rid);}
       // استبدال السطور
-      await supabase.from("payroll_lines").delete().eq("run_id",rid);
+      const{error:e1}=await supabase.from("payroll_lines").delete().eq("run_id",rid);if(e1)throw e1;
       const rows=[];
       computed.bl.forEach((b,i)=>rows.push({run_id:rid,operator_id:opv,period,employee_id:b.employee_id,role:"biker",name:b.name,biker_id:b.biker_id,level:b.inp.level,inputs:b.inp,computed:b.res,base:b.res.base,net_bonus:b.res.net_bonus,total:b.res.total,sort:i}));
       rows.push({run_id:rid,operator_id:opv,period,role:"supervisor",name:sup.name,level:null,inputs:{...sup,auto:supAuto},computed:computed.supRes,base:computed.supRes.base,net_bonus:computed.supRes.net_bonus,total:computed.supRes.total,sort:99});
       const{error:e2}=await supabase.from("payroll_lines").insert(rows);if(e2)throw e2;
-      if(approve)setStatus("approved");
+      if(approve){const{error:e3}=await supabase.from("payroll_runs").update({status:"approved",updated_at:new Date().toISOString()}).eq("id",rid);if(e3)throw e3;setStatus("approved");}
       setMsg({ok:true,t:approve?"تم اعتماد المسير":"تم حفظ المسير"});
     }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
     setSaving(false);
@@ -133,13 +140,16 @@ export default function Payroll({opId}){
         <Icon n="calendar" s={16}/>
         <input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/>
       </div>
-      <span className={"pr-status "+(status==="approved"?"ap":"df")}><span className="pr-dot"/>{status==="approved"?"معتمد":"مسودة"}</span>
+      {!allOps&&<span className={"pr-status "+(locked?"ap":"df")}><span className="pr-dot"/>{locked?"معتمد":"مسودة"}</span>}
       <div style={{flex:1}}/>
-      {opsCount>0&&<button className="pr-btn ghost" onClick={syncFromOps} title="سحب الغسلات والتقييم والشكاوى من تقارير سويتر المرفوعة في العمليات"><Icon n="refresh" s={15}/> سحب من العمليات</button>}
+      {!ro&&opsCount>0&&<button className="pr-btn ghost" onClick={syncFromOps} title="سحب الغسلات والتقييم والشكاوى من تقارير سويتر المرفوعة في العمليات"><Icon n="refresh" s={15}/> سحب من العمليات</button>}
       <button className="pr-btn ghost" onClick={exportCSV}><Icon n="download" s={15}/> تصدير</button>
-      <button className="pr-btn" onClick={()=>save(false)} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":"حفظ"}</button>
-      <button className="pr-btn ok" onClick={()=>save(true)} disabled={saving}><Icon n="check" s={15}/> اعتماد</button>
+      {!ro&&<button className="pr-btn" onClick={()=>save(false)} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":"حفظ"}</button>}
+      {!ro&&owner&&<button className="pr-btn ok" onClick={()=>save(true)} disabled={saving}><Icon n="check" s={15}/> اعتماد</button>}
     </div>
+    {allOps&&<div className="pr-msg pr-lock"><Icon n="alert" s={13}/> وضع «كل المشغّلين» للعرض فقط — اختر مشغّلاً لتعديل مسيره أو اعتماده.</div>}
+    {!allOps&&locked&&<div className="pr-msg pr-lock"><Icon n="lock" s={13}/> المسير معتمد ومقفل — لا حفظ ولا تعديل ولا سحب من العمليات. التصحيح بسطر تسوية فقط.</div>}
+    {!ro&&!owner&&<div className="pr-msg pr-lock"><Icon n="alert" s={13}/> اعتماد المسير للمالك فقط — احفظ المسودة ليعتمدها.</div>}
     {msg&&<div className={"pr-msg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
     {fromOps&&<div className="pr-msg ok" style={{background:"var(--info-bg)",color:"var(--info-ink)"}}><Icon n="operations" s={13} style={{verticalAlign:"-2px"}}/> المدخلات معبّأة تلقائياً من تقارير سويتر (العمليات) — يمكنك التعديل يدوياً قبل الحفظ.</div>}
 
@@ -152,6 +162,7 @@ export default function Payroll({opId}){
     </div>
     <div className="pr-note"><Icon n="alert" s={13}/> الراتب الأساسي مدفوع مسبقاً — المبلغ المحوَّل شهرياً هو «صافي المكافأة». المزايا العينية {AR(IN_KIND_TOTAL)} ر غير نقدية.</div>
 
+    <fieldset className="pr-fs" disabled={ro}>
     {/* البايكرز */}
     <div className="pr-sec-h"><Icon n="applicants" s={16}/> البايكرز <span>({computed.bl.length})</span></div>
     {computed.bl.length===0&&<div className="pr-empty">لا يوجد بايكرز مسجّلون بأرقام سويتر. أضِف الموظفين وأرقامهم أولاً من شاشة الموظفين.</div>}
@@ -219,6 +230,8 @@ export default function Payroll({opId}){
       </div>
     </div>
 
+    </fieldset>
+
     <div className="pr-grand">
       <div><span>مسير {periodLabel(period)}</span><small>{computed.sum.count} أفراد · إجمالي الحزمة</small></div>
       <b>{AR(computed.sum.total)} <i>ريال</i></b>
@@ -236,6 +249,8 @@ const CSS=`
 .pr-month input{border:none;outline:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);background:none}
 .pr-status{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:800}
 .pr-status.df{background:var(--warn-bg);color:var(--warn-ink)}.pr-status.ap{background:var(--ok-bg);color:var(--ok-ink)}
+.pr-fs{border:0;padding:0;margin:0;min-width:0}
+.pr-lock{display:flex;align-items:center;gap:7px;background:var(--soft);color:var(--ink-2)}
 .pr-dot{width:7px;height:7px;border-radius:50%;background:currentColor}
 .pr-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:11px;border:none;background:var(--ink);color:var(--bg);font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
 .pr-btn.ghost{background:var(--glass-2);border:1px solid var(--line-2);color:var(--ink-2)}
