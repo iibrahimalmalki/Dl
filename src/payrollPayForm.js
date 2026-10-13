@@ -93,3 +93,27 @@ export function payTotals(lines = []) {
   for (const k of ["due", "paid", "deferred", "pending", "short", "fees"]) t[k] = r2(t[k]);
   return t;
 }
+
+// «تسجيل دفع للكل»: حوالة واحدة (تاريخ ومرجع واحد) لعدة أسطر — كل سطر بمكافأته كاملة عبر الدالة نفسها.
+// b: {ids, paid_at, ref, fee, note} · الرسوم تُسجَّل مرة واحدة على أول سطر (حوالة واحدة)، والبقية null = بلا تغيير/0
+export const bulkTotal = (lines = [], ids = []) => r2((lines || []).filter(l => ids.includes(l.id)).reduce((a, l) => a + capOf(l), 0));
+export function bulkError(b = {}, lines = [], { period, today = "" } = {}) {
+  const sel = (lines || []).filter(l => (b.ids || []).includes(l.id));
+  if (!sel.length) return { field: "ids", ar: "حدّد سطراً واحداً على الأقل." };
+  const start = periodStart(period || (sel[0] && sel[0].period));
+  if (!b.paid_at) return { field: "paid_at", ar: "تاريخ الحوالة إلزامي." };
+  if (b.paid_at < start || (today && b.paid_at > today)) return { field: "paid_at", ar: `تاريخ الحوالة بين ${start} و${today}.` };
+  const fee = num(b.fee);
+  if (fee != null && (isNaN(fee) || fee < 0 || fee > 50)) return { field: "fee", ar: "رسوم الحوالة بين 0 و50." };
+  if (String(b.ref || "").trim().length > 40) return { field: "ref", ar: "مرجع الحوالة أطول من 40 حرفاً." };
+  return null;
+}
+export function bulkArgs(b = {}, lines = []) {
+  const fee = num(b.fee), note = String(b.note || "").trim(), ref = String(b.ref || "").trim();
+  return (lines || []).filter(l => (b.ids || []).includes(l.id)).map((l, i) => ({
+    p_line: l.id, p_status: "paid", p_paid_at: b.paid_at, p_amount: capOf(l),
+    // المرجع الفارغ لا يمسح مرجعاً مسجّلاً (null = بلا تغيير)، والملاحظة الفارغة كذلك (تبقى ملاحظة الترحيل مثلاً)
+    p_ref: ref || null, p_fee: i === 0 ? (fee == null ? 0 : fee) : null, p_note: note || null,
+    p_base_paid: null, p_base_paid_at: null,
+  }));
+}

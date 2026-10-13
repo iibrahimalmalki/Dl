@@ -41,3 +41,16 @@ ok('الملخص: المستحق والمدفوع والمؤجَّل والمع�
 const sp=statusPatch(payFormInit(supJun,TODAY),supJun,'paid');
 ok('تغيير الحالة: سبب التأجيل القديم لا ينتقل إلى «مدفوعة»، ويعود عند الرجوع',sp.status==='paid'&&sp.note===''&&statusPatch({...payFormInit(supJun,TODAY),...sp},supJun,'deferred').note===supJun.pay_note);
 ok('ملاحظة عدّلها المالك تبقى عند تغيير الحالة',statusPatch({status:'deferred',note:'عمولات P5 — دفعة أكتوبر'},supJun,'paid').note==='عمولات P5 — دفعة أكتوبر');
+
+// ── «تسجيل دفع للكل»: حوالة يونيو الواحدة لثلاثة بايكرز ──
+import('../src/payrollPayForm.js').then(({bulkTotal,bulkError,bulkArgs})=>{
+  const jun=[{id:'a',period:'2026-06',role:'biker',name:'Ariful',net_bonus:360.75,payment_status:'paid',bank_fee:0},{id:'m',period:'2026-06',role:'biker',name:'Midul',net_bonus:800.13,payment_status:'paid'},
+    {id:'r',period:'2026-06',role:'biker',name:'Rakib',net_bonus:502,payment_status:'paid'},{id:'s',period:'2026-06',role:'supervisor',net_bonus:533.52,payment_status:'deferred'}];
+  const b={ids:['a','m','r'],paid_at:'2026-10-04',ref:'9113102600100001',fee:'0.58',note:''};
+  ok('المجموع 1,662.88 لثلاثة أسطر',bulkTotal(jun,b.ids)===1662.88);
+  ok('بلا أسطر/بلا تاريخ/تاريخ مستقبلي/رسوم 60 ⇒ أخطاء',bulkError({...b,ids:[]},jun,{today:TODAY}).field==='ids'&&bulkError({...b,paid_at:''},jun,{today:TODAY}).field==='paid_at'&&bulkError({...b,paid_at:'2026-10-20'},jun,{today:TODAY}).field==='paid_at'&&bulkError({...b,fee:'60'},jun,{today:TODAY}).field==='fee'&&bulkError(b,jun,{today:TODAY})===null);
+  const A=bulkArgs(b,jun);
+  ok('الوسائط: 3 أسطر «مدفوعة» بمكافأة كل سطر كاملة والتاريخ والمرجع نفسيهما',A.length===3&&A.every(a=>a.p_status==='paid'&&a.p_paid_at==='2026-10-04'&&a.p_ref==='9113102600100001')&&A.map(a=>a.p_amount).join()==='360.75,800.13,502');
+  ok('الرسوم مرة واحدة على أول سطر، والبقية null (بلا تغيير)، والملاحظة الفارغة null (تبقى ملاحظة الترحيل)',A[0].p_fee===0.58&&A[1].p_fee===null&&A[2].p_fee===null&&A.every(a=>a.p_note===null&&a.p_base_paid===null));
+  ok('المرجع الفارغ ⇒ null (لا يمسح مرجعاً مسجّلاً)',bulkArgs({...b,ref:' '},jun)[0].p_ref===null);
+});

@@ -4,7 +4,8 @@ import Icon from"./Icon";
 import{useToast}from"./ui";
 import{LEVELS,computeBiker,computeSupervisor,summarize,complaintPct,complaintRatio,IN_KIND_TOTAL}from"./payrollEngine";
 import{payrollRoster,tipsCheck}from"./payrollRoster";
-import{PAY_ST,capOf,payFormInit,payFormError,payArgs,payTotals,statusPatch}from"./payrollPayForm";
+import{PAY_ST,capOf,payFormInit,payFormError,payArgs,payTotals,statusPatch,bulkTotal,bulkError,bulkArgs}from"./payrollPayForm";
+import{payrollMessage,complaintCounts,MSG_LANGS}from"./payrollMessage";
 const PAY_STATUS=Object.fromEntries(PAY_ST.map(x=>[x.v,x]));
 
 const RUN_ST={approved:"معتمد",partially_paid:"مدفوع جزئياً",paid:"مدفوع"};
@@ -289,9 +290,11 @@ function PayRow({p}){if(!p)return null;const S=PAY_STATUS[p.st]||PAY_STATUS.pend
 // خارج fieldset المسير لأنه معطّل في المسير المقفل؛ القاعدة تفرض الصلاحية والقواعد، والنموذج يعرض رفضها كما هو.
 const riyadhToday=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
 function PaySection({lines,period,onSaved}){
-  const[open,setOpen]=useState(null);const T=payTotals(lines);
+  const[open,setOpen]=useState(null);const[msgOpen,setMsgOpen]=useState(null);const[bulk,setBulk]=useState(false);const T=payTotals(lines);
   return(<div className="pr-paysec">
-    <div className="pr-sec-h"><Icon n="payroll" s={16}/> الدفع <span>({lines.length})</span></div>
+    <div className="pr-sec-h"><Icon n="payroll" s={16}/> الدفع <span>({lines.length})</span>
+      <div style={{flex:1}}/>{!bulk&&<button className="pr-btn ghost" onClick={()=>{setBulk(true);setOpen(null);}}><Icon n="cash" s={13}/> تسجيل دفع للكل</button>}</div>
+    {bulk&&<BulkPay lines={lines} period={period} onClose={()=>setBulk(false)} onSaved={onSaved}/>}
     <div className="pr-chips">
       <span className="pr-chip">المستحق <b>{AR(T.due)}</b></span>
       <span className="pr-chip good">مدفوع <b>{AR(T.paid)}</b> ({T.n.paid})</span>
@@ -302,10 +305,64 @@ function PaySection({lines,period,onSaved}){
     </div>
     {lines.map(l=><div className="pr-payl" key={l.id}>
       <div className="pr-payl-h"><b>{l.name||"—"}</b><span>{l.role==="supervisor"?"المشرف":"#"+(l.biker_id||"—")} · المكافأة {AR(capOf(l))} ر</span>
-        <div style={{flex:1}}/>{open!==l.id&&<button className="pr-btn ghost" onClick={()=>setOpen(l.id)}><Icon n="edit" s={13}/> تسجيل الدفع</button>}</div>
+        <div style={{flex:1}}/>
+        {l.payment_status==="paid"&&msgOpen!==l.id&&<button className="pr-btn ghost" onClick={()=>setMsgOpen(l.id)}><Icon n="chat" s={13}/> نسخ رسالة الواتساب</button>}
+        {open!==l.id&&<button className="pr-btn ghost" onClick={()=>setOpen(l.id)}><Icon n="edit" s={13}/> تسجيل الدفع</button>}</div>
       <PayRow p={payOf(l)}/>
+      {msgOpen===l.id&&<MsgBox line={l} onClose={()=>setMsgOpen(null)}/>}
       {open===l.id&&<PayForm line={l} period={l.period||period} onClose={()=>setOpen(null)} onSaved={res=>{setOpen(null);onSaved(l,res);}}/>}
     </div>)}
+  </div>);
+}
+// حوالة واحدة لعدة أسطر (مثل يونيو 1,662.88 لثلاثة بايكرز): كل سطر بمكافأته كاملة عبر record_payroll_payment، واحداً تلو الآخر
+function BulkPay({lines,period,onClose,onSaved}){
+  const toast=useToast();const today=riyadhToday();
+  const[b,setB]=useState(()=>({ids:lines.filter(l=>l.payment_status!=="paid"&&l.role==="biker").map(l=>l.id),paid_at:today,ref:"",fee:"0",note:""}));
+  const[fe,setFe]=useState(null);const[busy,setBusy]=useState(false);const[res,setRes]=useState(null);
+  const set=p=>{setB(x=>({...x,...p}));setFe(null);};
+  const tog=id=>set({ids:b.ids.includes(id)?b.ids.filter(x=>x!==id):[...b.ids,id]});
+  const submit=async()=>{
+    const e=bulkError(b,lines,{period,today});if(e){setFe(e);return;}
+    if(!confirm(`تسجيل حوالة واحدة ${AR(bulkTotal(lines,b.ids))} ر لـ${b.ids.length} أسطر بتاريخ ${b.paid_at}؟`))return;
+    setBusy(true);const out=[];
+    for(const a of bulkArgs(b,lines)){const l=lines.find(x=>x.id===a.p_line);
+      try{const{data,error}=await supabase.rpc("record_payroll_payment",a);
+        if(error)out.push({l,err:error.message});else{out.push({l,ok:true});onSaved(l,data||{});}}catch(x){out.push({l,err:String(x&&x.message||x)});}}
+    setBusy(false);setRes(out);const bad=out.filter(x=>x.err).length;
+    if(!bad){toast.ok(`سُجّلت الحوالة ✓ على ${out.length} أسطر`);onClose();}else toast.warn(`سُجّل ${out.length-bad} ولم يُسجَّل ${bad} — راجع الأسباب`);
+  };
+  return(<div className="pr-payl pr-payf">
+    <div className="pr-fh"><b>حوالة واحدة لعدة أسطر</b> — كل سطر يُسجَّل بمكافأته كاملة، بالتاريخ والمرجع نفسيهما.</div>
+    <div className="pr-bulk">{lines.map(l=><label key={l.id} className={b.ids.includes(l.id)?"on":""}><input type="checkbox" checked={b.ids.includes(l.id)} onChange={()=>tog(l.id)}/>
+      {l.name||"—"} <span>{AR(capOf(l))} ر · {(PAY_STATUS[l.payment_status]||PAY_STATUS.pending).ar}</span></label>)}</div>
+    <div className="pr-inputs">
+      <Fld l="تاريخ الحوالة"><input className={fe&&fe.field==="paid_at"?"inv":""} type="date" value={b.paid_at} max={today} onChange={e=>set({paid_at:e.target.value})}/></Fld>
+      <Fld l="مرجع الحوالة"><input className={fe&&fe.field==="ref"?"inv":""} dir="ltr" maxLength={40} value={b.ref} onChange={e=>set({ref:e.target.value})}/></Fld>
+      <Fld l="رسوم الحوالة (مرة واحدة)"><input className={fe&&fe.field==="fee"?"inv":""} type="number" step="0.01" min="0" value={b.fee} onChange={e=>set({fee:e.target.value})}/></Fld>
+      <Fld l="ملاحظة (اختياري)"><input value={b.note} onChange={e=>set({note:e.target.value})}/></Fld>
+    </div>
+    <div className="pr-chips"><span className="pr-chip good">المجموع <b>{AR(bulkTotal(lines,b.ids))}</b> ر · {b.ids.length} أسطر</span></div>
+    {fe&&<div className="pr-msg err">{fe.ar}</div>}
+    {res&&res.some(x=>x.err)&&<div className="pr-msg err">{res.filter(x=>x.err).map(x=><div key={x.l.id}>{x.l.name}: {x.err}</div>)}</div>}
+    <div className="pr-payact"><button className="pr-btn ok" onClick={submit} disabled={busy}><Icon n="check" s={14}/> {busy?"جارٍ التسجيل…":"تسجيل الحوالة"}</button><button className="pr-btn ghost" onClick={onClose} disabled={busy}>إغلاق</button></div>
+  </div>);
+}
+// رسالة الواتساب لسطر مدفوع: اللغة (الثلاث افتراضاً؛ المشرف عربي) + «كلمة من الإدارة» + معاينة + نسخ. الشكاوى المرفوعة/المرفوضة من ops_tickets
+function MsgBox({line,onClose}){
+  const toast=useToast();const[lang,setLang]=useState("all");const[note,setNote]=useState("");const[cc,setCc]=useState(null);
+  useEffect(()=>{if(line.role!=="biker"||!line.biker_id)return;let off=false;
+    supabase.from("ops_tickets").select("sweater_id,decision").eq("period",line.period).then(({data,error})=>{if(off||error||!data)return;
+      setCc(complaintCounts(data.filter(t=>String(t.sweater_id||"").trim()===String(line.biker_id).trim())));});
+    return()=>{off=true;};},[line.id]);
+  const text=payrollMessage(line,{lang,note,complaints:cc});
+  const copy=async()=>{try{await navigator.clipboard.writeText(text);toast.ok("نُسخت الرسالة ✓ — الصقها في واتساب");}
+    catch(e){const t=document.createElement("textarea");t.value=text;document.body.appendChild(t);t.select();try{document.execCommand("copy");toast.ok("نُسخت الرسالة ✓");}catch(x){toast.warn("تعذّر النسخ — حدّد النص وانسخه يدوياً");}t.remove();}};
+  return(<div className="pr-payf">
+    {line.role==="biker"?<div className="pr-payst">{MSG_LANGS.map(o=><label key={o.v} className={lang===o.v?"on":""}><input type="radio" name={"ml_"+line.id} checked={lang===o.v} onChange={()=>setLang(o.v)}/>{o.ar}</label>)}</div>
+      :<div className="pr-fh">رسالة المشرف بالعربي فقط.</div>}
+    <div className="pr-inputs"><Fld l="كلمة من الإدارة (اختياري)"><input value={note} onChange={e=>setNote(e.target.value)} placeholder="شكراً على جهدك هذا الشهر"/></Fld></div>
+    <pre className="pr-msgpre" dir="auto">{text}</pre>
+    <div className="pr-payact"><button className="pr-btn ok" onClick={copy}><Icon n="doc" s={14}/> نسخ الرسالة</button><button className="pr-btn ghost" onClick={onClose}>إغلاق</button></div>
   </div>);
 }
 function PayForm({line,period,onClose,onSaved}){
@@ -391,6 +448,10 @@ const CSS=`
 .pr-payst{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.pr-payst label{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:20px;border:1px solid var(--line-2);font-size:12px;font-weight:700;cursor:pointer}
 .pr-payst label.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}.pr-payst input{display:none}
 .pr-payf .inv{border-color:var(--bad)!important;outline:2px solid color-mix(in srgb,var(--bad) 30%,transparent)}
+.pr-fh{font-size:12px;color:var(--ink-2);margin-bottom:8px}
+.pr-bulk{display:flex;flex-direction:column;gap:5px;margin-bottom:9px}.pr-bulk label{display:flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid var(--line-2);border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;flex-wrap:wrap}
+.pr-bulk label.on{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}.pr-bulk span{color:var(--mut);font-size:11.5px;font-weight:600}
+.pr-msgpre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;line-height:1.75;max-height:420px;overflow:auto;margin:8px 0}
 .pr-payact{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
 .pr-chip.good{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok-ink)}.pr-chip.good b{color:var(--ok-ink)}
 .pr-chip.warn{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent);color:var(--bad-ink)}

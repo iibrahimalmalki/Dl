@@ -126,5 +126,14 @@ ok('تراجع إلى «بانتظار» بلا سبب جديد ⇒ مرفوض',
 run(OWNER,`'${ARIF}','pending',null,null,null,null,'إدخال خاطئ'`);
 ok('التراجع يفرّغ الدفع ويُبقي السبب',L(ARIF)==='pending|-|-|-|0|إدخال خاطئ|-|-');
 ok('عابد: مكافأة صفر ⇒ دفع بصفر مقبول',run(OWNER,`'${ABEDL}','paid','2026-08-01',0`).changed===true&&L(ABEDL).startsWith('paid|2026-08-01|0.00|'));
+// «تسجيل دفع للكل» (src/payrollPayForm.js bulkArgs): حوالة يونيو لثلاثة بايكرز بمرجع واحد ورسوم مرة واحدة — بالدالة نفسها
+const {bulkArgs}=await import('../src/payrollPayForm.js');
+const junL=JSON.parse(ps(`select json_agg(json_build_object('id',id,'period',period,'role',role,'name',name,'net_bonus',net_bonus,'payment_status',payment_status) order by sort) from payroll_lines where run_id='${JUN}' and role='biker'`));
+const junNotes=ps(`select string_agg(coalesce(pay_note,'-'),'|' order by sort) from payroll_lines where run_id='${JUN}' and role='biker' and id<>'${MIDJ}'`);
+for(const a of bulkArgs({ids:junL.map(l=>l.id),paid_at:'2026-10-04',ref:'9113102600100001',fee:'0.58',note:''},junL)){
+  const v=[a.p_line,a.p_status,a.p_paid_at,a.p_amount,a.p_ref,a.p_fee,a.p_note,a.p_base_paid,a.p_base_paid_at].map(x=>x==null?'null':typeof x==='number'?x:`'${x}'`).join(',');
+  run(OWNER,v);}
+ok('حوالة يونيو الواحدة: الثلاثة بالمرجع نفسه، والرسوم 0.58 مرة واحدة، والمجموع 1,662.88',ps(`select count(*) filter (where payment_ref='9113102600100001')||'|'||sum(bank_fee)||'|'||sum(paid_amount) from payroll_lines where run_id='${JUN}' and role='biker'`)==='3|0.58|1662.88');
+ok('ملاحظات الترحيل باقية (الملاحظة الفارغة null = بلا تغيير)',ps(`select string_agg(coalesce(pay_note,'-'),'|' order by sort) from payroll_lines where run_id='${JUN}' and role='biker' and id<>'${MIDJ}'`)===junNotes&&junNotes.includes('مرجع الحوالة غير مسجّل'));
 ok('البايكر يرى نتيجة التسجيل عبر RLS (ميدول يونيو: مدفوع، الأساس غير مدفوع)',as(MIDUL,`select payment_status||':'||base_paid from payroll_lines where period='2026-06'`)==='paid:false');
 }finally{ps(`drop database if exists ${db} with (force)`,'postgres');}
