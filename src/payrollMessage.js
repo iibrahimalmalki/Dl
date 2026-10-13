@@ -3,9 +3,18 @@
 // الإنتاج، الإكراميات، الصافي، «كلمة من الإدارة» قابلة للتعديل، وبعد الدفع: المبلغ والتاريخ وآخر 4 أرقام من المرجع.
 // المشرف بالعربي فقط. أرقام إنجليزية دائماً. لا مقارنة بأي بايكر آخر (القاعدة 6).
 
+// (نسخة صغيرة من latinDigits في complaintsReport.js/custodyPhone.js: الاستيراد منهما ينشئ حزمة مشتركة بين حزم كسولة)
 const DIG = { "٠": 0, "١": 1, "٢": 2, "٣": 3, "٤": 4, "٥": 5, "٦": 6, "٧": 7, "٨": 8, "٩": 9, "۰": 0, "۱": 1, "۲": 2, "۳": 3, "۴": 4, "۵": 5, "۶": 6, "۷": 7, "۸": 8, "۹": 9, "০": 0, "১": 1, "২": 2, "৩": 3, "৪": 4, "৫": 5, "৬": 6, "৭": 7, "৮": 8, "৯": 9 };
 const latin = s => String(s == null ? "" : s).replace(/[٠-٩۰-۹০-৯]/g, d => String(DIG[d]));
 const n2 = v => (Math.round((Number(v) || 0) * 100) / 100).toFixed(2);
+// نسبة الشكاوى: تقريب عادي (كتقرير الشكاوى: 2.1052 ⇒ 2.11) إلا إذا عبر التقريب حدّ شريحة السلامة (payrollEngine: ≥1 · ≥1.5 · ≥2 · >3)،
+// فيُعرض على جانب الشريحة التي حُسب بها المسير فعلاً (1.996 ⇒ 1.99 لا 2.00، و3.004 ⇒ 3.01 لا 3.00)
+export const pct2 = v => {
+  const x = Number(v) || 0, r = Math.round(x * 100) / 100;
+  if ([1, 1.5, 2].some(b => x < b && r >= b)) return (Math.floor(x * 100 + 1e-9) / 100).toFixed(2);
+  if (x > 3 && r <= 3) return (Math.ceil(x * 100 - 1e-9) / 100).toFixed(2);
+  return r.toFixed(2);
+};
 const int = v => String(Math.round(Number(v) || 0));
 export const last4 = ref => { const d = latin(ref).replace(/\s/g, ""); return d ? "…" + d.slice(-4) : ""; };
 
@@ -38,15 +47,15 @@ export function lineFacts(line = {}, complaints = null) {
 
 const T = {
   ar: { hi: n => `السلام عليكم ${n} 👋`, title: (m) => `مسير ${m} — دلو ورغوة`, washes: "🧽 الغسلات الصافية", rating: "⭐ التقييم",
-    compl: (r, c, j, p) => `📋 الشكاوى: ${[r != null ? `${r} مرفوعة` : null, c != null ? `${c} محسوبة` : null, j != null ? `${j} مرفوضة` : null, p != null ? `النسبة ${n2(p)}%` : null].filter(Boolean).join(" · ")}`,
+    compl: (r, c, j, p) => `📋 الشكاوى: ${[r != null ? `${r} مرفوعة` : null, c != null ? `${c} محسوبة` : null, j != null ? `${j} مرفوضة` : null, p != null ? `النسبة ${pct2(p)}%` : null].filter(Boolean).join(" · ")}`,
     rate: (b, q, s, t) => `💵 سعر الغسلة: ${n2(b)} + جودة ${n2(q)} + سلامة ${n2(s)} = ${n2(t)}`, prod: "➕ الإنتاج", tips: "🎁 الإكراميات", ded: "➖ الاستقطاعات",
     net: "✅ الصافي", sar: "ريال", paid: (a, d, r) => `💳 تم التحويل: ${n2(a)} ريال${d ? ` بتاريخ ${d}` : ""}${r ? ` — المرجع ${r}` : ""}`, note: "💬 كلمة من الإدارة" },
   en: { hi: n => `Hello ${n} 👋`, title: (m) => `Payroll ${m} — Dalu Warghwah`, washes: "🧽 Net washes", rating: "⭐ Rating",
-    compl: (r, c, j, p) => `📋 Complaints: ${[r != null ? `${r} raised` : null, c != null ? `${c} counted` : null, j != null ? `${j} rejected` : null, p != null ? `rate ${n2(p)}%` : null].filter(Boolean).join(" · ")}`,
+    compl: (r, c, j, p) => `📋 Complaints: ${[r != null ? `${r} raised` : null, c != null ? `${c} counted` : null, j != null ? `${j} rejected` : null, p != null ? `rate ${pct2(p)}%` : null].filter(Boolean).join(" · ")}`,
     rate: (b, q, s, t) => `💵 Rate per wash: ${n2(b)} + quality ${n2(q)} + safety ${n2(s)} = ${n2(t)}`, prod: "➕ Production", tips: "🎁 Tips", ded: "➖ Deductions",
     net: "✅ Net", sar: "SAR", paid: (a, d, r) => `💳 Transferred: ${n2(a)} SAR${d ? ` on ${d}` : ""}${r ? ` — ref ${r}` : ""}`, note: "💬 A word from management" },
   bn: { hi: n => `আসসালামু আলাইকুম ${n} 👋`, title: (m) => `${m} বেতন — Dalu Warghwah`, washes: "🧽 নিট ওয়াশ", rating: "⭐ রেটিং",
-    compl: (r, c, j, p) => `📋 অভিযোগ: ${[r != null ? `${r} এসেছে` : null, c != null ? `${c} গণনা হয়েছে` : null, j != null ? `${j} বাতিল` : null, p != null ? `হার ${n2(p)}%` : null].filter(Boolean).join(" · ")}`,
+    compl: (r, c, j, p) => `📋 অভিযোগ: ${[r != null ? `${r} এসেছে` : null, c != null ? `${c} গণনা হয়েছে` : null, j != null ? `${j} বাতিল` : null, p != null ? `হার ${pct2(p)}%` : null].filter(Boolean).join(" · ")}`,
     rate: (b, q, s, t) => `💵 প্রতি ওয়াশ: ${n2(b)} + মান ${n2(q)} + নিরাপত্তা ${n2(s)} = ${n2(t)}`, prod: "➕ উৎপাদন বোনাস", tips: "🎁 টিপস", ded: "➖ কর্তন",
     net: "✅ নিট", sar: "রিয়াল", paid: (a, d, r) => `💳 পাঠানো হয়েছে: ${n2(a)} রিয়াল${d ? ` (${d})` : ""}${r ? ` — রেফারেন্স ${r}` : ""}`, note: "💬 ম্যানেজমেন্টের কথা" },
 };
@@ -73,7 +82,7 @@ function supervisorText(line, note) {
   L.push(`السلام عليكم ${String(line.name || "").trim()} 👋`, `مسير ${monthName(line.period, "ar")} — دلو ورغوة (المشرف)`, "");
   if (c.team_orders != null) L.push(`🧽 طلبات الفريق: ${int(c.team_orders)}`);
   if (c.team_rating != null) L.push(`⭐ متوسط تقييم الفريق: ${n2(c.team_rating)}`);
-  if (c.team_complaint_pct != null) L.push(`📋 نسبة شكاوى الفريق: ${n2(c.team_complaint_pct)}%`);
+  if (c.team_complaint_pct != null) L.push(`📋 نسبة شكاوى الفريق: ${pct2(c.team_complaint_pct)}%`);
   if (c.rate_per_order != null) L.push(`💵 المعدل لكل طلب: ${n2(c.rate_per_order)}`);
   if (Number(c.deductions)) L.push(`➖ الاستقطاعات: −${n2(c.deductions)}`);
   L.push(`✅ العمولة: ${n2(line.net_bonus)} ريال`);

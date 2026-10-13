@@ -1,5 +1,5 @@
 // رسالة الواتساب لسطر المسير (src/payrollMessage.js): عربي/English/বাংলা، أرقام إنجليزية، المبلغ وآخر 4 أرقام من المرجع، المشرف عربي، لا مقارنة
-import {payrollMessage,lineFacts,complaintCounts,monthName,last4} from '../src/payrollMessage.js';
+import {payrollMessage,lineFacts,complaintCounts,monthName,last4,pct2} from '../src/payrollMessage.js';
 const ok=(l,c)=>{console.log((c?'✓':'✗ FAIL')+' '+l);if(!c)process.exitCode=1;};
 // ميدول يوليو كما في الإنتاج بعد الترحيل
 const mid={role:'biker',name:'Midul Hassan',biker_id:'1648',period:'2026-07',net_bonus:565.4,inputs:{complaint_approved:4,tips:42.9},
@@ -30,3 +30,4 @@ const sm=payrollMessage(sup,{lang:'en'});
 ok('المشرف: عربي دائماً، 439 طلباً، 4.51، 1.14%، 1.42، العمولة 623.38 مؤجَّلة',sm.includes('طلبات الفريق: 439')&&sm.includes('4.51')&&sm.includes('1.14%')&&sm.includes('1.42')&&sm.includes('623.38 ريال')&&sm.includes('مؤجَّلة')&&!sm.includes('Hello'));
 ok('أسماء الأشهر وآخر 4 أرقام',monthName('2026-06','bn')==='জুন 2026'&&monthName('2026-12','en')==='December 2026'&&last4('9113 1026 0010 3372')==='…3372'&&last4('')==='');
 ok('lineFacts: السعر الأساسي = السعر − الجودة − السلامة',lineFacts(mid).baseRate===2&&lineFacts(rak).baseRate===2);
+ok('النسبة: تقريب عادي، ولا عبور لحدّ الشريحة (1.996 ⇒ 1.99، 2.996 ⇒ 3.00، 3.004 ⇒ 3.01، 0.995 ⇒ 0.99)',pct2(2.1052631578947367)==='2.11'&&pct2(1.996)==='1.99'&&pct2(2.996)==='3.00'&&pct2(3.004)==='3.01'&&pct2(0.995)==='0.99'&&pct2(1.4999)==='1.49'&&pct2(0)==='0.00');

@@ -95,25 +95,27 @@ export function payTotals(lines = []) {
 }
 
 // «تسجيل دفع للكل»: حوالة واحدة (تاريخ ومرجع واحد) لعدة أسطر — كل سطر بمكافأته كاملة عبر الدالة نفسها.
-// b: {ids, paid_at, ref, fee, note} · الرسوم تُسجَّل مرة واحدة على أول سطر (حوالة واحدة)، والبقية null = بلا تغيير/0
-export const bulkTotal = (lines = [], ids = []) => r2((lines || []).filter(l => ids.includes(l.id)).reduce((a, l) => a + capOf(l), 0));
-export function bulkError(b = {}, lines = [], { period, today = "" } = {}) {
-  const sel = (lines || []).filter(l => (b.ids || []).includes(l.id));
-  if (!sel.length) return { field: "ids", ar: "حدّد سطراً واحداً على الأقل." };
-  const start = periodStart(period || (sel[0] && sel[0].period));
-  if (!b.paid_at) return { field: "paid_at", ar: "تاريخ الحوالة إلزامي." };
-  if (b.paid_at < start || (today && b.paid_at > today)) return { field: "paid_at", ar: `تاريخ الحوالة بين ${start} و${today}.` };
-  const fee = num(b.fee);
-  if (fee != null && (isNaN(fee) || fee < 0 || fee > 50)) return { field: "fee", ar: "رسوم الحوالة بين 0 و50." };
-  if (String(b.ref || "").trim().length > 40) return { field: "ref", ar: "مرجع الحوالة أطول من 40 حرفاً." };
+// الأسطر المؤهَّلة: غير المدفوعة فقط (بانتظار/مؤجَّلة) — المدفوع لا يُعاد تسجيله جماعياً (لا يُكتب مبلغ كامل فوق دفع جزئي ولا تاريخ فوق تاريخ).
+// b: {ids, paid_at, ref, fee, note} · الرسوم مرة واحدة (feeOn = معرّف السطر الذي يحملها؛ تختاره الواجهة: أول سطر لم تُسجَّل عليه بعد)
+export const bulkEligible = (lines = []) => (lines || []).filter(l => (l.payment_status || "pending") !== "paid");
+const pick = (lines, ids) => bulkEligible(lines).filter(l => (ids || []).includes(l.id));
+export const bulkTotal = (lines = [], ids = []) => r2(pick(lines, ids).reduce((a, l) => a + capOf(l), 0));
+// نفس قواعد النموذج الفردي (payFormError) لكل سطر بمكافأته كاملة — لا قواعد مكرَّرة
+export function bulkError(b = {}, lines = [], { today = "" } = {}) {
+  const sel = pick(lines, b.ids);
+  if (!sel.length) return { field: "ids", ar: "حدّد سطراً واحداً على الأقل (غير مدفوع)." };
+  for (const l of sel) {
+    const e = payFormError({ status: "paid", paid_at: b.paid_at, amount: String(capOf(l)), ref: b.ref, fee: b.fee, note: b.note }, l, { period: l.period, today });
+    if (e) return { ...e, ar: (sel.length > 1 ? `${l.name || "—"}: ` : "") + e.ar };
+  }
   return null;
 }
-export function bulkArgs(b = {}, lines = []) {
+export function bulkArgs(b = {}, lines = [], feeOn = null) {
   const fee = num(b.fee), note = String(b.note || "").trim(), ref = String(b.ref || "").trim();
-  return (lines || []).filter(l => (b.ids || []).includes(l.id)).map((l, i) => ({
-    p_line: l.id, p_status: "paid", p_paid_at: b.paid_at, p_amount: capOf(l),
-    // المرجع الفارغ لا يمسح مرجعاً مسجّلاً (null = بلا تغيير)، والملاحظة الفارغة كذلك (تبقى ملاحظة الترحيل مثلاً)
-    p_ref: ref || null, p_fee: i === 0 ? (fee == null ? 0 : fee) : null, p_note: note || null,
-    p_base_paid: null, p_base_paid_at: null,
+  return pick(lines, b.ids).map(l => ({
+    p_line: l.id, p_status: "paid", p_paid_at: b.paid_at, p_amount: capOf(l), p_ref: ref,
+    p_fee: l.id === feeOn ? (fee == null ? 0 : fee) : 0,
+    // سبب التأجيل/التراجع القديم لا ينتقل إلى «مدفوعة» (كـstatusPatch): الملاحظة الجماعية أو مسح
+    p_note: note, p_base_paid: null, p_base_paid_at: null,
   }));
 }
