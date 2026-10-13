@@ -10,8 +10,8 @@
 --     سلمان: deferred بمبلغ 623.38. عابد: لا مكافأة (بدون غسلات)، والأساس 1,000 صُرف كاملاً باتفاق ⇒ base_paid = true.
 --     ملاحظة المسير بنص المالك.
 --   يونيو (ee06d014…): final ⇒ approved في payroll_payments.sql. مكافآت البايكرز الثلاثة = 360.75 + 800.13 + 502.00 = 1,662.88
---     = المدفوع بتاريخ 2026-10-04 ⇒ paid بلا مرجع حوالة (غير متوفر) مع ملاحظة. سطر المشرف (533.52) ليس ضمن 1,662.88 ⇒ يبقى pending.
---   حالة المسير تُشتق تلقائياً: يوليو ⇒ partially_paid (سلمان مؤجَّل) · يونيو ⇒ partially_paid (المشرف pending).
+--     = المدفوع بتاريخ 2026-10-04 ⇒ paid بلا مرجع حوالة (غير متوفر) مع ملاحظة. سطر المشرف (533.52) ليس ضمن 1,662.88 ⇒ deferred مع عمولات المشرف (P5).
+--   حالة المسير تُشتق تلقائياً: يوليو ⇒ partially_paid (سلمان مؤجَّل) · يونيو ⇒ partially_paid (المشرف مؤجَّل).
 --   كل بند معاملة مستقلة (كتلة do): يُحدَّث العدد المتوقع بالضبط، أو 0 إذا كانت الحالة المستهدفة قائمة فعلاً (إعادة تشغيل) — وإلا تراجع.
 --   التطبيق عبر الأداة (الحارس يسمح لغير authenticated).
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -78,7 +78,7 @@ do $$ declare n int; begin
   then raise exception 'يوليو/الملاحظة: تأثّر % صفوف بدل 1 — تراجع', n; end if;
 end $$;
 
--- ═══ 6) يونيو — البايكرز الثلاثة مدفوعون 2026-10-04 (المجموع 1,662.88) بلا مرجع (3 صفوف) ═══
+-- ═══ 6) يونيو — البايكرز الثلاثة مدفوعون 2026-10-04 (المجموع 1,662.88) بلا مرجع (3 صفوف) + المشرف مؤجَّل (1 صف) ═══
 do $$ declare n int; s numeric; begin
   select sum(net_bonus) into s from public.payroll_lines where run_id = 'ee06d014-ed5a-4e82-8513-fc041188a116' and role = 'biker';
   if s is distinct from 1662.88 then raise exception 'يونيو: مجموع مكافآت البايكرز % ≠ 1,662.88 — تراجع', s; end if;
@@ -88,7 +88,13 @@ do $$ declare n int; s numeric; begin
   get diagnostics n = row_count;
   if n <> 3 and not (n = 0 and (select count(*) from public.payroll_lines where run_id = 'ee06d014-ed5a-4e82-8513-fc041188a116' and role = 'biker' and paid_at = '2026-10-04') = 3)
   then raise exception 'يونيو/الدفع: تأثّر % صفوف بدل 3 — تراجع', n; end if;
-  update public.payroll_runs set notes = coalesce(notes, '') || ' | الدفع: مكافآت البايكرز 1,662.88 بتاريخ 2026-10-04 (بلا مراجع حوالات مسجّلة). المشرف 533.52 لم يُسجَّل دفعه.', updated_at = now()
+  -- المشرف 533.52: مؤجَّل مع عمولات المشرف (P5) — قرار المالك 2026-10-13
+  update public.payroll_lines set payment_status = 'deferred', pay_note = 'مؤجَّل مع عمولات المشرف (P5)'
+   where run_id = 'ee06d014-ed5a-4e82-8513-fc041188a116' and role = 'supervisor' and net_bonus = 533.52 and payment_status = 'pending';
+  get diagnostics n = row_count;
+  if n <> 1 and not (n = 0 and (select count(*) from public.payroll_lines where run_id = 'ee06d014-ed5a-4e82-8513-fc041188a116' and role = 'supervisor' and payment_status = 'deferred') = 1)
+  then raise exception 'يونيو/المشرف: تأثّر % صفوف بدل 1 — تراجع', n; end if;
+  update public.payroll_runs set notes = coalesce(notes, '') || ' | الدفع: مكافآت البايكرز 1,662.88 بتاريخ 2026-10-04 (بلا مراجع حوالات مسجّلة). المشرف 533.52 مؤجَّل مع عمولات المشرف (P5).', updated_at = now()
    where id = 'ee06d014-ed5a-4e82-8513-fc041188a116' and coalesce(notes, '') not like '%1,662.88%';
 end $$;
 
@@ -96,7 +102,7 @@ end $$;
 -- select r.period, r.status, l.name, l.net_bonus, l.payment_status, l.paid_at, l.paid_amount, l.payment_ref, l.bank_fee, l.base_paid
 --   from payroll_lines l join payroll_runs r on r.id = l.run_id where r.period in ('2026-06','2026-07') order by r.period, l.sort;
 --   -- يوليو: 180.00/565.40/817.75 paid 2026-10-13 + المراجع + 0.58 · عابد paid 0 base_paid · سلمان 623.38 deferred · المسير partially_paid
---   -- يونيو: 360.75/800.13/502.00 paid 2026-10-04 · المشرف pending · المسير partially_paid
+--   -- يونيو: 360.75/800.13/502.00 paid 2026-10-04 · المشرف 533.52 deferred · المسير partially_paid
 -- select sum(paid_amount), sum(bank_fee) from payroll_lines l join payroll_runs r on r.id=l.run_id where r.period='2026-07';  -- 1563.15 / 1.74
 
 -- ═══ التراجع (SQL Editor) — يعيد الحالة قبل الملف ═══

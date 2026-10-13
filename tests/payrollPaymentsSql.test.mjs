@@ -68,7 +68,7 @@ ok('يوليو: الحسابات المخزّنة من المحرك (ميدول 
 ok('يوليو: المسير partially_paid (سلمان مؤجَّل)',ps(`select status from payroll_runs where id='${JUL}'`)==='partially_paid');
 ok('يوليو: الملاحظة بنص المالك',ps(`select notes from payroll_runs where id='${JUL}'`).includes('إنتاج راكب (25)'));
 ok('يوليو: المدفوع 1,563.15 والرسوم 1.74',ps(`select sum(paid_amount)||'|'||sum(bank_fee) from payroll_lines where run_id='${JUL}'`)==='1563.15|1.74');
-ok('يونيو: البايكرز مدفوعون 2026-10-04 (1,662.88) والمشرف pending',ps(`select string_agg(payment_status||':'||coalesce(paid_at::text,'-'),',' order by sort) from payroll_lines where run_id='${JUN}'`)==='paid:2026-10-04,paid:2026-10-04,paid:2026-10-04,pending:-'
+ok('يونيو: البايكرز مدفوعون 2026-10-04 (1,662.88) والمشرف مؤجَّل (P5)',ps(`select string_agg(payment_status||':'||coalesce(paid_at::text,'-'),',' order by sort) from payroll_lines where run_id='${JUN}'`)==='paid:2026-10-04,paid:2026-10-04,paid:2026-10-04,deferred:-'
   &&ps(`select sum(paid_amount) from payroll_lines where run_id='${JUN}'`)==='1662.88');
 ok('يونيو: partially_paid والملاحظة',ps(`select status from payroll_runs where id='${JUN}'`)==='partially_paid'&&ps(`select notes from payroll_runs where id='${JUN}'`).includes('1,662.88'));
 ps(M);
