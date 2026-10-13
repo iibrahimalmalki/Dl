@@ -113,7 +113,7 @@ export default function Payroll({opId,owner}){
       computed.bl.forEach((b,i)=>rows.push({run_id:rid,operator_id:opv,period,employee_id:b.employee_id,role:"biker",name:b.name,biker_id:b.biker_id,level:b.inp.level,inputs:b.inp,computed:b.res,base:b.res.base,net_bonus:b.res.net_bonus,total:b.res.total,sort:i}));
       rows.push({run_id:rid,operator_id:opv,period,role:"supervisor",name:sup.name,level:null,inputs:{...sup,auto:supAuto},computed:computed.supRes,base:computed.supRes.base,net_bonus:computed.supRes.net_bonus,total:computed.supRes.total,sort:99});
       const{error:e2}=await supabase.from("payroll_lines").insert(rows);if(e2)throw e2;
-      if(approve){const{error:e3}=await supabase.from("payroll_runs").update({status:"approved",updated_at:new Date().toISOString()}).eq("id",rid);if(e3)throw e3;setStatus("approved");}
+      if(approve){const{data:u3,error:e3}=await supabase.from("payroll_runs").update({status:"approved",updated_at:new Date().toISOString()}).eq("id",rid).select("id");if(e3)throw e3;if(!u3||!u3.length)throw new Error("لم يُعتمد المسير — تحقّق من الصلاحية");setStatus("approved");}
       setMsg({ok:true,t:approve?"تم اعتماد المسير":"تم حفظ المسير"});
     }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
     setSaving(false);
@@ -143,15 +143,15 @@ export default function Payroll({opId,owner}){
       {!allOps&&<span className={"pr-status "+(locked?"ap":"df")}><span className="pr-dot"/>{locked?"معتمد":"مسودة"}</span>}
       <div style={{flex:1}}/>
       {!ro&&opsCount>0&&<button className="pr-btn ghost" onClick={syncFromOps} title="سحب الغسلات والتقييم والشكاوى من تقارير سويتر المرفوعة في العمليات"><Icon n="refresh" s={15}/> سحب من العمليات</button>}
-      <button className="pr-btn ghost" onClick={exportCSV}><Icon n="download" s={15}/> تصدير</button>
+      {!allOps&&<button className="pr-btn ghost" onClick={exportCSV}><Icon n="download" s={15}/> تصدير</button>}
       {!ro&&<button className="pr-btn" onClick={()=>save(false)} disabled={saving}><Icon n="save" s={15}/> {saving?"جارٍ الحفظ…":"حفظ"}</button>}
       {!ro&&owner&&<button className="pr-btn ok" onClick={()=>save(true)} disabled={saving}><Icon n="check" s={15}/> اعتماد</button>}
     </div>
-    {allOps&&<div className="pr-msg pr-lock"><Icon n="alert" s={13}/> وضع «كل المشغّلين» للعرض فقط — اختر مشغّلاً لتعديل مسيره أو اعتماده.</div>}
+    {allOps&&<div className="pr-msg pr-lock"><Icon n="alert" s={13}/> وضع «كل المشغّلين» معاينة محسوبة من العمليات لا المسير المحفوظ — اختر مشغّلاً لعرض مسيره أو تعديله أو اعتماده.</div>}
     {!allOps&&locked&&<div className="pr-msg pr-lock"><Icon n="lock" s={13}/> المسير معتمد ومقفل — لا حفظ ولا تعديل ولا سحب من العمليات. التصحيح بسطر تسوية فقط.</div>}
     {!ro&&!owner&&<div className="pr-msg pr-lock"><Icon n="alert" s={13}/> اعتماد المسير للمالك فقط — احفظ المسودة ليعتمدها.</div>}
     {msg&&<div className={"pr-msg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
-    {fromOps&&<div className="pr-msg ok" style={{background:"var(--info-bg)",color:"var(--info-ink)"}}><Icon n="operations" s={13} style={{verticalAlign:"-2px"}}/> المدخلات معبّأة تلقائياً من تقارير سويتر (العمليات) — يمكنك التعديل يدوياً قبل الحفظ.</div>}
+    {fromOps&&!ro&&<div className="pr-msg ok" style={{background:"var(--info-bg)",color:"var(--info-ink)"}}><Icon n="operations" s={13} style={{verticalAlign:"-2px"}}/> المدخلات معبّأة تلقائياً من تقارير سويتر (العمليات) — يمكنك التعديل يدوياً قبل الحفظ.</div>}
 
     {/* ملخص المسير */}
     <div className="pr-kpis">

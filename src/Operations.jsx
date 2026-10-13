@@ -143,9 +143,11 @@ const CSS=`
 .op-desc{font-size:12px;color:var(--ink-2);line-height:1.5}
 .op-dec{display:flex;gap:6px;flex:none}
 .op-d{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;color:var(--mut)}
+.op-dec .op-d{cursor:default}
 .op-d.ap.on{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok-ink)}
 .op-d.rj.on{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent);color:var(--bad-ink)}
 .op-empty{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px dashed var(--line);border-radius:16px;padding:40px 24px;text-align:center}
 .op-empty-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--p-100),var(--p-100));color:var(--b)}
 .op-empty h3{font-size:16px;margin:0 0 8px}.op-empty p{color:var(--mut);font-size:12.5px;max-width:440px;margin:0 auto;line-height:1.7}
-@media(max-width:720px){`;
+@media(max-width:720px){.op-kpis{grid-template-columns:1fr 1fr}}
+`;
