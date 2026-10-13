@@ -12,20 +12,21 @@ ok('السقف = المكافأة الموجبة بمنزلتين، والسال
 const i1=payFormInit(supJun,TODAY),i2=payFormInit(midJul,TODAY),i3=payFormInit(abed,TODAY);
 ok('غير المدفوع: المبلغ = المكافأة، التاريخ = اليوم، الرسوم 0، والملاحظة المسجّلة',i1.status==='deferred'&&i1.amount==='533.52'&&i1.paid_at===TODAY&&i1.fee==='0'&&i1.note.includes('P5'));
 ok('المدفوع: قيمه المسجّلة (التاريخ والمبلغ والمرجع والرسوم)',i2.paid_at==='2026-10-13'&&i2.amount==='565.4'&&i2.ref==='9113102600103372'&&i2.fee==='0.58'&&i2.base==='');
-ok('الأساس المدفوع ⇒ «yes»',i3.base==='yes');
+ok('الأساس المدفوع ⇒ «yes»، ومدفوع بلا تاريخ مسجّل (عابد) ⇒ التاريخ فارغ لا «اليوم»',i3.base==='yes'&&i3.paid_at==='');
 
 const f=(o={})=>({...payFormInit(supJun,TODAY),status:'paid',paid_at:'2026-10-05',note:'',...o});
 ok('مدفوع كامل صحيح ⇒ لا خطأ',payFormError(f(),supJun,opt)===null);
 ok('تاريخ فارغ/مستقبلي/قبل الشهر ⇒ خطأ في حقل التاريخ',payFormError(f({paid_at:''}),supJun,opt).field==='paid_at'&&payFormError(f({paid_at:'2026-10-15'}),supJun,opt).field==='paid_at'&&payFormError(f({paid_at:'2026-05-31'}),supJun,opt).field==='paid_at');
 ok('أكثر من المكافأة ⇒ خطأ المبلغ',payFormError(f({amount:'533.53'}),supJun,opt).field==='amount');
 ok('صفر والمكافأة موجبة ⇒ خطأ المبلغ',/مؤجَّلة/.test(payFormError(f({amount:'0'}),supJun,opt).ar));
-ok('صفر والمكافأة صفر (عابد) ⇒ مقبول',payFormError({...payFormInit(abed,TODAY),paid_at:'2026-08-01'},abed,{period:'2026-07',today:TODAY})===null);
+ok('صفر والمكافأة صفر (عابد) ⇒ مقبول بتاريخ يُدخله المالك، وبلا تاريخ ⇒ «إلزامي» لا «اليوم»',payFormError({...payFormInit(abed,TODAY),paid_at:'2026-08-01'},abed,{period:'2026-07',today:TODAY})===null&&payFormError(payFormInit(abed,TODAY),abed,{period:'2026-07',today:TODAY}).field==='paid_at');
 ok('دفع جزئي بلا ملاحظة ⇒ خطأ الملاحظة، ومعها مقبول',payFormError(f({amount:'500'}),supJun,opt).field==='note'&&payFormError(f({amount:'500',note:'دفعة أولى'}),supJun,opt)===null);
-ok('أرقام عربية في المبلغ تُقبل',payFormError(f({amount:'٥٣٣.٥٢'}),supJun,opt)===null);
+ok('أرقام عربية والفاصلة «٫» وفواصل الآلاف تُقبل، والنص ⇒ «ليس رقماً»',payFormError(f({amount:'٥٣٣٫٥٢'}),supJun,opt)===null&&payArgs(f({amount:'1,234.50'}),supJun).p_amount===1234.5&&/ليس رقماً/.test(payFormError(f({amount:'abc'}),supJun,opt).ar));
 ok('رسوم 60 ⇒ خطأ الرسوم',payFormError(f({fee:'60'}),supJun,opt).field==='fee');
 ok('مؤجَّل بلا سبب ⇒ خطأ',payFormError({status:'deferred',note:' '},supJun,opt).field==='note');
-ok('تراجع إلى «بانتظار» بالسبب القديم نفسه ⇒ يطلب سبباً جديداً',payFormError({status:'pending',note:supJun.pay_note},supJun,opt).field==='note'&&payFormError({status:'pending',note:'إدخال خاطئ'},supJun,opt)===null);
+ok('تراجع إلى «بانتظار»: بلا سبب ⇒ خطأ، وبأي سبب ⇒ مقبول (كالقاعدة)',payFormError({status:'pending',note:' '},supJun,opt).field==='note'&&payFormError({status:'pending',note:supJun.pay_note},supJun,opt)===null);
 ok('تاريخ أساس بلا «مدفوع» ⇒ خطأ',payFormError(f({base:'no',base_at:'2026-07-01'}),supJun,opt).field==='base_at');
+ok('مسح تاريخ أساس مسجّل مع «مدفوع» ⇒ يُرشد إلى «غير مدفوع» أولاً (الدالة تُبقيه)',/غير مدفوع/.test(payFormError(f({base:'yes',base_at:''}),{...supJun,base_paid:true,base_paid_at:'2026-07-12'},opt).ar));
 
 const a=payArgs(f({ref:' 911 ',fee:'0.58',note:' عمولات '}),supJun);
 ok('الوسائط: مدفوع بكل القيم صريحة والمرجع والملاحظة مقصوصان',a.p_line==='e42e'&&a.p_status==='paid'&&a.p_paid_at==='2026-10-05'&&a.p_amount===533.52&&a.p_ref==='911'&&a.p_fee===0.58&&a.p_note==='عمولات'&&a.p_base_paid===null&&a.p_base_paid_at===null);
@@ -34,8 +35,9 @@ ok('مؤجَّل: لا تاريخ ولا مبلغ ولا مرجع ولا رسو�
 ok('الأساس «غير مدفوع» ⇒ false بلا تاريخ، والفارغ ⇒ null (بلا تغيير)',payArgs({status:'pending',base:'no',base_at:'x'},supJun).p_base_paid===false&&payArgs({status:'pending',base:'no',base_at:'x'},supJun).p_base_paid_at===null&&payArgs({status:'pending',base:''},supJun).p_base_paid===null);
 ok('مرجع فارغ يُرسل "" (يمسح) لا null',payArgs(f({ref:''}),supJun).p_ref==='');
 
-const T=payTotals([supJun,midJul,abed,{net_bonus:735,payment_status:'pending'}]);
-ok('الملخص: المستحق والمدفوع والمؤجَّل والمعلّق والرسوم والأعداد',T.due===1833.92&&T.paid===565.4&&T.deferred===533.52&&T.pending===735&&T.fees===0.58&&T.n.paid===2&&T.n.deferred===1&&T.n.pending===1);
+const T=payTotals([supJun,midJul,abed,{net_bonus:735,payment_status:'pending'},{net_bonus:400,payment_status:'paid',paid_amount:350}]);
+ok('الملخص: المستحق والمدفوع والمؤجَّل والمعلّق والرسوم والأعداد، والمتبقي من الدفع الجزئي ظاهر',T.due===2233.92&&T.paid===915.4&&T.deferred===533.52&&T.pending===735&&T.short===50&&T.n.short===1&&T.fees===0.58&&T.n.paid===3&&T.n.deferred===1&&T.n.pending===1
+  &&Math.abs(T.paid+T.short+T.deferred+T.pending-T.due)<0.001);
 const sp=statusPatch(payFormInit(supJun,TODAY),supJun,'paid');
 ok('تغيير الحالة: سبب التأجيل القديم لا ينتقل إلى «مدفوعة»، ويعود عند الرجوع',sp.status==='paid'&&sp.note===''&&statusPatch({...payFormInit(supJun,TODAY),...sp},supJun,'deferred').note===supJun.pay_note);
 ok('ملاحظة عدّلها المالك تبقى عند تغيير الحالة',statusPatch({status:'deferred',note:'عمولات P5 — دفعة أكتوبر'},supJun,'paid').note==='عمولات P5 — دفعة أكتوبر');

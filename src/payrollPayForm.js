@@ -16,7 +16,8 @@ export function payFormInit(line = {}, today = "") {
   const paid = line.payment_status === "paid";
   return {
     status: line.payment_status || "pending",
-    paid_at: paid && line.paid_at ? String(line.paid_at).slice(0, 10) : today,
+    // مدفوع بلا تاريخ مسجّل (عابد: ترحيل يوليو) ⇒ فارغ لا «اليوم» — لا يُسجَّل تاريخ لم يُدخله أحد
+    paid_at: paid ? (line.paid_at ? String(line.paid_at).slice(0, 10) : "") : today,
     amount: paid && line.paid_amount != null ? String(line.paid_amount) : String(capOf(line)),
     ref: line.payment_ref || "",
     fee: paid && Number(line.bank_fee) ? String(line.bank_fee) : "0",
@@ -33,7 +34,8 @@ export function statusPatch(f = {}, line = {}, status) {
   return { status, note: status === (line.payment_status || "pending") ? line.pay_note || "" : "" };
 }
 
-const num = s => { const t = String(s == null ? "" : s).trim().replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(",", "."); return t === "" ? null : Number(t); };
+// أرقام عربية، والفاصلة العشرية العربية «٫»، وفواصل الآلاف («٬» و«,») تُحذف
+const num = s => { const t = String(s == null ? "" : s).trim().replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/٫/g, ".").replace(/[٬,\s]/g, ""); return t === "" ? null : Number(t); };
 
 // أول خطأ ⇒ {field, ar} أو null — نفس قواعد record_payroll_payment
 export function payFormError(f = {}, line = {}, { period = line.period, today = "" } = {}) {
@@ -42,7 +44,8 @@ export function payFormError(f = {}, line = {}, { period = line.period, today = 
     if (!f.paid_at) return { field: "paid_at", ar: "تاريخ الدفع إلزامي." };
     if (f.paid_at < start || (today && f.paid_at > today)) return { field: "paid_at", ar: `تاريخ الدفع بين ${start} و${today}.` };
     const a = num(f.amount);
-    if (a == null || isNaN(a)) return { field: "amount", ar: "المبلغ المدفوع إلزامي." };
+    if (a == null) return { field: "amount", ar: "المبلغ المدفوع إلزامي." };
+    if (isNaN(a)) return { field: "amount", ar: "المبلغ ليس رقماً صحيحاً." };
     if (r2(a) < 0 || r2(a) > cap) return { field: "amount", ar: `المبلغ بين 0 و${cap.toFixed(2)} (المكافأة الصافية).` };
     if (r2(a) === 0 && cap > 0) return { field: "amount", ar: "المبلغ صفر والمكافأة موجبة — اختر «مؤجَّلة» أو «بانتظار الدفع»." };
     if (r2(a) < cap && !note) return { field: "note", ar: `دفع جزئي (${r2(a).toFixed(2)} من ${cap.toFixed(2)}) — اكتب السبب في الملاحظة.` };
@@ -52,11 +55,13 @@ export function payFormError(f = {}, line = {}, { period = line.period, today = 
   } else if (f.status === "deferred") {
     if (!note) return { field: "note", ar: "سبب التأجيل إلزامي في الملاحظة." };
   } else if (f.status === "pending") {
-    if (line.payment_status && line.payment_status !== "pending" && (!note || note === String(line.pay_note || "").trim()))
-      return { field: "note", ar: "التراجع إلى «بانتظار الدفع» يحتاج سبباً جديداً في الملاحظة." };
+    if (line.payment_status && line.payment_status !== "pending" && !note)
+      return { field: "note", ar: "التراجع إلى «بانتظار الدفع» يحتاج سبباً في الملاحظة." };
   } else return { field: "status", ar: "اختر حالة الدفع." };
   if (f.base_at && f.base !== "yes") return { field: "base_at", ar: "تاريخ صرف الأساس مع «الأساس مدفوع» فقط." };
   if (f.base === "yes" && f.base_at && (f.base_at < start || (today && f.base_at > today))) return { field: "base_at", ar: `تاريخ صرف الأساس بين ${start} و${today}.` };
+  // الدالة تُبقي التاريخ المسجّل إن أُرسل فارغاً مع «مدفوع»؛ المسح = «غير مدفوع» ثم «مدفوع» بلا تاريخ
+  if (f.base === "yes" && !f.base_at && line.base_paid_at) return { field: "base_at", ar: "لمسح تاريخ الأساس: سجّل «غير مدفوع» أولاً ثم «مدفوع» بلا تاريخ." };
   return null;
 }
 
@@ -75,15 +80,16 @@ export function payArgs(f = {}, line = {}) {
   };
 }
 
-// ملخص المسير المعتمد: المستحق والمدفوع والمؤجَّل والمتبقي والرسوم وعدد الأسطر لكل حالة
+// ملخص المسير المعتمد: المستحق والمدفوع والمؤجَّل والمعلّق والرسوم وعدد الأسطر لكل حالة،
+// وshort = المتبقي من الدفعات الجزئية (سطر «مدفوع» بأقل من مكافأته — حالة المسير تعدّه مدفوعاً)
 export function payTotals(lines = []) {
-  const t = { due: 0, paid: 0, deferred: 0, pending: 0, fees: 0, n: { paid: 0, deferred: 0, pending: 0 } };
+  const t = { due: 0, paid: 0, deferred: 0, pending: 0, short: 0, fees: 0, n: { paid: 0, deferred: 0, pending: 0, short: 0 } };
   (lines || []).forEach(l => {
     const cap = capOf(l), st = l.payment_status || "pending";
     t.due += cap; t.n[st] = (t.n[st] || 0) + 1;
-    if (st === "paid") { t.paid += Number(l.paid_amount) || 0; t.fees += Number(l.bank_fee) || 0; }
+    if (st === "paid") { const a = Number(l.paid_amount) || 0; t.paid += a; t.fees += Number(l.bank_fee) || 0; if (a < cap) { t.short += cap - a; t.n.short++; } }
     else if (st === "deferred") t.deferred += cap; else t.pending += cap;
   });
-  for (const k of ["due", "paid", "deferred", "pending", "fees"]) t[k] = r2(t[k]);
+  for (const k of ["due", "paid", "deferred", "pending", "short", "fees"]) t[k] = r2(t[k]);
   return t;
 }

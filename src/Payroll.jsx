@@ -5,8 +5,8 @@ import{useToast}from"./ui";
 import{LEVELS,computeBiker,computeSupervisor,summarize,complaintPct,complaintRatio,IN_KIND_TOTAL}from"./payrollEngine";
 import{payrollRoster,tipsCheck}from"./payrollRoster";
 import{PAY_ST,capOf,payFormInit,payFormError,payArgs,payTotals,statusPatch}from"./payrollPayForm";
+const PAY_STATUS=Object.fromEntries(PAY_ST.map(x=>[x.v,x]));
 
-const PAY_STATUS={paid:{ar:"مدفوعة"},deferred:{ar:"مؤجَّلة"},pending:{ar:"بانتظار الدفع"}}; // كما في payrollLine.js (بلا استيراد حتى لا تنشأ حزمة مشتركة)
 const RUN_ST={approved:"معتمد",partially_paid:"مدفوع جزئياً",paid:"مدفوع"};
 // حالة دفع السطر للعرض؛ التسجيل من قسم «الدفع» للمالك (record_payroll_payment)
 const payOf=l=>l&&l.payment_status?{st:l.payment_status,at:l.paid_at,amt:l.paid_amount,ref:l.payment_ref,fee:Number(l.bank_fee)||0,base:l.base_paid,note:l.pay_note}:null;
@@ -26,7 +26,6 @@ export default function Payroll({opId,owner}){
   const[stlTips,setStlTips]=useState(null);   // sweater_settlements.tip_amount للشهر
   const[supPay,setSupPay]=useState(null);   // حالة دفع سطر المشرف المحفوظ
   const[payLines,setPayLines]=useState([]); // أسطر المسير المحفوظة (بمعرّفاتها) لقسم «الدفع»
-  const[rev,setRev]=useState(0);             // إعادة التحميل بعد تسجيل دفع
   const[supAuto,setSupAuto]=useState(true);  // اشتقاق مدخلات الفريق تلقائياً
   const[runId,setRunId]=useState(null);
   const[status,setStatus]=useState("draft");
@@ -39,7 +38,7 @@ export default function Payroll({opId,owner}){
   const[fromOps,setFromOps]=useState(false); // هل عُبّئت المدخلات من العمليات
 
   // تحميل الفريق + كشف الشهر إن وُجد
-  useEffect(()=>{(async()=>{
+  useEffect(()=>{let off=false;(async()=>{   // off: تغيّر الشهر/المشغّل قبل اكتمال التحميل ⇒ يُهمل الرد القديم
     setLoading(true);setMsg(null);
     // كل الموظفين الحقيقيين؛ الفرز للمسير (بايكر نشط في الشهر) في payrollRoster
     let q=supabase.from("employees").select("id,full_name,employee_id,operator_id,staff_role,start_date,is_test").order("employee_id"); // التجريبي يُستبعد في payrollRoster (ويُعرف رقمه فلا يظهر «غير مربوط»)
@@ -47,6 +46,7 @@ export default function Payroll({opId,owner}){
     const[{data:emps},{data:offs},{data:stl}]=await Promise.all([q,
       supabase.from("offboarding").select("employee_id,sweater_id,last_day").not("last_day","is",null),
       (()=>{let sq=supabase.from("sweater_settlements").select("tip_amount").eq("period",period);if(opId&&opId!=="all")sq=sq.eq("operator_id",opId);return sq;})()]);
+    if(off)return;
     const stlT=(stl||[]).filter(x=>Number(x.tip_amount)>0); // tip_amount افتراضه 0 قبل قبول الفاتورة ⇒ 0 = غير معروفsetStlTips(stlT.length?stlT.reduce((a,x)=>a+Number(x.tip_amount),0):null);
     // كشف محفوظ؟
     // وضع «الكل»: لا يُحمَّل مسير مشغّل بعينه (كان يأخذ مسيراً عشوائياً ثم يكتب فوقه)
@@ -54,10 +54,12 @@ export default function Payroll({opId,owner}){
     if(opId&&opId!=="all"){const{data:runs}=await supabase.from("payroll_runs").select("*").eq("period",period).eq("operator_id",opId).limit(1);run=runs&&runs[0];}
     let lines=[];
     if(run){const{data:l}=await supabase.from("payroll_lines").select("*").eq("run_id",run.id).order("sort");lines=l||[];}
+    if(off)return;
     // بيانات العمليات لهذا الشهر (المشتقّة من تقارير سويتر)
     let opsQ=supabase.from("ops_biker_month").select("sweater_id,biker_name,net_washes,rating,approved_complaints,tips").eq("period",period);
     if(opId&&opId!=="all")opsQ=opsQ.eq("operator_id",opId);
     const{data:opsRows}=await opsQ;
+    if(off)return;
     const opsMap={};(opsRows||[]).forEach(o=>{if(o.sweater_id)opsMap[String(o.sweater_id).trim()]=o;});
     setOps(opsMap);
     const hasRun=lines.length>0;let usedOps=false;
@@ -84,7 +86,7 @@ export default function Payroll({opId,owner}){
     else setSup({name:supName,team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""});
     setRunId(run?.id||null);setStatus(run?.status||"draft");
     setLoading(false);
-  })();},[period,opId,rev]);
+  })();return()=>{off=true;};},[period,opId]);
 
   const setB=(i,k,v)=>setBikers(p=>p.map((b,j)=>j===i?{...b,inp:{...b.inp,[k]:v}}:b));
   const syncFromOps=()=>{setBikers(p=>p.map(b=>{const o=ops[String(b.biker_id).trim()];if(!o)return b;return{...b,inp:{...b.inp,net_washes:o.net_washes??b.inp.net_washes,rating:o.rating!=null?o.rating:b.inp.rating,complaint_approved:o.approved_complaints??b.inp.complaint_approved,tips:o.tips!=null?o.tips:b.inp.tips}};}));setFromOps(true);setMsg({ok:true,t:"تم سحب الغسلات والتقييم والشكاوى والإكراميات من العمليات"});};
@@ -266,7 +268,10 @@ export default function Payroll({opId,owner}){
 
     </fieldset>
 
-    {!allOps&&locked&&owner&&payLines.length>0&&<PaySection lines={payLines} period={period} onSaved={()=>setRev(v=>v+1)}/>}
+    {!allOps&&locked&&owner&&payLines.length>0&&<PaySection lines={payLines} period={period} onSaved={(line,res)=>{
+      // تحديث محلي من رد الدالة (بلا إعادة تحميل الصفحة): السطر، وحالة المسير، وشارة الدفع في البطاقة
+      const nl={...line,...res};setPayLines(ls=>ls.map(l=>l.id===line.id?nl:l));if(res.run_status)setStatus(res.run_status);
+      if(line.role==="supervisor")setSupPay(payOf(nl));else setBikers(bs=>bs.map(b=>b.employee_id===line.employee_id?{...b,pay:payOf(nl)}:b));}}/>}
 
     <div className="pr-grand">
       <div><span>مسير {periodLabel(period)}</span><small>{computed.sum.count} أفراد · إجمالي الحزمة</small></div>
@@ -292,13 +297,14 @@ function PaySection({lines,period,onSaved}){
       <span className="pr-chip good">مدفوع <b>{AR(T.paid)}</b> ({T.n.paid})</span>
       {T.n.deferred>0&&<span className="pr-chip caut">مؤجَّل <b>{AR(T.deferred)}</b> ({T.n.deferred})</span>}
       {T.n.pending>0&&<span className="pr-chip caut">بانتظار الدفع <b>{AR(T.pending)}</b> ({T.n.pending})</span>}
+      {T.n.short>0&&<span className="pr-chip bad">متبقٍ من دفع جزئي <b>{AR(T.short)}</b> ({T.n.short})</span>}
       {T.fees>0&&<span className="pr-chip">رسوم التحويل {AR(T.fees)} (على المؤسسة)</span>}
     </div>
     {lines.map(l=><div className="pr-payl" key={l.id}>
       <div className="pr-payl-h"><b>{l.name||"—"}</b><span>{l.role==="supervisor"?"المشرف":"#"+(l.biker_id||"—")} · المكافأة {AR(capOf(l))} ر</span>
         <div style={{flex:1}}/>{open!==l.id&&<button className="pr-btn ghost" onClick={()=>setOpen(l.id)}><Icon n="edit" s={13}/> تسجيل الدفع</button>}</div>
       <PayRow p={payOf(l)}/>
-      {open===l.id&&<PayForm line={l} period={period} onClose={()=>setOpen(null)} onSaved={()=>{setOpen(null);onSaved();}}/>}
+      {open===l.id&&<PayForm line={l} period={l.period||period} onClose={()=>setOpen(null)} onSaved={res=>{setOpen(null);onSaved(l,res);}}/>}
     </div>)}
   </div>);
 }
@@ -309,11 +315,12 @@ function PayForm({line,period,onClose,onSaved}){
   const inv=k=>fe&&fe.field===k?" inv":"";const paid=f.status==="paid";
   const submit=async()=>{
     const e=payFormError(f,line,{period,today});if(e){setFe(e);return;}
-    setBusy(true);const{data,error}=await supabase.rpc("record_payroll_payment",payArgs(f,line));setBusy(false);
-    if(error){setErr(error.message);return;}
+    setBusy(true);let data,error;
+    try{({data,error}=await supabase.rpc("record_payroll_payment",payArgs(f,line)));}catch(x){error=x;}finally{setBusy(false);}
+    if(error){setErr(error.message||String(error));return;}
     if(data&&data.changed===false)toast.ok("لا تغيير — البيانات كما هي");else toast.ok(`سُجّل الدفع ✓ — حالة المسير: ${RUN_ST[data&&data.run_status]||data&&data.run_status||"—"}`);
-    if(data&&Array.isArray(data.ref_also_on)&&data.ref_also_on.length)toast.ok(`تنبيه: المرجع نفسه مسجّل أيضاً على: ${data.ref_also_on.join("، ")}`,undefined,9000);
-    onSaved();
+    if(data&&Array.isArray(data.ref_also_on)&&data.ref_also_on.length)toast.warn(`تنبيه: المرجع نفسه مسجّل أيضاً على: ${data.ref_also_on.join("، ")}`,undefined,9000);
+    onSaved(data||{});
   };
   return(<div className="pr-payf">
     <div className="pr-payst">{PAY_ST.map(o=><label key={o.v} className={f.status===o.v?"on":""}><input type="radio" name={"pst_"+line.id} checked={f.status===o.v} onChange={()=>set(statusPatch(f,line,o.v))}/>{o.ar}</label>)}</div>
