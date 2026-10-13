@@ -1,6 +1,6 @@
 // بطاقة أداء البايكر الشهرية — دوال نقية فوق محرّك العمولة HR-POL-003 (payrollEngine.js).
 // لا عتبات هنا: كل ريال/مكافأة يُحسب بدوال المحرّك؛ «الهدف التالي» يُستخرج بفحص المحرّك نفسه.
-import{bikerQualityRiyal,bikerSafetyRiyal,productionBonus,complaintPct,LEVELS}from"./payrollEngine";
+import{bikerQualityRiyal,bikerSafetyRiyal,productionBonus,complaintPct,complaintRatio,LEVELS}from"./payrollEngine";
 
 const r2=n=>Math.round((Number(n)||0)*100)/100;
 const num=v=>Number(v)||0;
@@ -49,8 +49,11 @@ export function bikerScore(bm,extras={}){
   const bestDay=worked.reduce((m,d)=>!m||d.n>m.n?{date:d.date,n:d.n}:m,null);
   const rating=num(bm.rating);
   const complaints=num(bm.approved_complaints);
-  const cPct=bm.complaint_pct!=null&&bm.complaint_pct!==""?r2(bm.complaint_pct):complaintPct(complaints,washes);
-  const qR=bikerQualityRiyal(rating),sR=bikerSafetyRiyal(cPct);
+  // الشريحة من النسبة الكاملة (العدد/الصافي)، والمقرّبة للعرض فقط
+  const hasCount=bm.approved_complaints!=null&&bm.approved_complaints!=="";
+  const cExact=hasCount&&washes?complaintRatio(complaints,washes):num(bm.complaint_pct);
+  const cPct=r2(cExact);
+  const qR=bikerQualityRiyal(rating),sR=bikerSafetyRiyal(cExact);
   const ratePerWash=r2(2+qR+sR);
   const rounds=(extras.rounds||[]).filter(r=>r&&r.status!=="requested").slice().sort((a,b)=>String(b.round_date||"").localeCompare(String(a.round_date||"")));
   const last=rounds[0];
@@ -63,7 +66,7 @@ export function bikerScore(bm,extras={}){
     rating,complaints,complaintPct:cPct,qR,sR,ratePerWash,
     fixed:r2(washes*2),quality:r2(washes*qR),safety:r2(washes*sR),bonusBase:r2(washes*ratePerWash),
     production:productionBonus(washes,rating),
-    nextProduction:nextProductionOf(washes),nextQuality:nextQualityOf(rating),nextSafety:nextSafetyOf(cPct,washes),
+    nextProduction:nextProductionOf(washes),nextQuality:nextQualityOf(rating),nextSafety:nextSafetyOf(cExact,washes),
     compliance:last&&last.compliance_pct!=null?{pct:num(last.compliance_pct),effect:last.effect||null,date:last.round_date||null}:null,
     rounds:rounds.slice(0,3),fines,revenue,
   };

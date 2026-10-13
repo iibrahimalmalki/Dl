@@ -11,6 +11,8 @@ const periodAr=p=>{if(!p)return"—";const[y,m]=String(p).split("-");const M=["�
 const fmtD=d=>{if(!d)return"—";const s=String(d).slice(0,10),p=s.split("-");return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s;};
 const daysLeft=end=>{if(!end)return null;const t=new Date();t.setHours(0,0,0,0);return Math.round((new Date(String(end).slice(0,10)+"T00:00:00")-t)/86400000);};
 const q=(t,c)=>supabase.from(t).select(c).then(({data})=>data||[]).then(x=>x,()=>[]);
+// أسطر المسير المعتمد فقط (غير المسودة) — المسودة تظهر في صفحة المسير وحدها
+const qPay=c=>supabase.from("payroll_lines").select(c+",payroll_runs!inner(status)").neq("payroll_runs.status","draft").then(({data})=>data||[]).then(x=>x,()=>[]);
 const prevPeriod=p=>{const[y,m]=String(p).split("-").map(Number);const d=new Date(y,(m||1)-2,1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const monthsBack=(p,n)=>{const[y,m]=String(p).split("-").map(Number);const out=[];for(let i=n-1;i>=0;i--){const d=new Date(y,(m||1)-1-i,1);out.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);}return out;};
 const shortMonth=p=>{const[y,m]=String(p).split("-");return`${["ينا","فبر","مار","أبر","ماي","يون","يول","أغس","سبت","أكت","نوف","ديس"][(+m||1)-1]} ${String(y).slice(2)}`;};
@@ -105,7 +107,7 @@ function MarginReport({period}){
   const[d,setD]=useState(null);
   useEffect(()=>{(async()=>{
     const[ops,pay,vexp,units,viol,setts]=await Promise.all([
-      q("ops_biker_month","period,net_washes"),q("payroll_lines","period,total"),
+      q("ops_biker_month","period,net_washes"),qPay("period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),q("violations","fine_applied"),
       q("sweater_settlements","period,net_total,status"),
     ]);setD({ops,pay,vexp,units,viol,setts});
@@ -140,7 +142,7 @@ function MarginReport({period}){
 // ── مسير الرواتب ──
 function PayrollReport({period}){
   const[rows,setRows]=useState(null);
-  useEffect(()=>{q("payroll_lines","period,role,name,level,base,net_bonus,total").then(d=>setRows(d));},[]);
+  useEffect(()=>{qPay("period,role,name,level,base,net_bonus,total").then(d=>setRows(d));},[]);
   const s=useMemo(()=>{if(!rows)return null;
     const r=rows.filter(x=>x.period===period);
     const list=r.map(x=>({name:x.name||"—",role:x.role==="supervisor"?"مشرف":"بايكر",level:x.level||"—",base:Number(x.base||0),bonus:Number(x.net_bonus||0),total:Number(x.total||0)})).sort((a,b)=>b.total-a.total);
@@ -390,7 +392,7 @@ function CashflowReport({period}){
   useEffect(()=>{(async()=>{
     const[fin,ops,pay,vexp,units,setts]=await Promise.all([
       q("finance_monthly","period,direction,category,amount,txn_count,is_capital"),
-      q("ops_biker_month","period,net_washes"),q("payroll_lines","period,total"),
+      q("ops_biker_month","period,net_washes"),qPay("period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),
       q("sweater_settlements","period,net_total,status"),
     ]);setD({fin:fin||[],ops,pay,vexp,units,setts});
@@ -477,7 +479,7 @@ function CompareReport({period}){
   const[d,setD]=useState(null);const prev=prevPeriod(period);
   useEffect(()=>{(async()=>{
     const[ops,pay,vexp,units,rounds,apps,setts]=await Promise.all([
-      q("ops_biker_month","period,net_washes,rating,approved_complaints"),q("payroll_lines","period,total"),
+      q("ops_biker_month","period,net_washes,rating,approved_complaints"),qPay("period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),
       q("field_rounds","period,compliance_pct"),q("applicants","status,submitted_at"),
       q("sweater_settlements","period,net_total,status"),
@@ -532,7 +534,7 @@ function ExecReport({period}){
   useEffect(()=>{(async()=>{
     const[fin,ops,pay,vexp,units,viol,rounds,apps,emps,setts]=await Promise.all([
       q("finance_monthly","period,direction,category,amount,is_capital"),
-      q("ops_biker_month","period,net_washes,rating,approved_complaints,complaint_pct"),q("payroll_lines","period,total"),
+      q("ops_biker_month","period,net_washes,rating,approved_complaints,complaint_pct"),qPay("period,total"),
       q("vendor_expenses","exp_date,amount"),q("housing_units","annual_rent,active"),q("violations","fine_applied,status"),
       q("field_rounds","period,compliance_pct"),q("applicants","status,submitted_at"),q("employees","id,profession_ok"),
       q("sweater_settlements","period,net_total,status"),

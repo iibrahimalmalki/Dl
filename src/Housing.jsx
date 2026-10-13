@@ -3,6 +3,7 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import{HOUSING_VIOLATIONS,HOUSING_REDLINES,suggestFine}from"./housingPolicy";
+import{isManagerial}from"./testSandbox";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
 const fmtD=d=>d?new Date(d+"T00:00:00").toLocaleDateString("en-GB"):"—";
@@ -202,7 +203,7 @@ function UnitModal({f,set,busy,save}){const u=(k,v)=>set({...f,[k]:v});return(<M
 function OccModal({f,set,busy,save,units,emps}){const u=(k,v)=>set({...f,[k]:v});
   const pickEmp=id=>{const e=(emps||[]).find(x=>x.id===id);set({...f,employee_id:id||null,name:e?e.full_name+(e.employee_id?" ("+e.employee_id+")":""):f.name,mobile:e&&e.mobile?e.mobile.trim():f.mobile,role:f.role||"بايكر"});};
   return(<Modal title={f.id?"تعديل ساكن":"إضافة ساكن"} set={set} busy={busy} save={save}>
-  <Fld l="اختر الموظف *"><select value={f.employee_id||""} onChange={e=>pickEmp(e.target.value)}><option value="">— اختر من الموظفين —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
+  <Fld l="اختر الموظف *"><select value={f.employee_id||""} onChange={e=>pickEmp(e.target.value)}><option value="">— اختر من الموظفين —</option>{(emps||[]).filter(x=>!isManagerial(x)).map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
   <Fld l="الاسم *"><input value={f.name||""} onChange={e=>u("name",e.target.value)}/></Fld>
   <div className="hs-2"><Fld l="الجوال"><input value={f.mobile||""} onChange={e=>u("mobile",e.target.value)}/></Fld><Fld l="الهوية/الإقامة"><input value={f.national_id||""} onChange={e=>u("national_id",e.target.value)}/></Fld></div>
   <div className="hs-2"><Fld l="الصفة"><input value={f.role||""} onChange={e=>u("role",e.target.value)} placeholder="بايكر"/></Fld><Fld l="الوحدة"><select value={f.unit_id||""} onChange={e=>u("unit_id",e.target.value)}><option value="">—</option>{units.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Fld></div>
@@ -218,7 +219,7 @@ function PayModal({f,set,busy,save}){const u=(k,v)=>set({...f,[k]:v});return(<Mo
 
 function VioModal({f,set,busy,save,units,emps}){const u=(k,v)=>set({...f,[k]:v});const pickOcc=id=>{const e=(emps||[]).find(x=>x.id===id);set({...f,occupant_employee_id:id||null,occupant:e?e.full_name+(e.employee_id?" ("+e.employee_id+")":""):null});};return(<Modal title={f.id?"تعديل مخالفة":"تسجيل مخالفة"} set={set} busy={busy} save={save}>
   <Fld l="نوع المخالفة *"><select value={f.category||""} onChange={e=>u("category",e.target.value)}><option value="">— اختر —</option>{HOUSING_VIOLATIONS.map(v=><option key={v.cat}>{v.cat}</option>)}</select></Fld>
-  <div className="hs-2"><Fld l="الساكن"><select value={f.occupant_employee_id||""} onChange={e=>pickOcc(e.target.value)}><option value="">— غير محدّد —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld><Fld l="رقم المرة"><select value={f.occurrence||1} onChange={e=>{const o=Number(e.target.value);const fine=suggestFine(o);u("occurrence",o);set(s=>({...s,occurrence:o,amount:fine==null?"":fine}));}}>{[1,2,3,4].map(n=><option key={n} value={n}>المرة {n}</option>)}</select></Fld></div>
+  <div className="hs-2"><Fld l="الساكن"><select value={f.occupant_employee_id||""} onChange={e=>pickOcc(e.target.value)}><option value="">— غير محدّد —</option>{(emps||[]).filter(x=>!isManagerial(x)).map(x=><option key={x.id} value={x.id}>{x.full_name}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld><Fld l="رقم المرة"><select value={f.occurrence||1} onChange={e=>{const o=Number(e.target.value);const fine=suggestFine(o);u("occurrence",o);set(s=>({...s,occurrence:o,amount:fine==null?"":fine}));}}>{[1,2,3,4].map(n=><option key={n} value={n}>المرة {n}</option>)}</select></Fld></div>
   <div className="hs-2"><Fld l="الغرامة (﷼)"><input type="number" value={f.amount??""} onChange={e=>u("amount",e.target.value)} placeholder="إخلاء = فارغ"/></Fld><Fld l="الإجراء"><input value={f.action||""} onChange={e=>u("action",e.target.value)} placeholder="إنذار / غرامة / إخلاء"/></Fld></div>
   <div className="hs-2"><Fld l="التاريخ"><input type="date" value={f.incident_date||""} onChange={e=>u("incident_date",e.target.value)}/></Fld><Fld l="الحالة"><select value={f.status||"open"} onChange={e=>u("status",e.target.value)}><option value="open">مفتوحة</option><option value="closed">مغلقة</option></select></Fld></div>
   <Fld l="ملاحظات"><textarea rows={2} value={f.notes||""} onChange={e=>u("notes",e.target.value)}/></Fld>

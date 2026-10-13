@@ -2,20 +2,23 @@ import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
-import{LEVELS,computeBiker,computeSupervisor,summarize,complaintPct,IN_KIND_TOTAL}from"./payrollEngine";
+import{LEVELS,computeBiker,computeSupervisor,summarize,complaintPct,complaintRatio,IN_KIND_TOTAL}from"./payrollEngine";
+import{payrollRoster,tipsCheck}from"./payrollRoster";
 
 const AR=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-const nowPeriod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
+// الافتراضي الشهر السابق (كالإقفال الشهري): مسير الشهر يُعدّ بعد انتهائه
+const prevPeriod=()=>{const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;};
 const periodLabel=p=>{const[y,m]=p.split("-");const mn=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][+m-1]||m;return`${mn} ${y}`;};
-const BLANK_B=()=>({level:"M1",net_washes:"",rating:"",complaint_approved:"",tips:"",dmg:"",abs:"",mat:"",trn:""});
 
 // القفل: المسير غير «draft» لا يُحفظ ولا يُعدَّل ولا يُسحب إليه (التصحيح بسطر تسوية لاحقاً)، والاعتماد للمالك فقط
 // (يفرضهما أيضاً payroll_runs_guard/payroll_lines_guard في القاعدة). وضع «الكل» للعرض فقط.
 export default function Payroll({opId,owner}){
-  const[period,setPeriod]=useState(nowPeriod());
+  const[period,setPeriod]=useState(prevPeriod());
   const[loading,setLoading]=useState(true);
   const[bikers,setBikers]=useState([]);     // [{employee_id,name,biker_id,inp:{...}}]
-  const[sup,setSup]=useState({name:"سلمان المالكي",team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""});
+  const[sup,setSup]=useState({name:"",team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""});
+  const[unlinked,setUnlinked]=useState([]);   // صفوف عمليات بلا موظف مربوط (كانت تُستبعد بصمت)
+  const[stlTips,setStlTips]=useState(null);   // sweater_settlements.tip_amount للشهر
   const[supAuto,setSupAuto]=useState(true);  // اشتقاق مدخلات الفريق تلقائياً
   const[runId,setRunId]=useState(null);
   const[status,setStatus]=useState("draft");
@@ -30,9 +33,13 @@ export default function Payroll({opId,owner}){
   // تحميل الفريق + كشف الشهر إن وُجد
   useEffect(()=>{(async()=>{
     setLoading(true);setMsg(null);
-    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id").not("employee_id","is",null).eq("is_test",false).order("employee_id"); // التجريبي خارج الكشف وراتب المشرف
+    // كل الموظفين الحقيقيين؛ الفرز للمسير (بايكر نشط في الشهر) في payrollRoster
+    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id,staff_role,start_date,is_test").order("employee_id"); // التجريبي يُستبعد في payrollRoster (ويُعرف رقمه فلا يظهر «غير مربوط»)
     if(opId&&opId!=="all")q=q.eq("operator_id",opId);
-    const{data:emps}=await q;
+    const[{data:emps},{data:offs},{data:stl}]=await Promise.all([q,
+      supabase.from("offboarding").select("employee_id,sweater_id,last_day").not("last_day","is",null),
+      (()=>{let sq=supabase.from("sweater_settlements").select("tip_amount").eq("period",period);if(opId&&opId!=="all")sq=sq.eq("operator_id",opId);return sq;})()]);
+    const stlT=(stl||[]).filter(x=>Number(x.tip_amount)>0); // tip_amount افتراضه 0 قبل قبول الفاتورة ⇒ 0 = غير معروفsetStlTips(stlT.length?stlT.reduce((a,x)=>a+Number(x.tip_amount),0):null);
     // كشف محفوظ؟
     // وضع «الكل»: لا يُحمَّل مسير مشغّل بعينه (كان يأخذ مسيراً عشوائياً ثم يكتب فوقه)
     let run=null;
@@ -40,7 +47,7 @@ export default function Payroll({opId,owner}){
     let lines=[];
     if(run){const{data:l}=await supabase.from("payroll_lines").select("*").eq("run_id",run.id).order("sort");lines=l||[];}
     // بيانات العمليات لهذا الشهر (المشتقّة من تقارير سويتر)
-    let opsQ=supabase.from("ops_biker_month").select("sweater_id,net_washes,rating,approved_complaints").eq("period",period);
+    let opsQ=supabase.from("ops_biker_month").select("sweater_id,biker_name,net_washes,rating,approved_complaints,tips").eq("period",period);
     if(opId&&opId!=="all")opsQ=opsQ.eq("operator_id",opId);
     const{data:opsRows}=await opsQ;
     const opsMap={};(opsRows||[]).forEach(o=>{if(o.sweater_id)opsMap[String(o.sweater_id).trim()]=o;});
@@ -48,28 +55,31 @@ export default function Payroll({opId,owner}){
     const hasRun=lines.length>0;let usedOps=false;
     // بناء صفوف البايكرز
     const savedByEmp={};lines.filter(l=>l.role==="biker").forEach(l=>{if(l.employee_id)savedByEmp[l.employee_id]=l;});
-    const rows=(emps||[]).map(e=>{
+    const R=payrollRoster({emps:emps||[],offboarding:offs||[],ops:opsRows||[],period,savedIds:Object.keys(savedByEmp)});
+    setUnlinked(R.unlinked);
+    const rows=R.bikers.map(e=>{
       const s=savedByEmp[e.id];const inp=s?.inputs||{};
       const o=opsMap[String(e.employee_id).trim()];
       // إن لم يوجد كشف محفوظ لكن توجد بيانات عمليات → عبّئ منها
       const useOps=!s&&o;if(useOps)usedOps=true;
-      return{employee_id:e.id,name:e.full_name||s?.name||"—",biker_id:e.employee_id,
+      return{employee_id:e.id,name:e.full_name||s?.name||"—",biker_id:e.employee_id,noStart:!e.start_date,
         inp:{level:inp.level||"M1",
           net_washes:inp.net_washes??(useOps?o.net_washes:""),
           rating:inp.rating??(useOps&&o.rating!=null?o.rating:""),
           complaint_approved:inp.complaint_approved??(useOps?o.approved_complaints:""),
-          tips:inp.tips??"",dmg:inp.dmg??"",abs:inp.abs??"",mat:inp.mat??"",trn:inp.trn??""}};
+          tips:inp.tips??(useOps&&o.tips!=null?o.tips:""),qd:inp.qd??"",dmg:inp.dmg??"",abs:inp.abs??"",mat:inp.mat??"",trn:inp.trn??""}};
     });
     setBikers(rows);setFromOps(usedOps&&!hasRun);
     const supLine=lines.find(l=>l.role==="supervisor");
-    if(supLine){const i=supLine.inputs||{};setSup({name:supLine.name||"سلمان المالكي",team_orders:i.team_orders??"",team_rating:i.team_rating??"",team_complaint_approved:i.team_complaint_approved??"",deductions:i.deductions??""});setSupAuto(!!i.auto);}
-    else setSup(s=>({...s,team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""}));
+    const supName=R.supervisor?R.supervisor.full_name:"";
+    if(supLine){const i=supLine.inputs||{};setSup({name:supLine.name||supName,team_orders:i.team_orders??"",team_rating:i.team_rating??"",team_complaint_approved:i.team_complaint_approved??"",deductions:i.deductions??""});setSupAuto(!!i.auto);}
+    else setSup({name:supName,team_orders:"",team_rating:"",team_complaint_approved:"",deductions:""});
     setRunId(run?.id||null);setStatus(run?.status||"draft");
     setLoading(false);
   })();},[period,opId]);
 
   const setB=(i,k,v)=>setBikers(p=>p.map((b,j)=>j===i?{...b,inp:{...b.inp,[k]:v}}:b));
-  const syncFromOps=()=>{setBikers(p=>p.map(b=>{const o=ops[String(b.biker_id).trim()];if(!o)return b;return{...b,inp:{...b.inp,net_washes:o.net_washes??b.inp.net_washes,rating:o.rating!=null?o.rating:b.inp.rating,complaint_approved:o.approved_complaints??b.inp.complaint_approved}};}));setFromOps(true);setMsg({ok:true,t:"تم سحب الغسلات والتقييم والشكاوى من العمليات"});};
+  const syncFromOps=()=>{setBikers(p=>p.map(b=>{const o=ops[String(b.biker_id).trim()];if(!o)return b;return{...b,inp:{...b.inp,net_washes:o.net_washes??b.inp.net_washes,rating:o.rating!=null?o.rating:b.inp.rating,complaint_approved:o.approved_complaints??b.inp.complaint_approved,tips:o.tips!=null?o.tips:b.inp.tips}};}));setFromOps(true);setMsg({ok:true,t:"تم سحب الغسلات والتقييم والشكاوى والإكراميات من العمليات"});};
   const opsCount=Object.keys(ops).length;
   const allOps=!opId||opId==="all";
   const locked=status!=="draft";   // approved / final وما بعدهما
@@ -79,8 +89,10 @@ export default function Payroll({opId,owner}){
   const computed=useMemo(()=>{
     const bl=bikers.map(b=>{
       const washes=+b.inp.net_washes||0;
+      // الشريحة من النسبة الكاملة، والمعروض مقرّب
       const cpct=complaintPct(b.inp.complaint_approved,washes);
-      return{...b,res:computeBiker({name:b.name,biker_id:b.biker_id,level:b.inp.level,net_washes:washes,rating:+b.inp.rating||0,complaint_pct:cpct,tips:+b.inp.tips||0,deduct_damage:+b.inp.dmg||0,deduct_absence:+b.inp.abs||0,deduct_materials:+b.inp.mat||0,deduct_training:+b.inp.trn||0}),cpct};
+      const noRating=String(b.inp.rating??"").trim()==="";
+      return{...b,noRating,noWashes:!washes,res:computeBiker({name:b.name,biker_id:b.biker_id,level:b.inp.level,net_washes:washes,rating:+b.inp.rating||0,complaint_pct:complaintRatio(b.inp.complaint_approved,washes),tips:+b.inp.tips||0,quality_deduction:+b.inp.qd||0,deduct_damage:+b.inp.dmg||0,deduct_absence:+b.inp.abs||0,deduct_materials:+b.inp.mat||0,deduct_training:+b.inp.trn||0}),cpct};
     });
     // اشتقاق الفريق
     const totW=bl.reduce((a,b)=>a+(+b.inp.net_washes||0),0);
@@ -88,12 +100,15 @@ export default function Payroll({opId,owner}){
     const avgR=rated.length?rated.reduce((a,b)=>a+ +b.inp.rating,0)/rated.length:0;
     const totAppr=bl.reduce((a,b)=>a+(+b.inp.complaint_approved||0),0);
     const teamOrders=supAuto?totW:(+sup.team_orders||0);
-    const teamRating=supAuto?Math.round(avgR*1000)/1000:(+sup.team_rating||0);
-    const teamCPct=supAuto?complaintPct(totAppr,totW):complaintPct(sup.team_complaint_approved,totW);
-    const supRes=computeSupervisor({name:sup.name,team_orders:teamOrders,team_rating:teamRating,team_complaint_pct:teamCPct,deductions:+sup.deductions||0});
+    const teamRating=supAuto?avgR:(+sup.team_rating||0);   // بلا تقريب قبل الشريحة
+    // اليدوي يقسم على طلبات الفريق اليدوية (كان يقسم على مجموع غسلات البايكرز)
+    const teamRatio=supAuto?complaintRatio(totAppr,totW):complaintRatio(sup.team_complaint_approved,teamOrders);
+    const teamCPct=Math.round(teamRatio*100)/100;
+    const supRes=computeSupervisor({name:sup.name,team_orders:teamOrders,team_rating:teamRating,team_complaint_pct:teamRatio,deductions:+sup.deductions||0});
     const sum=summarize([...bl.map(b=>b.res),supRes]);
-    return{bl,supRes,sum,teamOrders,teamRating,teamCPct};
-  },[bikers,sup,supAuto]);
+    const tipsWarn=tipsCheck(bl.reduce((a,b)=>a+(+b.inp.tips||0),0),stlTips);
+    return{bl,supRes,sum,teamOrders,teamRating,teamCPct,tipsWarn};
+  },[bikers,sup,supAuto,stlTips]);
 
   const save=async(approve)=>{
     if(ro||(approve&&!owner))return;
@@ -153,6 +168,10 @@ export default function Payroll({opId,owner}){
     {msg&&<div className={"pr-msg "+(msg.ok?"ok":"err")}>{msg.t}</div>}
     {fromOps&&!ro&&<div className="pr-msg ok" style={{background:"var(--info-bg)",color:"var(--info-ink)"}}><Icon n="operations" s={13} style={{verticalAlign:"-2px"}}/> المدخلات معبّأة تلقائياً من تقارير سويتر (العمليات) — يمكنك التعديل يدوياً قبل الحفظ.</div>}
 
+    {unlinked.length>0&&<div className="pr-msg err"><Icon n="alert" s={13}/> بايكرز في تقارير الشهر غير مربوطين بموظف — لن يظهروا في المسير حتى تُربط أرقامهم من شاشة الموظفين: {unlinked.map(u=>`${u.biker_name||"—"} #${u.sweater_id}`).join("، ")}</div>}
+    {!allOps&&!sup.name&&<div className="pr-msg err"><Icon n="alert" s={13}/> لا مشرف محدّد — عيّن دور «supervisor» للمشرف في جدول الموظفين أو اكتب اسمه في بطاقة المشرف.</div>}
+    {computed.tipsWarn&&<div className="pr-msg err"><Icon n="alert" s={13}/> مجموع الإكراميات {AR(computed.tipsWarn.total)} ر ≠ إكراميات الفاتورة {AR(computed.tipsWarn.invoice)} ر (الفرق {AR(computed.tipsWarn.diff)} ر)</div>}
+
     {/* ملخص المسير */}
     <div className="pr-kpis">
       <Sum ic="employees" c="var(--p)" bg="var(--p-100)" t="أعضاء الفريق" v={computed.sum.count}/>
@@ -183,16 +202,21 @@ export default function Payroll({opId,owner}){
         <div className="pr-chips">
           <span className="pr-chip">جودة <b>{r.quality_riyal.toFixed(2)}</b></span>
           <span className="pr-chip">سلامة <b>{r.safety_riyal.toFixed(2)}</b></span>
-          <span className="pr-chip">شكاوى <b>{b.cpct}%</b></span>
+          <span className="pr-chip">شكاوى <b>{b.cpct.toFixed(2)}%</b></span>
           <span className="pr-chip hot">المعدل/غسلة <b>{r.rate_per_wash.toFixed(2)}</b></span>
           {r.production>0&&<span className="pr-chip good"><Icon n="star" s={11}/> إنتاج {r.production}</span>}
           {(+b.inp.rating>0&&+b.inp.rating<4)&&<span className="pr-chip warn"><Icon n="alert" s={11}/> تقييم &lt;4 يوقف الإنتاج</span>}
+          {b.noRating&&<span className="pr-chip caut"><Icon n="alert" s={11}/> لا تقييم — أدخله يدوياً (لا يُحتسب 0 تلقائياً)</span>}
+          {b.noWashes&&<span className="pr-chip caut"><Icon n="alert" s={11}/> بدون غسلات — تأكد</span>}
+          {b.noStart&&<span className="pr-chip caut"><Icon n="alert" s={11}/> تاريخ المباشرة غير مُدخل</span>}
+          {r.base_deducted>0&&<span className="pr-chip bad"><Icon n="alert" s={11}/> الاستقطاعات تتجاوز المكافأة — يُخصم {AR(r.base_deducted)} ر من الأساس</span>}
         </div>
         <div className="pr-deduct-t" onClick={()=>setOpenDeduct(p=>({...p,[i]:!od}))}>
           <Icon n={od?"x":"trash"} s={13}/> الاستقطاعات {r.deductions>0&&<b style={{color:"var(--bad-ink)"}}>−{AR(r.deductions)} ر</b>} {r.deduction_capped&&<span className="pr-cap">مُقيّدة بسقف 50%</span>}
           <span style={{marginInlineStart:"auto",color:"var(--mut-2)"}}>{od?"▲":"▼"}</span>
         </div>
         {od&&<div className="pr-inputs pr-ded">
+          <Fld l="خصم الجودة"><input type="number" value={b.inp.qd} onChange={e=>setB(i,"qd",e.target.value)} placeholder="0"/></Fld>
           <Fld l="ضرر (50%)"><input type="number" value={b.inp.dmg} onChange={e=>setB(i,"dmg",e.target.value)} placeholder="0"/></Fld>
           <Fld l="غياب (÷30)"><input type="number" value={b.inp.abs} onChange={e=>setB(i,"abs",e.target.value)} placeholder="0"/></Fld>
           <Fld l="مواد تالفة"><input type="number" value={b.inp.mat} onChange={e=>setB(i,"mat",e.target.value)} placeholder="0"/></Fld>
@@ -214,7 +238,7 @@ export default function Payroll({opId,owner}){
       </div>
       <div className="pr-inputs">
         <Fld l="طلبات الفريق"><input type="number" value={supAuto?computed.teamOrders:sup.team_orders} disabled={supAuto} onChange={e=>setSup({...sup,team_orders:e.target.value})}/></Fld>
-        <Fld l="متوسط تقييم الفريق"><input type="number" step="0.001" value={supAuto?computed.teamRating:sup.team_rating} disabled={supAuto} onChange={e=>setSup({...sup,team_rating:e.target.value})}/></Fld>
+        <Fld l="متوسط تقييم الفريق"><input type="number" step="0.001" value={supAuto?Math.round(computed.teamRating*1000)/1000:sup.team_rating} disabled={supAuto} onChange={e=>setSup({...sup,team_rating:e.target.value})}/></Fld>
         <Fld l={supAuto?"نسبة الشكاوى%":"شكاوى الفريق المعتمدة"}><input type="number" step="0.01" value={supAuto?computed.teamCPct:sup.team_complaint_approved} disabled={supAuto} onChange={e=>setSup({...sup,team_complaint_approved:e.target.value})}/></Fld>
         <Fld l="استقطاعات (ر)"><input type="number" value={sup.deductions} onChange={e=>setSup({...sup,deductions:e.target.value})} placeholder="0"/></Fld>
       </div>
@@ -284,6 +308,7 @@ const CSS=`
 .pr-chip{display:inline-flex;align-items:center;gap:5px;background:var(--soft);border:1px solid var(--line-2);border-radius:9px;padding:4px 9px;font-size:11px;color:var(--mut);font-weight:600}
 .pr-chip b{color:var(--ink)}
 .pr-chip.hot{background:var(--p-100);border-color:rgba(var(--p-rgb),.35);color:var(--warn-ink)}.pr-chip.hot b{color:var(--warn-ink)}
+.pr-chip.caut{background:var(--warn-bg);color:var(--warn-ink)}.pr-chip.bad{background:var(--bad-bg);color:var(--bad-ink)}
 .pr-chip.good{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok-ink)}.pr-chip.good b{color:var(--ok-ink)}
 .pr-chip.warn{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent);color:var(--bad-ink)}
 .pr-deduct-t{display:flex;align-items:center;gap:7px;margin-top:11px;padding-top:11px;border-top:1px dashed var(--line);font-size:12px;font-weight:700;color:var(--mut);cursor:pointer}
