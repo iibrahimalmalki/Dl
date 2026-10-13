@@ -4,7 +4,7 @@ import Icon from"./Icon";
 import{useToast}from"./ui";
 import HandoverLog from"./HandoverLog";
 import TestBadge from"./TestBadge";
-import{realOnly,realBy,testLast}from"./testSandbox";
+import{realOnly,realBy,testLast,isManagerial}from"./testSandbox";
 // «الطلبات والتنبيهات»: طلبات الوقود والزيت من البوابة + fleet_alerts() — بصلاحية fleet_alerts، تُحمَّل عند فتح التبويب فقط
 const FleetRequests=lazy(()=>import("./FleetRequests"));
 
@@ -255,7 +255,7 @@ function CustodyModal({f,set,save,busy,emps}){
   return(<div className="fl-scrim" onClick={()=>set(null)}><div className="fl-modal" onClick={e=>e.stopPropagation()}>
     <div className="fl-mh"><b>نقل حيازة مؤقت — {v.plate}</b><button onClick={()=>set(null)}><Icon n="x" s={18}/></button></div>
     <div className="fl-mb">
-      <Fld l="البايكر البديل *"><select value={f.to_emp_id||""} onChange={e=>u("to_emp_id",e.target.value)}><option value="">— اختر البديل —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.is_test?" · 🧪 تجريبي":""}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
+      <Fld l="البايكر البديل *"><select value={f.to_emp_id||""} onChange={e=>u("to_emp_id",e.target.value)}><option value="">— اختر البديل —</option>{(emps||[]).filter(x=>!isManagerial(x)).map(x=><option key={x.id} value={x.id}>{x.full_name}{x.is_test?" · 🧪 تجريبي":""}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
       <Fld l="حتى تاريخ (نهاية الحيازة)"><input type="date" value={f.end_date||""} onChange={e=>u("end_date",e.target.value)}/></Fld>
       <Fld l="السبب"><input value={f.reason||""} onChange={e=>u("reason",e.target.value)} placeholder="إجازة البايكر الأساسي"/></Fld>
       <Fld l="مرجع التفويض في «تم» (اختياري)"><input value={f.tam_ref||""} onChange={e=>u("tam_ref",e.target.value)} placeholder="رقم/مرجع تفويض المركبة"/></Fld>
@@ -297,7 +297,7 @@ function VehModal({f,set,save,busy,emps}){
       </div>
       <div className="fl-2">
         <Fld l="الحالة"><select value={f.status||"active"} onChange={e=>u("status",e.target.value)}>{Object.entries(V_STATUS).map(([k,v])=><option key={k} value={k}>{v.ar}</option>)}</select></Fld>
-        <Fld l="البايكر الحالي"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير معيّن —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.is_test?" · 🧪 تجريبي":""}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
+        <Fld l="البايكر الحالي"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير معيّن —</option>{(emps||[]).filter(x=>!isManagerial(x)).map(x=><option key={x.id} value={x.id}>{x.full_name}{x.is_test?" · 🧪 تجريبي":""}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
       </div>
       <div className="fl-2">
         <Fld l="حالة المفتاح"><input value={f.key_status||""} onChange={e=>u("key_status",e.target.value)} placeholder="متوفر / مفقود / لا يوجد"/></Fld>
@@ -325,7 +325,7 @@ function IncModal({f,set,save,busy,veh,emps}){
       </div>
       <Fld l="العنوان"><input value={f.title||""} onChange={e=>u("title",e.target.value)} placeholder="وصف مختصر"/></Fld>
       <div className="fl-2">
-        <Fld l="البايكر"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير محدّد —</option>{(emps||[]).filter(x=>x.staff_role!=="manager").map(x=><option key={x.id} value={x.id}>{x.full_name}{x.is_test?" · 🧪 تجريبي":""}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
+        <Fld l="البايكر"><select value={f.biker_employee_id||""} onChange={e=>pickBiker(e.target.value)}><option value="">— غير محدّد —</option>{(emps||[]).filter(x=>!isManagerial(x)).map(x=><option key={x.id} value={x.id}>{x.full_name}{x.is_test?" · 🧪 تجريبي":""}{x.employee_id?" ("+x.employee_id+")":""}</option>)}</select></Fld>
         <Fld l="الخطورة"><select value={f.severity||"high"} onChange={e=>u("severity",e.target.value)}>{Object.entries(SEV).map(([k,v])=><option key={k} value={k}>{v.ar}</option>)}</select></Fld>
       </div>
       <div className="fl-2">

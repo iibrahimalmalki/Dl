@@ -6,6 +6,7 @@ import{settlementLine,MIN_GUARANTEE_ORDERS,SSP_CONTRACT,tiersActive}from"./sweat
 import{stageOf,stageLabel,isLocked}from"./settlementStatus";
 import{lifecycle,DUE_DAYS,addDays,tipFromPayment,riyadhDate,todayRiyadh}from"./invoiceLifecycle";
 import{reconcileMonth}from"./monthRecon";
+import{isManagerial}from"./testSandbox";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" ﷼";
 const int=n=>Number(n||0).toLocaleString("en-US");
@@ -163,7 +164,7 @@ export default function Settlement({opId,me,owner}){
   const note=(ok,t)=>setMsg({ok,t});
   const opv=(opId&&opId!=="all")?opId:null;
 
-  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role").order("full_name").then(({data})=>setEmps((data||[]).filter(e=>e.staff_role!=="manager")));},[]);
+  useEffect(()=>{supabase.from("employees").select("id,full_name,employee_id,staff_role").order("full_name").then(({data})=>setEmps((data||[]).filter(e=>!isManagerial(e))));},[]);
   const loadPeriod=async(p)=>{
     setLoading(true);
     const{data:h}=await supabase.from("sweater_settlements").select("*").eq("period",p).limit(1);

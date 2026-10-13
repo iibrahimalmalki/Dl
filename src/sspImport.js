@@ -3,14 +3,14 @@
 // القواعد مُتحقَّق منها على ملفات حقيقية؛ أي تعديل هنا يغيّر أرقام الرواتب والتسوية.
 import * as XLSX from"xlsx";
 
-export const KINDS=["bookings","tickets","comp","add","deduct","maintenance","ratings_cum","tips_cum","summary_cum"];
-export const KIND_AR={bookings:"الحجوزات",tickets:"التذاكر",comp:"تعويضات العملاء",add:"إلغاء العميل (إضافة)",deduct:"إلغاء البايكر (خصم)",maintenance:"إلغاء للصيانة",ratings_cum:"التذاكر والتقييمات (تراكمي)",tips_cum:"الحجوزات والإكراميات (تراكمي)",summary_cum:"ملخص الخصومات والتعويضات (تراكمي)"};
+export const KINDS=["bookings","tickets","comp","add","deduct","maintenance","tips","ratings_cum","summary_cum"];
+export const KIND_AR={bookings:"الحجوزات",tickets:"التذاكر",comp:"تعويضات العملاء",add:"إلغاء العميل (إضافة)",deduct:"إلغاء البايكر (خصم)",maintenance:"إلغاء للصيانة",ratings_cum:"التذاكر والتقييمات (تراكمي)",tips:"الإكراميات (شهري)",summary_cum:"ملخص الخصومات والتعويضات (تراكمي)"};
 
 // الأنماط الأطول أولاً: biker_bookings_and_tips و bikers_tickets_and_ratings يحويان كلمات bookings/tickets
 const NAME_RULES=[
   ["deductions_and_compensations_summary_report","summary_cum"],
   ["bikers_tickets_and_ratings_report","ratings_cum"],
-  ["biker_bookings_and_tips_report","tips_cum"],
+  ["biker_bookings_and_tips_report","tips"],
   ["bookings_cancelled_due_to_maintenance","maintenance"],
   ["customer_cancelled_bookings","add"],
   ["biker_cancelled_bookings","deduct"],
@@ -31,9 +31,10 @@ export function detectKind(filename,headers){
   if(H.has("booking status"))return"bookings";
   if(H.has("ticket description"))return"tickets";
   if(H.has("discount value")||H.has("sub category name"))return"comp";
-  if(raw.some(h=>/tip/i.test(h)))return"tips_cum";
   // ملفات الإلغاء الثلاثة بنفس الأعمدة؛ الصيانة وحدها بشرطات سفلية
   if(H.has("booked slot")&&H.has("cancel reason")&&raw.some(h=>/^﻿?booking_id$/i.test(h.trim())))return"maintenance";
+  // الإكراميات: عمود الصافي بالاسم الكامل (كان /tip/i يطابق أي عمود فيه tip مثل Multiple)
+  if([...H].some(h=>TIP_COL.test(h)))return"tips";
   return null;
 }
 
@@ -75,8 +76,28 @@ export const exportDateOf=fn=>{const m=String(fn||"").match(/(\d{4}-\d{2}-\d{2})
 
 // عزل النص اللاتيني/التواريخ داخل الجمل العربية (FSI…PDI) حتى لا ينقلب ترتيبها
 const iso=t=>`\u2068${t}\u2069`;
+// ملف الإكراميات الشهري: «Net Tips (After Bank Fees)» حسب «Company ID» (= رقم سويتر)
+const TIP_COL=/^net tips\b/;
 const numOrNull=v=>{if(v==null)return null;const s=String(v).trim();if(!s||/^n\/?a$/i.test(s))return null;const n=Number(s);return isFinite(n)?n:null;};
 const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length*100)/100:null;
+// بلا تقريب: التقييم يحدد الشريحة (3.995 لا تصبح 4.00)، والتقريب في العرض فقط
+const avgExact=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+
+// صفوف ملف الإكراميات → {sid:{tips,bookings}}؛ bookings = «Total Bookings» (أونلاين + أوفلاين) للمطابقة مع المكتملة.
+// الملف فيه أيضاً «Total Bookings (Online) [Full Wash]»… فلا يُؤخذ أول عمود فيه booking.
+export function parseTips(rows){
+  const out={};
+  (rows||[]).map(normRow).forEach(r=>{
+    const keys=Object.keys(r);
+    const sid=str(r["company id"]);const tk=keys.find(k=>TIP_COL.test(k));
+    if(!sid||!tk)return;
+    const bk=["total bookings","total bookings (online)"].find(k=>k in r&&numOrNull(r[k])!=null);
+    const o=out[sid]||(out[sid]={tips:0,bookings:null});
+    o.tips=Math.round((o.tips+(numOrNull(r[tk])||0))*100)/100;
+    if(bk)o.bookings=(o.bookings||0)+numOrNull(r[bk]);
+  });
+  return out;
+}
 const status=v=>String(v??"").trim().toLowerCase().replace(/[\s-]+/g,"_");
 const CLOSED=new Set(["collect_payment","cancel_client","cancel_admin"]);
 const OPEN=new Set(["initiated","to_be_allocated"]);
@@ -91,12 +112,13 @@ const REQ={
 
 export function buildMonth(files,period){
   const warnings=[];const W=(code,ar)=>warnings.push({code,ar});
-  const refs={ratings_cum:null,tips_cum:null,summary_cum:null};
+  const refs={ratings_cum:null,summary_cum:null};let tipRows=null;
   const by={};const usable={};const given=new Set();const noSid=new Set();let exportDate=null;
   (files||[]).forEach(f=>{
     if(!f.kind){W("unknown_file",`ملف غير معروف: ${iso(f.filename)}`);return;}
     given.add(f.kind);
     if(f.kind in refs){refs[f.kind]=(refs[f.kind]||[]).concat(f.rows||[]);return;}
+    if(f.kind==="tips"){tipRows=(tipRows||[]).concat(f.rows||[]);return;}
     const rows=(f.rows||[]).map(normRow);
     const have=new Set(Object.keys(rows[0]||{}));
     const miss=(REQ[f.kind]||[]).filter(c=>!have.has(c));
@@ -118,15 +140,19 @@ export function buildMonth(files,period){
     const nm=str(r["biker name"]);
     if(nm){const b=biker(nm);const key=b.sid||b.name;
       const o=by[key]||(by[key]={sweater_id:b.sid,biker_name:b.name,net_washes:0,collect_payment:0,cancel_client:0,cancel_admin:0,_r:[],daily:{}});
-      if(q!=null)o._r.push(q);if(bh!=null)o._r.push(bh);
-      if(st==="collect_payment"){o.collect_payment++;o.daily[d]=(o.daily[d]||0)+1;}
+      // التقييم من الحجوزات المكتملة فقط (الملغاة خارج المتوسط)
+      if(st==="collect_payment"){o.collect_payment++;o.daily[d]=(o.daily[d]||0)+1;if(q!=null)o._r.push(q);if(bh!=null)o._r.push(bh);}
       else if(st==="cancel_client")o.cancel_client++;else if(st==="cancel_admin")o.cancel_admin++;}
     if(!CLOSED.has(st))return;
     const x=days[d]||(days[d]={day:d,period,total_bookings:0,washes:0,cancel_client:0,cancel_admin:0,_q:[],_b:[]});
     x.total_bookings++;if(st==="collect_payment"){x.washes++;if(!lastWash||d>lastWash)lastWash=d;}else x[st]++;
     if(q!=null)x._q.push(q);if(bh!=null)x._b.push(bh);
   });
-  const bikers=Object.values(by).map(({_r,...o})=>({...o,net_washes:o.collect_payment,rating:avg(_r),days:Object.keys(o.daily).length}))
+  // الصافي = المكتملة + إلغاء العميل (HR-POL-003)؛ daily = المكتملة لكل يوم
+  const tipMap=tipRows?parseTips(tipRows):null;
+  const bikers=Object.values(by).map(({_r,...o})=>{const t=tipMap&&o.sweater_id?tipMap[o.sweater_id]:null;
+    return{...o,net_washes:o.collect_payment+o.cancel_client,rating:avgExact(_r),days:Object.keys(o.daily).length,
+      tips:tipMap?(t?t.tips:0):null,tip_bookings:t?t.bookings:null};})
     .sort((a,b)=>b.net_washes-a.net_washes);
   const daily=Object.values(days).sort((a,b)=>a.day<b.day?-1:1).map(({_q,_b,...x})=>({...x,avg_quality:avg(_q),avg_behavior:avg(_b)}));
 
@@ -151,7 +177,7 @@ export function buildMonth(files,period){
     else{const b=biker(r["biker name"]);tickets.push({period,booking_ref:ref,sweater_id:b.sid,biker_name:b.name,ticket_date:d,description:sub||"",sub_category:sub,compensation:val||null});}});
 
   const cnt=k=>adjustments.filter(a=>a.kind===k).length;
-  const online=bikers.reduce((s,b)=>s+b.net_washes,0);
+  const online=bikers.reduce((s,b)=>s+b.collect_payment,0);
   const summary={online,add:cnt("add"),deduct:cnt("deduct"),maintenance:cnt("maintenance"),freeWash,otherComp:Math.round(otherComp*100)/100};
   summary.expectedNet=summary.online+summary.add-summary.deduct-summary.maintenance-summary.freeWash;
 
@@ -162,6 +188,13 @@ export function buildMonth(files,period){
   if(!given.has("bookings"))W("no_bookings","لا يوجد ملف الحجوزات (bookings_report) — وهو إلزامي");
   else if(usable.bookings&&!seen.size)W("empty_month","ملف الحجوزات لا يحوي صفوفاً لهذا الشهر");
   if(seen.size&&!complete)W("incomplete",`الشهر غير مكتمل — ${open} حجزاً مفتوحاً${open?` (${Object.entries(openBy).map(([k,v])=>iso(`${k}: ${v}`)).join("، ")})`:""}، آخر يوم فيه غسلة ${lastWash?iso(lastWash):"—"}`);
+  if(tipMap){
+    const known=new Set(bikers.map(b=>b.sweater_id).filter(Boolean));
+    const stray=Object.keys(tipMap).filter(k=>!known.has(k)&&tipMap[k].tips);
+    if(stray.length)W("tips_unmatched",`إكراميات لأرقام ليست في حجوزات الشهر: ${stray.map(iso).join("، ")}`);
+    bikers.filter(b=>b.tip_bookings!=null&&b.tip_bookings!==b.collect_payment).forEach(b=>W("tips_count",`ملف الإكراميات: حجوزات ${iso(b.sweater_id)} = ${b.tip_bookings} ≠ المكتملة ${b.collect_payment} — تأكد أن الملف للشهر نفسه`));
+  }
+  bikers.filter(b=>b.sweater_id&&b.rating==null&&b.collect_payment>0).forEach(b=>W("no_rating",`لا تقييم لـ ${b.biker_name} ${iso("#"+b.sweater_id)} — لن يُحتسب 0 تلقائياً`));
   if(noSid.size)W("no_sid",`بايكر بلا رقم سويتر بين قوسين: ${[...noSid].join("، ")}`);
 
   return{bikers,daily,adjustments,tickets,summary,coverage,refs,warnings};

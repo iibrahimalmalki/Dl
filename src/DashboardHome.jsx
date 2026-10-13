@@ -44,7 +44,7 @@ export default function DashboardHome({onNav,theme="light"}){
       q("interview_sessions","status,decision,rating"),
       q("onboarding","progress"),
       q("ops_biker_month","period,sweater_id,biker_name,net_washes,rating,complaint_pct,approved_complaints"),
-      q("payroll_lines","period,role,total"),
+      supabase.from("payroll_lines").select("period,role,total,payroll_runs!inner(status)").neq("payroll_runs.status","draft").then(({data})=>data||[],()=>[]), // المعتمد فقط
       q("violations","status,severity,fine_applied"),
       q("field_rounds","compliance_pct,period,status,round_date,sweater_id"),
       q("vendor_expenses","exp_date,amount"),
@@ -157,7 +157,7 @@ export default function DashboardHome({onNav,theme="light"}){
     const sv=Object.values(sess);const reached=lv=>sv.filter(x=>x>=lv).length;
     const total0=reached(0)||sv.length;
     const funnel=[["دخول الإعلان",reached(0)],["المزايا",reached(1)],["الحاسبة",reached(2)],["يوم في الحياة",reached(3)],["الأسئلة",reached(4)],["زر التقديم",reached(5)]];
-    const bikers=d.emps.filter(e=>e.staff_role!=="manager");
+    const bikers=d.emps.filter(e=>!["manager","supervisor"].includes(e.staff_role)); // المدير والمشرف خارج البايكرز (isManagerial في testSandbox.js)
     const openViol=d.viol.filter(v=>!["closed","settled","paid","rejected"].includes(String(v.status||"").toLowerCase())).length;
     const finesTotal=d.viol.reduce((a,v)=>a+Number(v.fine_applied||0),0);
     const ivPending=d.ivs.filter(i=>i.status!=="completed").length;

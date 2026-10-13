@@ -3,6 +3,7 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import{ITEM_CATS,CAT_ICON,REQ_TYPES,REQ_STATUS,APPROVAL_THRESHOLD,needsCeo,STANDARD_KIT,money}from"./supplyPolicy";
+import{isManagerial}from"./testSandbox";
 
 const fmtD=d=>d?new Date(d).toLocaleDateString("en-GB"):"—";
 const today=()=>new Date().toISOString().slice(0,10);
@@ -26,7 +27,7 @@ export default function Supply({owner,opId}){
       supabase.from("sc_request_items").select("*").then(r=>r.data||[]),
       opF(supabase.from("sc_custody").select("*").order("assigned_at",{ascending:false})).then(r=>r.data||[]),
       opF(supabase.from("sc_stocktakes").select("*").order("created_at",{ascending:false})).then(r=>r.data||[]),
-      supabase.from("employees").select("id,full_name,employee_id,staff_role").then(r=>(r.data||[]).filter(e=>e.staff_role!=="manager")),
+      supabase.from("employees").select("id,full_name,employee_id,staff_role").then(r=>(r.data||[]).filter(e=>!isManagerial(e))),
       supabase.from("vendors").select("id,name").then(r=>r.data||[]),
     ]);
     setItems(it);setReqs(rq);setReqItems(ri);setCust(cu);setTakes(tk);setEmps(em);setVendors(vn);

@@ -3,6 +3,7 @@
 import { supabase, SUPA_URL, SUPA_ANON, ensureFreshToken } from "../supabase";
 import { normPhone } from "./engine";
 import { compressImage } from "./compress";
+import { isManagerial } from "../testSandbox";
 export { compressImage };
 
 export const BUCKET = "daily-receipts";
@@ -52,7 +53,7 @@ export async function loadAdmin() {
   ]);
   const R = [it, co, dl, sh, ad, em].map(res);
   return { items: R[0].data, couriers: R[1].data, deliveries: R[2].data, shares: R[3].data.map(flatShare), adjustments: R[4].data,
-    employees: R[5].data.filter(e => e.staff_role !== "manager"), ready: !R.slice(0, 5).some(r => r.missing), error: (R.find(r => r.error) || {}).error || null };
+    employees: R[5].data.filter(e => !isManagerial(e)), ready: !R.slice(0, 5).some(r => r.missing), error: (R.find(r => r.error) || {}).error || null };
 }
 
 async function uploadPhoto(path, blob) {

@@ -10,6 +10,7 @@ export const LEVELS={
   M5:{ar:"بايكر ممارس خبير",salary:1800},
 };
 export const SUPERVISOR_BASE=1500;
+export const SUP_RATE_CAP=1.75;   // سقف معدل المشرف لكل طلب
 // المزايا العينية الشهرية (غير نقدية — جزء من الحزمة)
 export const IN_KIND={housing:450,work_card:800,mobile:97,fuel:280,gosi:20,medical:50};
 export const IN_KIND_TOTAL=Object.values(IN_KIND).reduce((a,b)=>a+b,0); // 1697
@@ -92,13 +93,15 @@ export function computeBiker(inp){
   const capped=deductions>cap;
   if(capped)deductions=cap;
   const netBonus=round2(bonusBase+tips+production-deductions);
+  // قرار المالك 2026-10-13: لا يقف الصافي عند 0 — ما زاد من الاستقطاعات عن المكافأة يُخصم من الأساس (ضمن سقف 50%) مع تنبيه
+  const baseDeducted=netBonus<0?round2(-netBonus):0;
   const total=round2(base+netBonus);           // إجمالي الحزمة النقدية
   return{
     role:"biker",name:inp.name,biker_id:inp.biker_id,level,base,
     net_washes:washes,rating:Number(inp.rating)||0,complaint_pct:Number(inp.complaint_pct)||0,
     quality_riyal:qR,safety_riyal:sR,rate_per_wash:ratePerWash,
     fixed,quality,safety,bonus_base:bonusBase,tips,production,
-    deduction_parts:dParts,deductions,deduction_capped:capped,deduction_cap:cap,
+    deduction_parts:dParts,deductions,deduction_capped:capped,deduction_cap:cap,base_deducted:baseDeducted,
     net_bonus:netBonus,total,in_kind:IN_KIND_TOTAL,
   };
 }
@@ -110,24 +113,33 @@ export function computeSupervisor(inp){
   const orders=Number(inp.team_orders)||0;
   const qR=teamQualityRiyal(inp.team_rating);
   const sR=teamSafetyRiyal(inp.team_complaint_pct);
-  const ratePerOrder=round2(0.40+qR+sR);       // السقف 1.75
+  const ratePerOrder=Math.min(SUP_RATE_CAP,round2(0.40+qR+sR));
   const ordersRiyal=round2(orders*0.40);
   const quality=round2(orders*qR);
   const safety=round2(orders*sR);
-  const variable=round2(ordersRiyal+quality+safety);
-  const deductions=round2(inp.deductions);
-  const netBonus=round2(variable-deductions);
+  const variable=Math.min(round2(ordersRiyal+quality+safety),round2(orders*ratePerOrder));
+  // سقف الاستقطاعات 50% من الأساس كالبايكر، والصافي لا يقل عن 0
+  const cap=round2(base*0.5);
+  let deductions=round2(inp.deductions);
+  const capped=deductions>cap;
+  if(capped)deductions=cap;
+  const netBonus=Math.max(0,round2(variable-deductions));
   const total=round2(base+netBonus);
   return{
     role:"supervisor",name:inp.name,base,
     team_orders:orders,team_rating:Number(inp.team_rating)||0,team_complaint_pct:Number(inp.team_complaint_pct)||0,
     quality_riyal:qR,safety_riyal:sR,rate_per_order:ratePerOrder,
     orders_riyal:ordersRiyal,quality,safety,variable,
-    deductions,net_bonus:netBonus,total,
+    deductions,deduction_capped:capped,deduction_cap:cap,net_bonus:netBonus,total,
   };
 }
 
-// نسبة الشكاوى من عدد الشكاوى المعتمدة والغسلات
+// نسبة الشكاوى الكاملة بلا تقريب — هي التي تحدد الشريحة (2/201 = 0.995% ⇒ ريال 1.00 لا 0.75)
+export function complaintRatio(approved,washes){
+  const w=Number(washes)||0;if(!w)return 0;
+  return(Number(approved)||0)/w*100;
+}
+// نسبة الشكاوى للعرض فقط (منزلتان)
 export function complaintPct(approved,washes){
   const w=Number(washes)||0;if(!w)return 0;
   return round2((Number(approved)||0)/w*100);

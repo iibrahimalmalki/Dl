@@ -22,7 +22,8 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
   const[period,setPeriod]=useState(prevMonth());
   const[files,setFiles]=useState([]);            // [{id,filename,kind,rows,headers}]
   const[reading,setReading]=useState(false);const[drag,setDrag]=useState(false);
-  const[emps,setEmps]=useState({});               // employee_id → id
+  const[emps,setEmps]=useState({});               // employee_id → id (الحقيقيون فقط)
+  const[testSids,setTestSids]=useState(()=>new Set()); // أرقام الموظفين التجريبيين — لا تُحفظ (test_sandbox.md)
   const[saved,setSaved]=useState(0);              // صفوف ops_biker_month للشهر والمشغّل
   const[uploads,setUploads]=useState([]);
   const[existing,setExisting]=useState(null);     // Set(booking_ref) من ops_tickets
@@ -39,8 +40,8 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
     setSaved(count||0);setUploads(up||[]);
   };
   useEffect(()=>{loadStatus();setConfirmTmp(false);setRecon(null);/*eslint-disable-next-line*/},[period,opId]);
-  useEffect(()=>{(async()=>{const{data}=await supabase.from("employees").select("id,employee_id").not("employee_id","is",null);
-    const m={};(data||[]).forEach(e=>{m[String(e.employee_id).trim()]=e.id;});setEmps(m);})();},[]);
+  useEffect(()=>{(async()=>{const{data}=await supabase.from("employees").select("id,employee_id,is_test").not("employee_id","is",null);
+    const m={},t=new Set();(data||[]).forEach(e=>{const k=String(e.employee_id).trim();if(e.is_test)t.add(k);else m[k]=e.id;});setEmps(m);setTestSids(t);})();},[]);
 
   const addFiles=async list=>{
     const arr=[...(list||[])].filter(f=>/\.(csv|xlsx|xls)$/i.test(f.name));if(!arr.length)return;
@@ -59,7 +60,8 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
     const s=new Set();for(const c of chunk(refsKey.split(","),150)){const{data,error}=await supabase.from("ops_tickets").select("booking_ref").in("booking_ref",c);if(error)return;(data||[]).forEach(r=>s.add(String(r.booking_ref)));}
     if(live)setExisting(s);})();return()=>{live=false;};},[refsKey]);
 
-  const bikers=useMemo(()=>(built?built.bikers:[]).map(b=>({...b,emp:b.sweater_id?emps[String(b.sweater_id).trim()]||null:null})),[built,emps]);
+  const bikers=useMemo(()=>(built?built.bikers:[]).map(b=>{const k=b.sweater_id?String(b.sweater_id).trim():"";return{...b,emp:k?emps[k]||null:null,test:!!k&&testSids.has(k)};}),[built,emps,testSids]);
+  const hasTips=bikers.some(b=>b.tips!=null);
   const blocked=!built||built.warnings.some(w=>BLOCK.includes(w.code));
   const incomplete=built&&built.warnings.some(w=>w.code==="incomplete");
   const newTickets=built&&existing?built.tickets.filter(t=>!existing.has(String(t.booking_ref))).length:null;
@@ -70,11 +72,13 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
     const fail=(table,error)=>{toast.bad(`تعذّر الحفظ في ${table}`,error.message||String(error),0);setSaving(false);};
     try{
       // 1) ops_biker_month — بلا approved_complaints/complaint_pct لتبقى قيمتهما
-      const bm=bikers.filter(b=>b.sweater_id).map(b=>({operator_id:opId,period,sweater_id:b.sweater_id,employee_id:b.emp,biker_name:b.biker_name,
-        net_washes:b.net_washes,collect_payment:b.collect_payment,cancel_client:b.cancel_client,cancel_admin:b.cancel_admin,rating:b.rating,daily:b.daily,updated_at:now}));
+      //    الإكراميات تُكتب فقط إن رُفع ملفها (وإلا تبقى القيمة المحفوظة)، والتجريبي لا يُحفظ
+      const bm=bikers.filter(b=>b.sweater_id&&!b.test).map(b=>({operator_id:opId,period,sweater_id:b.sweater_id,employee_id:b.emp,biker_name:b.biker_name,
+        net_washes:b.net_washes,collect_payment:b.collect_payment,cancel_client:b.cancel_client,cancel_admin:b.cancel_admin,rating:b.rating,daily:b.daily,updated_at:now,
+        ...(hasTips?{tips:b.tips??0}:{})}));
       if(bm.length){const{error}=await supabase.from("ops_biker_month").upsert(bm,{onConflict:"operator_id,period,sweater_id"});if(error)return fail("ops_biker_month",error);}
       // 2) ops_daily
-      if(built.daily.length){const{error}=await supabase.from("ops_daily").upsert(built.daily,{onConflict:"day"});if(error)return fail("ops_daily",error);}
+      if(built.daily.length){const{error}=await supabase.from("ops_daily").upsert(built.daily.map(d=>({...d,operator_id:opId})),{onConflict:"operator_id,day"});if(error)return fail("ops_daily",error);}
       // 3) sweater_adjustments — الموجود يبقى كما هو
       if(built.adjustments.length){const{error}=await supabase.from("sweater_adjustments").upsert(built.adjustments.map(a=>({...a,operator_id:opId})),{onConflict:"booking_ref,kind",ignoreDuplicates:true});if(error)return fail("sweater_adjustments",error);}
       // 4) ops_tickets — إدخال الجديد فقط، وللموجود تعبئة sub_category/compensation إن كانتا فارغتين
@@ -89,9 +93,11 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
           if(r.sub_category==null&&t.sub_category!=null)patch.sub_category=t.sub_category;if(r.compensation==null&&t.compensation!=null)patch.compensation=t.compensation;
           if(Object.keys(patch).length){const{error}=await supabase.from("ops_tickets").update(patch).eq("id",r.id);if(error)return fail("ops_tickets",error);upd++;}}}
       }
-      // 5) report_uploads — صف لكل ملف
-      const ups=files.filter(f=>f.kind).map(f=>({operator_id:opId,period,kind:f.kind,filename:f.filename,rows:f.rows.length,uploaded_at:now}));
-      if(ups.length){const{error}=await supabase.from("report_uploads").insert(ups);if(error)return fail("report_uploads",error);}
+      // 5) report_uploads — صف واحد لكل نوع (آخر رفع يستبدل السابق بدل التكرار)
+      const byK={};files.filter(f=>f.kind).forEach(f=>{const u=byK[f.kind]||(byK[f.kind]={operator_id:opId,period,kind:f.kind,filename:"",rows:0,uploaded_at:now});
+        u.filename=u.filename?u.filename+" + "+f.filename:f.filename;u.rows+=f.rows.length;});
+      const ups=Object.values(byK);
+      if(ups.length){const{error}=await supabase.from("report_uploads").upsert(ups,{onConflict:"operator_id,period,kind"});if(error)return fail("report_uploads",error);}
       toast.ok(`حُفظت بيانات ${periodAr(period)}${incomplete?" (مؤقت)":""}`,`${bm.length} بايكر · ${built.daily.length} يوم · ${built.adjustments.length} تعديل · ${ins} تذكرة جديدة${upd?` · ${upd} محدّثة`:""}`,8000);
       setFiles([]);setConfirmTmp(false);await loadStatus();
     }catch(e){toast.bad("خطأ أثناء الحفظ",String(e.message||e),0);}
@@ -170,12 +176,14 @@ export default function MonthClose({opId,ops=[],onOp,me,owner,onNav}){
         {bikers.length>0&&<DataTable caption="معاينة البايكرز" rows={bikers} rowKey={b=>b.sweater_id||b.biker_name} pageSize={20} initialSort={{k:"net",dir:-1}}
           columns={[
             {k:"name",label:"البايكر",value:b=>b.biker_name,search:true,render:b=><span className="mc-bk"><b>{b.biker_name||"—"}</b><small dir="ltr">#{b.sweater_id||"—"}</small></span>},
-            {k:"net",label:"غسلات",num:true,value:b=>b.net_washes,render:b=><b>{b.net_washes}</b>},
+            {k:"net",label:"الصافي",num:true,value:b=>b.net_washes,render:b=><b title={`مكتملة ${b.collect_payment} + إلغاء عميل ${b.cancel_client}`}>{b.net_washes}</b>},
+            {k:"cp",label:"مكتملة",num:true,value:b=>b.collect_payment,hideSm:true},
             {k:"cc",label:"إلغاء عميل",num:true,value:b=>b.cancel_client},
             {k:"ca",label:"إلغاء إدارة",num:true,value:b=>b.cancel_admin},
-            {k:"rt",label:"تقييم",num:true,value:b=>b.rating,render:b=>b.rating!=null?b.rating.toFixed(2):"—"},
+            {k:"rt",label:"تقييم",num:true,value:b=>b.rating,render:b=>b.rating!=null?b.rating.toFixed(2):<Badge tone="warn">لا تقييم</Badge>},
+            ...(hasTips?[{k:"tp",label:"إكراميات",num:true,value:b=>b.tips,render:b=>(b.tips||0).toFixed(2)}]:[]),
             {k:"days",label:"أيام عمل",num:true,value:b=>b.days,hideSm:true},
-            {k:"link",label:"الربط بموظف",sortable:false,render:b=>!b.sweater_id?<Badge tone="bad">بلا رقم — لن يُحفظ</Badge>:b.emp?<Badge tone="ok">مرتبط</Badge>:<Badge tone="warn">غير مرتبط</Badge>},
+            {k:"link",label:"الربط بموظف",sortable:false,render:b=>!b.sweater_id?<Badge tone="bad">بلا رقم — لن يُحفظ</Badge>:b.test?<Badge>🧪 تجريبي — لن يُحفظ</Badge>:b.emp?<Badge tone="ok">مرتبط</Badge>:<Badge tone="warn">غير مرتبط</Badge>},
           ]}/>}
 
         <div className="mc-act">
