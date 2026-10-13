@@ -4,8 +4,7 @@ import Icon from"./Icon";
 import{useToast}from"./ui";
 import HandoverLog from"./HandoverLog";
 import TestBadge from"./TestBadge";
-import{realOnly,realBy,testLast}from"./testSandbox";
-import{isManagerial}from"./testSandbox";
+import{realOnly,realBy,testLast,isManagerial}from"./testSandbox";
 // «الطلبات والتنبيهات»: طلبات الوقود والزيت من البوابة + fleet_alerts() — بصلاحية fleet_alerts، تُحمَّل عند فتح التبويب فقط
 const FleetRequests=lazy(()=>import("./FleetRequests"));
 

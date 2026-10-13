@@ -9,6 +9,8 @@
 --      الواجهة في هذا الـPR تعامل manager وsupervisor معاً كإدارة (isManagerial) فلا يظهر سلمان في قوائم البايكرز.
 --   4) report_uploads: صف واحد لكل (مشغّل، شهر، نوع) — الإقفال يعمل upsert بدل insert.
 --   5) ops_daily: عمود operator_id ومفتاح (operator_id, day) بدل day وحده.
+--   6) complaint_pct يُعاد حسابه كلما تغيّر الصافي (إعادة الإقفال تغيّر net_washes ولا تكتب complaint_pct؛
+--      sync_approved_complaints يحدّثه فقط عند تغيّر قرارات التذاكر).
 --
 -- وقائع مقروءة من الإنتاج 2026-10-13:
 --   • ops_biker_month.rating = numeric(4,2)؛ لا عمود tips. لا view يعتمد على ops_biker_month.
@@ -74,6 +76,22 @@ commit;
 -- alter table public.ops_daily add constraint ops_daily_pkey primary key using index ops_daily_op_day;
 -- commit;
 
+-- ═══ 6) complaint_pct مع الصافي ═══
+begin;
+create or replace function public.ops_bm_complaint_pct() returns trigger
+language plpgsql set search_path to 'public' as $$
+begin
+  if tg_op = 'INSERT' or new.net_washes is distinct from old.net_washes then
+    new.complaint_pct := case when coalesce(new.net_washes, 0) > 0
+      then round(coalesce(new.approved_complaints, 0)::numeric / new.net_washes * 100, 2) else 0 end;
+  end if;
+  return new;
+end $$;
+revoke all on function public.ops_bm_complaint_pct() from public, anon, authenticated;
+create or replace trigger trg_ops_bm_complaint_pct before insert or update of net_washes on public.ops_biker_month
+  for each row execute function public.ops_bm_complaint_pct();
+commit;
+
 -- ═══ التحقق ═══
 -- select column_name, data_type, numeric_precision, numeric_scale from information_schema.columns
 --  where (table_name, column_name) in (('ops_biker_month','tips'),('ops_biker_month','rating'),('employees','start_date'),('ops_daily','operator_id'));
@@ -86,6 +104,8 @@ commit;
 
 -- ═══ التراجع (SQL Editor) ═══
 -- begin;
+-- drop trigger if exists trg_ops_bm_complaint_pct on public.ops_biker_month;
+-- drop function if exists public.ops_bm_complaint_pct();
 -- alter table public.ops_daily drop constraint if exists ops_daily_pkey;
 -- alter table public.ops_daily add constraint ops_daily_pkey primary key (day);
 -- drop index if exists public.ops_daily_op_day;

@@ -63,4 +63,7 @@ ok('إعادة التشغيل لا تغيّر شيئاً',err(W)===null&&nw('202
 ps(`update ops_biker_month set net_washes=1 where period='2026-08' and sweater_id='1624'; update ops_biker_month set net_washes=collect_payment where period='2026-08' and sweater_id in ('1648')`);
 const e=err(W);
 ok('عدد غير متوقع ⇒ تراجع كامل',e&&e.includes('تراجع')&&nw('2026-08')==='1/134/236');
+ps(`update ops_biker_month set approved_complaints=4 where period='2026-08' and sweater_id='1648'`);
+ps(`update ops_biker_month set net_washes=201 where period='2026-08' and sweater_id='1648'`);
+ok('إعادة الإقفال (تغيّر الصافي) تعيد حساب complaint_pct: 4/201 = 1.99',ps(`select complaint_pct from ops_biker_month where period='2026-08' and sweater_id='1648'`)==='1.99');
 }finally{ps(`drop database if exists ${db} with (force)`,'postgres');}

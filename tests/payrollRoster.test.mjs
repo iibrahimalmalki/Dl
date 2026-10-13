@@ -24,6 +24,9 @@ ok('من له سطر محفوظ يبقى ظاهراً ولو خرج من الت�
 ok('غير المربوط = رقم في العمليات بلا موظف (لا يُستبعد بصمت)',R.unlinked.length===1&&R.unlinked[0].sweater_id==='9999'&&R.unlinked[0].biker_name==='Ghost');
 ok('اسم المشرف من جدول الموظفين',R.supervisor&&R.supervisor.full_name==='سلمان المالكي');
 ok('isActiveBiker: دور آخر غير biker مرفوض',!isActiveBiker(E('x','1',{staff_role:'manager'}),'2026-07')&&!isActiveBiker(E('x','',{}),'2026-07'));
+ok('إعادة التعيين: مباشرة بعد آخر يوم تعيده للمسير',payrollRoster({emps:[E('re','1631',{start_date:'2026-08-01'})],offboarding:offs,period:'2026-08'}).bikers.length===1
+  &&payrollRoster({emps:[E('re','1631',{start_date:'2026-08-01'})],offboarding:offs,period:'2026-07'}).bikers.length===0);
+ok('رقم التجريبي في العمليات لا يُعدّ «غير مربوط»',payrollRoster({emps,ops:[{sweater_id:'TEST01'}],period:'2026-07'}).unlinked.length===0);
 ok('الإكراميات: يوليو 81.90 مقابل 82.00 ⇒ بلا تحذير',tipsCheck(81.9,82)===null);
 const tw=tipsCheck(80.5,82);
 ok('الإكراميات: فرق 1.50 ⇒ تحذير',tw&&tw.diff===1.5&&tw.total===80.5&&tw.invoice===82);

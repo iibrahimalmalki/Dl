@@ -12,7 +12,9 @@ export function isActiveBiker(e,period,lastDay){
   if((e.staff_role||"biker")!=="biker")return false;
   const{start,end}=monthBounds(period);
   if(e.start_date&&String(e.start_date).slice(0,10)>end)return false;
-  if(lastDay&&String(lastDay).slice(0,10)<start)return false;
+  // غادر قبل الشهر ولم يُعَد تعيينه بعد المغادرة (مباشرة لاحقة لآخر يوم = إعادة تعيين)
+  const ld=lastDay&&String(lastDay).slice(0,10),sd=e.start_date&&String(e.start_date).slice(0,10);
+  if(ld&&ld<start&&!(sd&&sd>ld))return false;
   return true;
 }
 
@@ -24,9 +26,9 @@ export function payrollRoster({emps=[],offboarding=[],ops=[],period,savedIds=[]}
   const lastOf=e=>{const a=lastBy[e.id],b=lastBy["s:"+sid(e.employee_id)];return a&&b?(a>b?a:b):a||b||null;};
   const bikers=emps.filter(e=>saved.has(e.id)||isActiveBiker(e,period,lastOf(e)));
   // كل رقم سويتر لموظف حقيقي (حتى غير النشط) يُعدّ مربوطاً؛ غير المربوط = لا موظف بهذا الرقم
-  const known=new Set(emps.filter(e=>!e.is_test).map(e=>sid(e.employee_id)).filter(Boolean));
+  const known=new Set(emps.map(e=>sid(e.employee_id)).filter(Boolean));   // التجريبي معروف أيضاً (خارج المسير لا «غير مربوط»)
   const unlinked=ops.filter(o=>sid(o.sweater_id)&&!known.has(sid(o.sweater_id))).map(o=>({sweater_id:sid(o.sweater_id),biker_name:o.biker_name||""}));
-  const supervisor=emps.find(e=>e.staff_role==="supervisor")||null;
+  const supervisor=emps.find(e=>e.staff_role==="supervisor"&&!e.is_test)||null;
   return{bikers,unlinked,supervisor};
 }
 

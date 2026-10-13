@@ -34,12 +34,12 @@ export default function Payroll({opId,owner}){
   useEffect(()=>{(async()=>{
     setLoading(true);setMsg(null);
     // كل الموظفين الحقيقيين؛ الفرز للمسير (بايكر نشط في الشهر) في payrollRoster
-    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id,staff_role,start_date").eq("is_test",false).order("employee_id"); // التجريبي خارج الكشف وراتب المشرف
+    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id,staff_role,start_date,is_test").order("employee_id"); // التجريبي يُستبعد في payrollRoster (ويُعرف رقمه فلا يظهر «غير مربوط»)
     if(opId&&opId!=="all")q=q.eq("operator_id",opId);
     const[{data:emps},{data:offs},{data:stl}]=await Promise.all([q,
       supabase.from("offboarding").select("employee_id,sweater_id,last_day").not("last_day","is",null),
       (()=>{let sq=supabase.from("sweater_settlements").select("tip_amount").eq("period",period);if(opId&&opId!=="all")sq=sq.eq("operator_id",opId);return sq;})()]);
-    const stlT=(stl||[]).filter(x=>x.tip_amount!=null);setStlTips(stlT.length?stlT.reduce((a,x)=>a+Number(x.tip_amount),0):null);
+    const stlT=(stl||[]).filter(x=>Number(x.tip_amount)>0); // tip_amount افتراضه 0 قبل قبول الفاتورة ⇒ 0 = غير معروفsetStlTips(stlT.length?stlT.reduce((a,x)=>a+Number(x.tip_amount),0):null);
     // كشف محفوظ؟
     // وضع «الكل»: لا يُحمَّل مسير مشغّل بعينه (كان يأخذ مسيراً عشوائياً ثم يكتب فوقه)
     let run=null;
@@ -169,6 +169,7 @@ export default function Payroll({opId,owner}){
     {fromOps&&!ro&&<div className="pr-msg ok" style={{background:"var(--info-bg)",color:"var(--info-ink)"}}><Icon n="operations" s={13} style={{verticalAlign:"-2px"}}/> المدخلات معبّأة تلقائياً من تقارير سويتر (العمليات) — يمكنك التعديل يدوياً قبل الحفظ.</div>}
 
     {unlinked.length>0&&<div className="pr-msg err"><Icon n="alert" s={13}/> بايكرز في تقارير الشهر غير مربوطين بموظف — لن يظهروا في المسير حتى تُربط أرقامهم من شاشة الموظفين: {unlinked.map(u=>`${u.biker_name||"—"} #${u.sweater_id}`).join("، ")}</div>}
+    {!allOps&&!sup.name&&<div className="pr-msg err"><Icon n="alert" s={13}/> لا مشرف محدّد — عيّن دور «supervisor» للمشرف في جدول الموظفين أو اكتب اسمه في بطاقة المشرف.</div>}
     {computed.tipsWarn&&<div className="pr-msg err"><Icon n="alert" s={13}/> مجموع الإكراميات {AR(computed.tipsWarn.total)} ر ≠ إكراميات الفاتورة {AR(computed.tipsWarn.invoice)} ر (الفرق {AR(computed.tipsWarn.diff)} ر)</div>}
 
     {/* ملخص المسير */}
@@ -205,9 +206,9 @@ export default function Payroll({opId,owner}){
           <span className="pr-chip hot">المعدل/غسلة <b>{r.rate_per_wash.toFixed(2)}</b></span>
           {r.production>0&&<span className="pr-chip good"><Icon n="star" s={11}/> إنتاج {r.production}</span>}
           {(+b.inp.rating>0&&+b.inp.rating<4)&&<span className="pr-chip warn"><Icon n="alert" s={11}/> تقييم &lt;4 يوقف الإنتاج</span>}
-          {b.noRating&&<span className="pr-chip warn"><Icon n="alert" s={11}/> لا تقييم — أدخله يدوياً (لا يُحتسب 0 تلقائياً)</span>}
-          {b.noWashes&&<span className="pr-chip warn"><Icon n="alert" s={11}/> بدون غسلات — تأكد</span>}
-          {b.noStart&&<span className="pr-chip warn"><Icon n="alert" s={11}/> تاريخ المباشرة غير مُدخل</span>}
+          {b.noRating&&<span className="pr-chip caut"><Icon n="alert" s={11}/> لا تقييم — أدخله يدوياً (لا يُحتسب 0 تلقائياً)</span>}
+          {b.noWashes&&<span className="pr-chip caut"><Icon n="alert" s={11}/> بدون غسلات — تأكد</span>}
+          {b.noStart&&<span className="pr-chip caut"><Icon n="alert" s={11}/> تاريخ المباشرة غير مُدخل</span>}
           {r.base_deducted>0&&<span className="pr-chip bad"><Icon n="alert" s={11}/> الاستقطاعات تتجاوز المكافأة — يُخصم {AR(r.base_deducted)} ر من الأساس</span>}
         </div>
         <div className="pr-deduct-t" onClick={()=>setOpenDeduct(p=>({...p,[i]:!od}))}>
@@ -307,7 +308,7 @@ const CSS=`
 .pr-chip{display:inline-flex;align-items:center;gap:5px;background:var(--soft);border:1px solid var(--line-2);border-radius:9px;padding:4px 9px;font-size:11px;color:var(--mut);font-weight:600}
 .pr-chip b{color:var(--ink)}
 .pr-chip.hot{background:var(--p-100);border-color:rgba(var(--p-rgb),.35);color:var(--warn-ink)}.pr-chip.hot b{color:var(--warn-ink)}
-.pr-chip.warn{background:var(--warn-bg);color:var(--warn-ink)}.pr-chip.bad{background:var(--bad-bg);color:var(--bad-ink)}
+.pr-chip.caut{background:var(--warn-bg);color:var(--warn-ink)}.pr-chip.bad{background:var(--bad-bg);color:var(--bad-ink)}
 .pr-chip.good{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok-ink)}.pr-chip.good b{color:var(--ok-ink)}
 .pr-chip.warn{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent);color:var(--bad-ink)}
 .pr-deduct-t{display:flex;align-items:center;gap:7px;margin-top:11px;padding-top:11px;border-top:1px dashed var(--line);font-size:12px;font-weight:700;color:var(--mut);cursor:pointer}
