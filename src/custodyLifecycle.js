@@ -86,7 +86,7 @@ export function updateError(f={}){
 }
 
 // السجل الزمني لقطعة (صفحة العُهد): إنشاء، تسجيل/تحديث، اعتماد/رفض، استبدال
-const SRC={round:"من جولة ميدانية",declaration:"من إقرار العهدة",replacement:"بديل لقطعة مُستبدلة",manual:"يدوياً"};
+const SRC={round:"من جولة ميدانية",declaration:"من إقرار العهدة",replacement:"بديل لقطعة مُستبدلة",manual:"يدوياً",handover:"بتسليم عهدة (سلاسل الإمداد)"};
 export function timeline(asset,rows=[]){
   const ev=[];
   ev.push({at:asset.created_at||asset.start_date,type:"created",ar:`أُنشئت ${SRC[asset.source]||asset.source||""} · بداية العمر ${asset.start_date}`});
