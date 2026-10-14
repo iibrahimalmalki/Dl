@@ -1160,7 +1160,7 @@ function Assets({ me }) {
       supabase.from("biker_assets").select("id,kind,asset_id,items,notes,status,reject_reason,reviewed_at,request_id,created_at")
         .eq("biker_employee_id", bid).order("created_at", { ascending: false }).limit(300),
       // RLS (ca_biker_sel) يقصرها على قطع البايكر؛ sweater_id = رقمه في كل السجلات
-      supabase.from("custody_assets").select("id,item_type,category,name,name_en,start_date,end_date,life_months,status,reorder_request_id,source,created_at,serial_no,specs")
+      supabase.from("my_custody_assets").select("id,item_type,category,name,name_en,start_date,end_date,life_months,status,reorder_request_id,source,created_at,serial_no,specs")
         .eq("sweater_id", bid).order("name"),
     ]);
     if (a.error || b.error) { setLoadErr(a.error || b.error); setDecls(d => d || []); setPieces(p => p || []); return; }

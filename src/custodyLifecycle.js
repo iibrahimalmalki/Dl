@@ -11,8 +11,8 @@ export const kindOf=r=>(r&&r.kind)||"baseline";
 
 const CLOSED=["replaced","returned"];
 export const isLive=a=>!!a&&!CLOSED.includes(a.status);
-// قطع «عهدتي الحالية»: النشطة/المستحقة، والدراجة لها تبويبها الخاص (الاستلام)
-export const myPieces=(assets=[])=>assets.filter(a=>isLive(a)&&a.item_type!=="motorcycle");
+// قطع «عهدتي الحالية»: النشطة/المستحقة، والدراجة لها تبويبها الخاص (الاستلام)، و«الناقصة» (سُجّلت ناقصة في جولة) ليست بيد البايكر
+export const myPieces=(assets=[])=>assets.filter(a=>isLive(a)&&a.status!=="missing"&&a.item_type!=="motorcycle");
 
 // حالة التسجيل الأول للبايكر من صفوفه في biker_assets ⇒ none | pending | approved | rejected (مع الصف)
 export function baselineState(rows=[]){
@@ -27,7 +27,7 @@ export function baselineState(rows=[]){
 const RANK={good:0,fair:1,poor:2,damaged:3};
 export const worst=conds=>conds.filter(Boolean).reduce((a,c)=>(RANK[c]??0)>(RANK[a]??-1)?c:a,null);
 
-const addMonths=(iso,m)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()+Math.round(Number(m)||0));return d.toISOString().slice(0,10);};
+export const addMonths=(iso,m)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()+Math.round(Number(m)||0));return d.toISOString().slice(0,10);};
 // أسطر اعتماد التسجيل الأول: قطعة لكل مفتاح كتالوج. قطعة نشطة لنفس البايكر ونفس الصنف (من الجولات) ⇒ تُربط ولا يتغيّر تاريخها.
 // items: أصناف الإقرار · assets: قطع custody_assets لنفس البايكر (عبر employees) · start: تاريخ بداية القطع الجديدة
 // ⇒ {lines, unmapped}: unmapped = أصناف بلا مفتاح كتالوج (يرفض الخادم الاعتماد إن وُجدت)
@@ -38,7 +38,8 @@ export function baselineLines(items=[],assets=[],start){
     if(!groups.has(ck))groups.set(ck,[]);groups.get(ck).push(it);});
   const lines=[...groups.entries()].map(([ck,its])=>{
     const c=catalogByKey(ck);
-    const ex=assets.find(a=>isLive(a)&&catalogOfAsset(a)&&catalogOfAsset(a).key===ck)||null;
+    // «الناقصة» لا تُربط: يُنشأ للإقرار قطعة جديدة وتُغلق الناقصة في القاعدة (custody_missing_supersede)
+    const ex=assets.find(a=>isLive(a)&&a.status!=="missing"&&catalogOfAsset(a)&&catalogOfAsset(a).key===ck)||null;
     return{catalog_key:ck,item_keys:its.map(i=>i.key),asset_id:ex?ex.id:null,
       name:c.name,name_en:c.en,item_type:c.type,category:c.category,life_months:c.life,lead_days:c.lead,
       condition:worst(its.map(i=>i.condition)),
@@ -107,4 +108,4 @@ export function replacementRow(old,today,extra={}){
     item_type:old.item_type,category:old.category,name:old.name,name_en:old.name_en||null,
     start_date:today,life_months:life,lead_days:lead,end_date:addMonths(today,life),status:"active",source:"replacement",notes:`بديل عن ${old.id}`,...extra};
 }
-export{CATALOG};
+export{CATALOG,catalogByKey,catalogOfAsset};

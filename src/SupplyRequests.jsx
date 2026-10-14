@@ -5,6 +5,7 @@ import{useToast}from"./ui";
 import{buildSupplyRequestMsg,buildEscalationMsg,buildConsolidatedMsg,classifyOpenRequests,elapsedBoth}from"./fieldReport";
 import ActivityLog from"./ActivityLog";
 import{signedUrls}from"./storageUrl";
+import{renewTargets}from"./custodyRound";
 const SR_FL={status:"الحالة",requesting_dept:"الجهة الطالبة",biker_name:"البايكر",sweater_id:"رقم البايكر",ref:"المرجع",sla_hours:"مهلة (ساعة)"};
 const SR_DV={open:"مفتوح",escalated:"مُصعّد",completed:"مكتمل",cancelled:"ملغى"};
 
@@ -77,10 +78,30 @@ export default function SupplyRequests({opId,owner}){
     try{window.location.href=url;}catch(_){}
   };
   const complete=async(r)=>{
-    const note=prompt("ملاحظة الاكتمال (اختياري) — ما الذي تم توفيره؟","تم التوفير")||null;
-    const{data}=await supabase.from("supply_requests").update({status:"completed",completed_at:new Date().toISOString(),completion_note:note}).eq("id",r.id).select().single();
+    const raw=prompt("ملاحظة الاكتمال (اختياري) — ما الذي تم توفيره؟","تم التوفير");
+    if(raw===null)return; // «إلغاء» لا يغلق الطلب
+    const note=raw.trim()||null;
+    // التسليم يجدّد دورة العهدة (البداية = يوم التسليم) — src/custodyRound.js:
+    // القطع المربوطة بالطلب نفسه (reorder_request_id: اعتماد إقرار/«طلب سويتر»)، ولطلب الجولة: نفس بايكر الجولة ونفس الصنف
+    const LIVE=["active","due","missing"],COLS="id,employee_id,name,name_en,item_type,status,reorder_request_id";
+    const{data:linked,error:e1}=await supabase.from("custody_assets").select(COLS).eq("reorder_request_id",r.id).in("status",LIVE);
+    if(e1){setMsg({ok:false,t:"تعذّر قراءة العهد المرتبطة بالطلب — لم يُغلق: "+(e1.message||e1)});return;}
+    let targets=(linked||[]).filter(a=>a.item_type!=="device"&&a.item_type!=="motorcycle");
+    if(r.round_id){
+      const{data:rd,error:e2}=await supabase.from("field_rounds").select("employee_id").eq("id",r.round_id).maybeSingle();
+      if(e2){setMsg({ok:false,t:"تعذّر قراءة جولة الطلب — لم يُغلق: "+(e2.message||e2)});return;}
+      if(rd&&rd.employee_id){
+        const{data:as,error:e3}=await supabase.from("custody_assets").select(COLS).eq("employee_id",rd.employee_id).in("status",LIVE);
+        if(e3){setMsg({ok:false,t:"تعذّر قراءة عهد البايكر — لم يُغلق: "+(e3.message||e3)});return;}
+        const ids=new Set(targets.map(a=>a.id));renewTargets(r.items,as||[],rd.employee_id).forEach(a=>{if(!ids.has(a.id))targets.push(a);});
+      }
+    }
+    if(targets.length&&!confirm(`تسليم ${r.ref} يجدّد دورة هذه العُهد لـ ${r.biker_name||r.sweater_id} (البداية اليوم):\n• ${targets.map(a=>a.name+(a.status==="missing"?" (كانت ناقصة)":"")).join("\n• ")}\n\nمتابعة؟`))return;
+    const{data:res,error}=await supabase.rpc("supply_request_complete",{p_request:r.id,p_note:note,p_assets:targets.map(a=>a.id)});
+    if(error){setMsg({ok:false,t:"تعذّر إغلاق الطلب: "+(error.message||error)});return;}
+    const{data}=await supabase.from("supply_requests").select("*").eq("id",r.id).single();
     if(data)setRows(p=>p.map(x=>x.id===r.id?data:x));
-    setMsg({ok:true,t:`تم إغلاق الطلب ${r.ref} كمكتمل`});
+    setMsg({ok:true,t:`تم إغلاق الطلب ${r.ref} كمكتمل`+(res&&res.renewed?` · جُدّدت ${res.renewed} عُهدة من ${res.start}`:"")});
   };
   const del=async(r)=>{if(!confirm("حذف هذا الطلب؟"))return;const{error}=await supabase.from("supply_requests").delete().eq("id",r.id);if(!error)setRows(p=>p.filter(x=>x.id!==r.id));};
 
