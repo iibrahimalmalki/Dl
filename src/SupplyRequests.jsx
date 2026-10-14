@@ -157,7 +157,7 @@ export default function SupplyRequests({opId,owner}){
         <div className="sq-items">
           {(r.items||[]).map((it,i)=>(
             <div className="sq-item" key={i}>
-              {it.photo?<button className="sq-iph" onClick={()=>setZoom(photoUrls[it.photo]||it.photo)} aria-label={"صورة "+(it.ar||"")}><img src={photoUrls[it.photo]||it.photo} alt="" loading="lazy"/></button>:<span className="sq-in">#{it.n}</span>}
+              {it.photo?<button className="sq-iph" onClick={()=>setZoom(photoUrls[it.photo]||it.photo)} aria-label={"صورة "+(it.ar||"")}><img src={photoUrls[it.photo]||it.photo} alt="" loading="lazy"/></button>:<span className="sq-in">{it.n!=null?"#"+it.n:"•"}</span>}
               <div className="sq-itxt"><div className="sq-iar">{it.ar}{it.parts_ar?<span className="sq-part"> 🔧 {it.parts_ar}</span>:null}</div><div className="sq-icat">{it.type} · {it.category} — <b>{it.status_ar}</b>{it.note?` · ${it.note}`:""}</div></div>
             </div>))}
         </div>
