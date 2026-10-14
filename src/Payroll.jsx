@@ -27,7 +27,7 @@ export default function Payroll({opId,owner}){
   const[stlTips,setStlTips]=useState(null);   // sweater_settlements.tip_amount للشهر
   const[supPay,setSupPay]=useState(null);   // حالة دفع سطر المشرف المحفوظ
   const[payLines,setPayLines]=useState([]); // أسطر المسير المحفوظة (بمعرّفاتها) لقسم «الدفع»
-  const[empNames,setEmpNames]=useState({}); // employee_id ⇒ {ar, bn} أسماء العرض لرسالة الواتساب (employees.name_ar/name_bn)
+  const[empNames,setEmpNames]=useState({}); // employee_id ⇒ {ar, bn, en} أسماء العرض لرسالة الواتساب (employees.name_ar/name_bn/name_en)
   const[supAuto,setSupAuto]=useState(true);  // اشتقاق مدخلات الفريق تلقائياً
   const[runId,setRunId]=useState(null);
   const[status,setStatus]=useState("draft");
@@ -43,13 +43,13 @@ export default function Payroll({opId,owner}){
   useEffect(()=>{let off=false;(async()=>{   // off: تغيّر الشهر/المشغّل قبل اكتمال التحميل ⇒ يُهمل الرد القديم
     setLoading(true);setMsg(null);
     // كل الموظفين الحقيقيين؛ الفرز للمسير (بايكر نشط في الشهر) في payrollRoster
-    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id,staff_role,start_date,is_test,name_ar,name_bn").order("employee_id"); // التجريبي يُستبعد في payrollRoster (ويُعرف رقمه فلا يظهر «غير مربوط»)
+    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id,staff_role,start_date,is_test,name_ar,name_bn,name_en").order("employee_id"); // التجريبي يُستبعد في payrollRoster (ويُعرف رقمه فلا يظهر «غير مربوط»)
     if(opId&&opId!=="all")q=q.eq("operator_id",opId);
     const[{data:emps},{data:offs},{data:stl}]=await Promise.all([q,
       supabase.from("offboarding").select("employee_id,sweater_id,last_day").not("last_day","is",null),
       (()=>{let sq=supabase.from("sweater_settlements").select("tip_amount").eq("period",period);if(opId&&opId!=="all")sq=sq.eq("operator_id",opId);return sq;})()]);
     if(off)return;
-    setEmpNames(Object.fromEntries((emps||[]).map(e=>[e.id,{ar:e.name_ar||"",bn:e.name_bn||""}])));
+    setEmpNames(Object.fromEntries((emps||[]).map(e=>[e.id,{ar:e.name_ar||"",bn:e.name_bn||"",en:e.name_en||""}])));
     const stlT=(stl||[]).filter(x=>Number(x.tip_amount)>0); // tip_amount افتراضه 0 قبل قبول الفاتورة ⇒ 0 = غير معروفsetStlTips(stlT.length?stlT.reduce((a,x)=>a+Number(x.tip_amount),0):null);
     // كشف محفوظ؟
     // وضع «الكل»: لا يُحمَّل مسير مشغّل بعينه (كان يأخذ مسيراً عشوائياً ثم يكتب فوقه)

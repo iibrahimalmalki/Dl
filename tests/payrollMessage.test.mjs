@@ -64,17 +64,18 @@ Assalamu Alaikum, Brother *Midul*
 ━━━━━━━━━━━━━━━━━━━━
 🏢 مؤسسة دلو ورغوة | Dalu Warghwah Est.
 📅 يوليو 2026 | July 2026`;
-const MID_N={ar:'ميدول',bn:'মিদুল'},RAK_N={ar:'رقيب',bn:'রাকিব'};
+const MID_N={ar:'ميدول',bn:'মিদুল',en:'Midul'},RAK_N={ar:'رقيب',bn:'রাকিব',en:'Rakib'};
 const got=payrollMessage(mid,{notes,complaints:cc,names:MID_N});
 ok('ميدول يوليو يطابق النموذج المعتمد حرفياً (190، 4.48، 9/4/5، 2.11%، 2.75، 522.50، 42.90، 565.40، …3372)',got===EXPECTED);
 if(got!==EXPECTED){const a=got.split('\n'),b=EXPECTED.split('\n');for(let i=0;i<Math.max(a.length,b.length);i++)if(a[i]!==b[i]){console.log('  سطر',i+1,'\n  الناتج:  ',JSON.stringify(a[i]),'\n  المتوقع: ',JSON.stringify(b[i]));break;}}
 ok('أرقام إنجليزية في كل الأسطر حتى البنغالي (2026 لا ২০২৬)، وحتى لو كُتبت الكلمة بأرقام عربية/بنغالية',!/[٠-٩০-৯]/.test(got)&&!/[٠-٩০-৯]/.test(payrollMessage(mid,{notes:{ar:'مكافأة ٢٥',bn:'৫০ রিয়াল'}}))&&payrollMessage(mid,{notes:{ar:'مكافأة ٢٥'}}).includes('مكافأة 25'));
-ok('أسماء العرض من ملف الموظف: العربي والبنغالي منه، والإنجليزي الاسم الأول المسجّل',displayName(mid,'ar',MID_N)==='ميدول'&&displayName(mid,'bn',MID_N)==='মিদুল'&&displayName(mid,'en',MID_N)==='Midul');
+ok('أسماء العرض من ملف الموظف: العربي والبنغالي والإنجليزي منه',displayName(mid,'ar',MID_N)==='ميدول'&&displayName(mid,'bn',MID_N)==='মিদুল'&&displayName({name:'Mohamad Rakib'},'en',RAK_N)==='Rakib');
+ok('الإنجليزي الفارغ ⇒ الاسم الأول المسجّل (رقيب ⇒ Mohamad)',displayName({name:'Mohamad Rakib'},'en',{ar:'رقيب',en:' '})==='Mohamad'&&displayName({name:'Mohamad Rakib'},'en',{})==='Mohamad');
 ok('خانة فارغة ⇒ الاسم الأول المسجّل (لا أسماء مكتوبة في الكود)',displayName(mid,'ar',{})==='Midul'&&displayName(mid,'bn',{ar:'ميدول',bn:' '})==='Midul'&&displayName({name:'Abed mia'},'ar')==='Abed'&&payrollMessage(mid,{}).includes('أخ *Midul*'));
 ok('Production لا يظهر عند الصفر، والإكراميات تظهر دائماً (حتى 0.00)',!got.includes('Production')&&payrollMessage({...mid,computed:{...mid.computed,tips:0},inputs:{}},{}).includes('   Tips:            + 0.00'));
 const rak={...mid,name:'Mohamad Rakib',biker_id:'1700',net_bonus:817.75,computed:{...mid.computed,net_washes:201,rating:4.5,complaint_pct:0.4975124378109453,quality_riyal:0.75,safety_riyal:1,rate_per_wash:3.75,bonus_base:753.75,tips:39,production:25},payment_ref:'9113102600103684',paid_amount:817.75};
 const rk=payrollMessage(rak,{names:RAK_N});
-ok('رقيب: أخ *رقيب* / Mohamad (الاسم الأول المسجّل) / রাকিব، 201 × 3.75 = 753.75، Production + 25.00 🏆 قبل Tips + 39.00، Net 817.75، …3684',rk.includes('أخ *رقيب*')&&rk.includes('Brother *Mohamad*')&&rk.includes('ভাই *রাকিব*')&&rk.includes('   201 × 3.75     =  753.75\n   Production:      + 25.00 🏆\n   Tips:            + 39.00')&&rk.includes('*Net Bonus: 817.75 SAR*')&&rk.includes('Ref …3684'));
+ok('رقيب: أخ *رقيب* / Rakib (name_en — الاسم المسجّل Mohamad Rakib لا يُعدَّل) / রাকিব، 201 × 3.75 = 753.75، Production + 25.00 🏆 قبل Tips + 39.00، Net 817.75، …3684',rk.includes('أخ *رقيب*')&&rk.includes('Brother *Rakib*')&&rk.includes('ভাই *রাকিব*')&&rk.includes('   201 × 3.75     =  753.75\n   Production:      + 25.00 🏆\n   Tips:            + 39.00')&&rk.includes('*Net Bonus: 817.75 SAR*')&&rk.includes('Ref …3684'));
 ok('بلا كلمة إدارة: لا قسم ولا فاصل مكرر، والتذييل مباشرة بعد الفاصل',!rk.includes('كلمة من الإدارة')&&rk.includes('Ref …3684\n━━━━━━━━━━━━━━━━━━━━\n🏢 مؤسسة دلو ورغوة'));
 ok('كلمة بلغة واحدة: سطرها فقط',(()=>{const t=payrollMessage(mid,{notes:{en:'Great work'}});return t.includes('*Management:* Great work 💪')&&!t.includes('🏆 *كلمة من الإدارة:*')&&!t.includes('ম্যানেজমেন্ট:');})());
 ok('بلا بيانات تذاكر: المحسوبة من المسير، والمرفوعة/المرفوضة «—»',payrollMessage(mid,{}).includes('Filed:  *—*')&&payrollMessage(mid,{}).includes('Accepted:  *4*'));
