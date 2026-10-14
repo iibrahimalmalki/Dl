@@ -3,7 +3,7 @@ import{supabase,SITE_URL}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import{bikerLoginId,hasBikerAlias}from"./bikerLogin";
-import{phoneOf,isTechEmail,roleLabel,permSummary,permText,lastSeen,FILTERS,filterUsers,counts,canHardDelete,confirmName}from"./usersLib";
+import{phoneOf,isTechEmail,roleLabel,permSummary,permText,lastSeen,lastActive,portalLast,FILTERS,filterUsers,counts,canHardDelete,confirmName}from"./usersLib";
 
 const waNum=raw=>{let d=String(raw||"").replace(/[^0-9]/g,"");if(!d)return"";if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("966")||d.startsWith("880"))return d;if(d.startsWith("0"))return(d.length===11?"880":"966")+d.replace(/^0+/,"");if(d.startsWith("5")&&d.length===9)return"966"+d;if(d.startsWith("1")&&d.length===10)return"880"+d;return d;};
 const genPass=()=>{const a="abcdefghjkmnpqrstuvwxyz",A="ABCDEFGHJKLMNPQRSTUVWXYZ",n="23456789";const p=s=>s[Math.floor(Math.random()*s.length)];let s=p(A)+p(a)+p(a)+p(n)+p(n)+p(a)+p(n)+p(a);return s;};
@@ -54,6 +54,7 @@ export default function UserManagement(){
   const[pwFor,setPwFor]=useState(null);const[pwVal,setPwVal]=useState("");
   const[mob,setMob]=useState("");   // جوال الحساب الإداري لرسائل الوثائق (app_users.mobile)
   const[act,setAct]=useState(null);       // {user_id: last_sign_in_at|null} — null حتى تُطبَّق admin_users_activity
+  const[ext,setExt]=useState(null);       // {user_id: {act, p, k}} — آخر نشاط وآخر تسجيل في البوابة (admin_users_activity_ex)؛ null قبل تطبيقها
   const[psum,setPsum]=useState({});        // ملخص الصلاحيات لكل مستخدم
   const[filt,setFilt]=useState("all");const[srch,setSrch]=useState("");
   const[menuFor,setMenuFor]=useState(null);  // قائمة «⋯» المفتوحة
@@ -62,10 +63,13 @@ export default function UserManagement(){
     document.addEventListener("click",close);document.addEventListener("keydown",esc);return()=>{document.removeEventListener("click",close);document.removeEventListener("keydown",esc);};},[menuFor]);
 
   const loadUsers=async()=>{setLoading(true);
-    const[u,p,a]=await Promise.all([supabase.from("app_users").select("id,email,display_name,is_owner,active,biker_employee_id,mobile,position").order("created_at"),
-      supabase.from("user_permissions").select("user_id,can_edit"),supabase.rpc("admin_users_activity")]);
+    const[u,p,x]=await Promise.all([supabase.from("app_users").select("id,email,display_name,is_owner,active,biker_employee_id,mobile,position").order("created_at"),
+      supabase.from("user_permissions").select("user_id,can_edit"),supabase.rpc("admin_users_activity_ex")]);
+    // users_activity_ex.sql: آخر دخول + آخر نشاط + آخر تسجيل في البوابة؛ قبل تطبيقها ⇒ admin_users_activity (آخر دخول فقط)
+    const a=x.error?await supabase.rpc("admin_users_activity"):x;
     setUsers(u.data||[]);setPsum(permSummary(p.data||[]));
     setAct(a.error?null:Object.fromEntries((a.data||[]).map(r=>[r.user_id,r.last_sign_in_at||null])));
+    setExt(x.error?null:Object.fromEntries((x.data||[]).map(r=>[r.user_id,{act:r.last_active_at||null,p:r.portal_last_at||null,k:r.portal_last_kind||null}])));
     setLoading(false);};
   useEffect(()=>{loadUsers();supabase.auth.getUser().then(({data})=>setMyId(data.user&&data.user.id));
     supabase.from("employees").select("id,full_name,mobile,employee_id").order("full_name").then(({data})=>setEmps(data||[]));},[]);
@@ -227,7 +231,8 @@ export default function UserManagement(){
       {!act&&<div className="um-hint"><Icon n="lock" s={12}/> «آخر دخول» يظهر بعد تطبيق docs/sql/users_admin.sql.</div>}
 
       <div className="um-list">{(()=>{const list=filterUsers(users,filt,srch,act);return list.length?list.map(u=>{
-        const ls=lastSeen(act?act[u.id]:undefined),ph=phoneOf(u),sm=psum[u.id];
+        const ls=lastSeen(act?act[u.id]:undefined),ph=phoneOf(u),sm=psum[u.id],ex=ext&&ext[u.id];
+        const la=ex?lastActive(ex.act):null,pl=ex&&u.biker_employee_id?portalLast(ex.p,ex.k):null;
         return(<div className="um-u" key={u.id}>
         <div className="um-u-top">
           <div className="um-av">{(u.display_name||u.email||"?").trim().charAt(0).toUpperCase()}</div>
@@ -243,6 +248,10 @@ export default function UserManagement(){
               {ls&&<span className={"um-ls "+ls.tone}>{ls.t}</span>}
               {!u.is_owner&&!u.biker_employee_id&&<span>{permText(sm)}</span>}
             </div>
+            {(la||pl)&&<div className="um-u-act">
+              {la&&<span className={"um-ls "+la.tone}>{la.t}</span>}
+              {pl&&<span className={"um-ls "+pl.tone}>{pl.t}</span>}
+            </div>}
           </div>
           <div className="um-more">
             <button className="um-dots" aria-label={"إجراءات "+(u.display_name||"")} aria-expanded={menuFor===u.id} onClick={()=>setMenuFor(menuFor===u.id?null:u.id)}>⋯</button>
@@ -366,6 +375,7 @@ const CSS=`
 .um-empty{text-align:center;padding:24px 10px;color:var(--mut);font-size:13px;font-weight:700}
 .um-u-role{font-size:12px;font-weight:700;color:var(--ink-2);margin-top:2px}
 .um-u-meta{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:4px;font-size:11.5px;color:var(--mut-2)}
+.um-u-act{display:flex;flex-direction:column;gap:2px;margin-top:3px;font-size:11.5px;min-width:0}.um-u-act span{overflow-wrap:anywhere}
 .um-ls{font-weight:700}.um-ls.ok{color:var(--ok-ink)}.um-ls.warn{color:var(--warn-ink)}
 .um-more{position:relative;flex:none;align-self:flex-start}
 .um-dots{width:40px;height:40px;border-radius:11px;border:1px solid var(--line);background:var(--glass-2);color:var(--ink-2);font-size:20px;font-weight:900;line-height:1;cursor:pointer}

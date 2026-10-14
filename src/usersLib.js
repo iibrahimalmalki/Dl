@@ -51,6 +51,33 @@ export function lastSeen(ts, now = Date.now()) {
   return { t: d === 1 ? "آخر دخول أمس" : `آخر دخول قبل ${d} يوم`, tone: d > 7 ? "warn" : "" };
 }
 
+// «منذ متى» بصيغة الصفحة: الآن / قبل N دقيقة / ساعة / أمس / قبل N يوم ← {ago, days}
+function since(ts, now) {
+  const min = Math.max(0, Math.floor((now - new Date(ts).getTime()) / 60000));
+  if (min < 60) return { ago: min < 2 ? "الآن" : `قبل ${min} دقيقة`, days: 0 };
+  const h = Math.floor(min / 60);
+  if (h < 24) return { ago: `قبل ${h} ساعة`, days: 0 };
+  const d = Math.floor(h / 24);
+  return { ago: d === 1 ? "أمس" : `قبل ${d} يوم`, days: d };
+}
+
+// آخر نشاط (أحدث تجديد لجلسة في auth.sessions — admin_users_activity_ex) ← {t, tone}. undefined = غير متاح بعد
+export function lastActive(ts, now = Date.now()) {
+  if (ts === undefined) return null;
+  if (!ts) return { t: "لا جلسة نشطة", tone: "warn" };
+  const s = since(ts, now);
+  return { t: `آخر نشاط ${s.ago}`, tone: s.days > 7 ? "warn" : s.days === 0 ? "ok" : "" };
+}
+
+// آخر تسجيل للبايكر في البوابة (أحدث ما سجّله بنفسه) ← {t, tone}. undefined = غير متاح بعد
+export const PORTAL_KIND = { bike_handover: "استلام دراجة", custody: "إقرار عهدة", fuel: "طلب وقود", support: "دعم" };
+export function portalLast(ts, kind, now = Date.now()) {
+  if (ts === undefined) return null;
+  if (!ts) return { t: "آخر تسجيل في البوابة: لا شيء بعد", tone: "warn" };
+  const s = since(ts, now);
+  return { t: `آخر تسجيل في البوابة: ${PORTAL_KIND[kind] || "نشاط"} ${s.ago}`, tone: s.days > 7 ? "warn" : "" };
+}
+
 export const FILTERS = [
   { k: "all", ar: "الكل" }, { k: "admin", ar: "الإدارة" }, { k: "biker", ar: "البايكرز" },
   { k: "never", ar: "لم يدخل بعد" }, { k: "off", ar: "موقوفون" },
