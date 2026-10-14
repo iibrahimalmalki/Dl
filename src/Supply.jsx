@@ -2,11 +2,14 @@ import{useState,useEffect,useMemo}from"react";
 import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
-import{ITEM_CATS,CAT_ICON,REQ_TYPES,REQ_STATUS,APPROVAL_THRESHOLD,needsCeo,STANDARD_KIT,money}from"./supplyPolicy";
+import{ITEM_CATS,CAT_ICON,REQ_TYPES,REQ_STATUS,APPROVAL_THRESHOLD,needsCeo,money}from"./supplyPolicy";
+import{KIT_KEYS,SINGLE_KEYS,handoverError,handoverPlan}from"./custodyHandover";
+import{catalogByKey}from"./custodyLifecycle";
 import{isManagerial}from"./testSandbox";
 
 const fmtD=d=>d?new Date(d).toLocaleDateString("en-GB"):"—";
 const today=()=>new Date().toISOString().slice(0,10);
+const CA_COLS="id,operator_id,employee_id,biker_name,sweater_id,item_type,category,name,name_en,start_date,life_months,end_date,lead_days,status,source,notes";
 
 export default function Supply({owner,opId}){
   const[tab,setTab]=useState("stock");
@@ -25,7 +28,8 @@ export default function Supply({owner,opId}){
       opF(supabase.from("sc_items").select("*").order("category")).then(r=>r.data||[]),
       opF(supabase.from("sc_requests").select("*").order("seq",{ascending:false})).then(r=>r.data||[]),
       supabase.from("sc_request_items").select("*").then(r=>r.data||[]),
-      opF(supabase.from("sc_custody").select("*").order("assigned_at",{ascending:false})).then(r=>r.data||[]),
+      // العُهد من custody_assets (المرجع الوحيد — custody_unify_plan.md): القطع القائمة فقط، بأعمدة محدّدة
+      opF(supabase.from("custody_assets").select(CA_COLS).in("status",["active","due","missing"]).order("name")).then(r=>r.data||[]),
       opF(supabase.from("sc_stocktakes").select("*").order("created_at",{ascending:false})).then(r=>r.data||[]),
       supabase.from("employees").select("id,full_name,employee_id,staff_role").then(r=>(r.data||[]).filter(e=>!isManagerial(e))),
       supabase.from("vendors").select("id,name").then(r=>r.data||[]),
@@ -186,53 +190,49 @@ function Requests({items,reqs,reqItems,vendors,uid,op,owner,note,load}){
   </div>);
 }
 
-/* ═══ العُهد ═══ */
-function Custody({items,cust,emps,op,note,load}){
-  const[assign,setAssign]=useState(null);
-  const active=cust.filter(c=>c.status==="assigned");
-  const byBiker=useMemo(()=>{const m={};active.forEach(c=>{const k=c.employee_id||c.biker_name;(m[k]=m[k]||{name:c.biker_name,emp:c.employee_id,rows:[]}).rows.push(c);});return Object.values(m);},[active]);
-  const findItem=name=>items.find(i=>i.name.trim()===String(name).trim());
+/* ═══ العُهد — custody_assets (المرجع الوحيد للعهد) ═══ */
+function Custody({cust,emps,op,note,load}){
+  const[assign,setAssign]=useState(null);const[saving,setSaving]=useState(false);
+  const byBiker=useMemo(()=>{const m={};cust.forEach(c=>{const k=c.employee_id||c.biker_name;(m[k]=m[k]||{name:c.biker_name,emp:c.employee_id,rows:[]}).rows.push(c);});return Object.values(m).sort((a,b)=>String(a.name).localeCompare(String(b.name)));},[cust]);
+  const emp=assign?emps.find(e=>e.id===assign.emp):null;
+  const keys=assign?(assign.mode==="kit"?KIT_KEYS:(assign.key?[assign.key]:[])):[];
+  const plan=useMemo(()=>emp?handoverPlan(keys,cust,{employee:emp,operator_id:op,date:assign.date}):null,[emp,assign,cust]);
 
+  // التسليم: صفوف جديدة نشطة من تاريخ التسليم الفعلي، و«الناقصة» للصنف نفسه تُفعَّل، والمسجّل لا يتكرّر (src/custodyHandover.js)
   const doAssign=async()=>{
-    const emp=emps.find(e=>e.id===assign.emp);if(!emp){note(false,"اختر البايكر");return;}
-    let lines=[];
-    if(assign.mode==="kit")lines=STANDARD_KIT.map(k=>({name:k.name,qty:k.qty}));
-    else lines=[{name:assign.name,qty:Number(assign.qty||1),item_id:assign.item_id}];
-    lines=lines.filter(l=>l.name&&Number(l.qty)>0);
-    if(!lines.length){note(false,"لا بنود للتسليم");return;}
-    for(const l of lines){
-      const it=l.item_id?items.find(x=>x.id===l.item_id):findItem(l.name);
-      await supabase.from("sc_custody").insert({operator_id:op,employee_id:emp.id,biker_name:emp.full_name,item_id:it?it.id:null,item_name:l.name,qty:Number(l.qty),status:"assigned",form_ref:"FRM-OPS-001"});
-      if(it)await supabase.from("sc_moves").insert({operator_id:op,item_id:it.id,kind:"out",qty:Number(l.qty),ref_type:"custody",note:`عهدة ${emp.full_name}`});
-    }
-    setAssign(null);note(true,"تم تسليم العهدة وتوقيعها (FRM-OPS-001)");await load();
-  };
-  const ret=async(c,lost)=>{
-    await supabase.from("sc_custody").update({status:lost?"lost":"returned",returned_at:new Date().toISOString()}).eq("id",c.id);
-    if(!lost&&c.item_id)await supabase.from("sc_moves").insert({operator_id:op,item_id:c.item_id,kind:"in",qty:Number(c.qty),ref_type:"custody",note:`إرجاع عهدة ${c.biker_name}`});
-    note(true,lost?"سُجّل كمفقود":"تم إرجاع العهدة للمخزون");await load();
+    const err=handoverError({employee:emp,keys,date:assign.date},today());if(err){note(false,err);return;}
+    if(!plan.inserts.length&&!plan.activate.length){note(false,"كل الأصناف المختارة مسجّلة لهذا البايكر — لا جديد");return;}
+    setSaving(true);
+    let fail=null;
+    if(plan.inserts.length){const{error}=await supabase.from("custody_assets").insert(plan.inserts);if(error)fail=error.message;}
+    for(const a of plan.activate){if(fail)break;const{error}=await supabase.from("custody_assets").update(a.patch).eq("id",a.id);if(error)fail=error.message;}
+    setSaving(false);
+    if(fail){note(false,"تعذّر التسليم: "+fail);await load();return;}
+    const skip=plan.skipped.length?` · مسجّلة مسبقاً (لم تتكرّر): ${plan.skipped.map(k=>(catalogByKey(k)||{}).name).join("، ")}`:"";
+    setAssign(null);note(true,`سُلّمت ${plan.inserts.length+plan.activate.length} عُهدة لـ ${emp.full_name} من ${assign.date}${skip}`);await load();
   };
 
   return(<div>
-    <div className="sp-bar"><div style={{flex:1,fontSize:12.5,color:"var(--mut)",fontWeight:700}}><Icon n="doc" s={13}/> تسليم المعدات وفق نموذج FRM-OPS-001 · {active.length} بند مُسلّم</div>
-      <button className="sp-add" onClick={()=>setAssign({emp:"",mode:"kit",name:"",qty:1,item_id:""})}><Icon n="plus" s={15}/> تسليم عهدة</button></div>
-    {byBiker.length===0?<Empty ic="id" t="لا عُهد مُسلّمة بعد" s="سلّم قائمة التجهيز القياسية لبايكر جديد بضغطة، أو صنفاً مفرداً."/>:
+    <div className="sp-bar"><div style={{flex:1,fontSize:12.5,color:"var(--mut)",fontWeight:700}}><Icon n="doc" s={13}/> العُهد القائمة للبايكرز (FRM-OPS-001) · {cust.length} قطعة</div>
+      <button className="sp-add" onClick={()=>setAssign({emp:"",mode:"kit",key:"",date:today()})}><Icon n="plus" s={15}/> تسليم عهدة</button></div>
+    <div className="sp-route auto"><Icon n="alert" s={13}/> العمر والإهلاك والإرجاع والاستبدال في صفحة «العُهد والإهلاك»، والجوال يُسجَّل هناك مع IMEI. الفقد يُسجَّل بجولة جرد («مفقودة» ⇐ بانتظار قرار المالك).</div>
+    {byBiker.length===0?<Empty ic="id" t="لا عُهد مُسلّمة بعد" s="سلّم القائمة القياسية لبايكر جديد بضغطة، أو صنفاً مفرداً."/>:
     <div className="sp-cust">{byBiker.map((b,i)=>(
       <div className="sp-cust-card" key={i}>
-        <div className="sp-cust-h"><div className="sp-cust-av">{(b.name||"?").trim().charAt(0)}</div><b>{b.name}</b><span className="sp-cust-cnt">{b.rows.length} بند</span></div>
+        <div className="sp-cust-h"><div className="sp-cust-av">{(b.name||"?").trim().charAt(0)}</div><b>{b.name}</b><span className="sp-cust-cnt">{b.rows.length} قطعة</span></div>
         <div className="sp-cust-items">{b.rows.map(c=>(
-          <div className="sp-cust-it" key={c.id}><span className="sp-cust-nm">{c.item_name} {c.qty>1?`×${c.qty}`:""}{!c.item_id&&<i className="sp-out">خارج المخزون</i>}</span>
-            <div className="sp-cust-a"><button onClick={()=>ret(c,false)} title="إرجاع للمخزون"><Icon n="back" s={12}/></button><button className="lost" onClick={()=>ret(c,true)} title="فقد"><Icon n="alert" s={12}/></button></div></div>))}</div>
+          <div className="sp-cust-it" key={c.id}><span className="sp-cust-nm">{c.name}{c.status==="missing"&&<i className="sp-out">ناقصة</i>}{c.status==="due"&&<i className="sp-out">مستحقة</i>}</span>
+            <span className="sp-cust-d">{c.status==="missing"?"—":c.start_date}</span></div>))}</div>
       </div>))}</div>}
 
     {assign&&<Modal title="تسليم عهدة — FRM-OPS-001" onClose={()=>setAssign(null)}>
       <F l="البايكر"><select value={assign.emp} onChange={e=>setAssign({...assign,emp:e.target.value})}><option value="">اختر…</option>{emps.map(e=><option key={e.id} value={e.id}>{e.full_name}{e.employee_id?` · #${e.employee_id}`:""}</option>)}</select></F>
-      <div className="sp-modechips"><button className={assign.mode==="kit"?"on":""} onClick={()=>setAssign({...assign,mode:"kit"})}>القائمة القياسية ({STANDARD_KIT.length} بند)</button><button className={assign.mode==="single"?"on":""} onClick={()=>setAssign({...assign,mode:"single"})}>صنف مفرد</button></div>
-      {assign.mode==="kit"?<div className="sp-kit">{STANDARD_KIT.map((k,i)=><span key={i} className="sp-kitc">{k.name}{k.qty>1?` ×${k.qty}`:""}</span>)}</div>:
-      <div className="sp-g2"><F l="الصنف"><select value={assign.item_id} onChange={e=>{const it=items.find(x=>x.id===e.target.value);setAssign({...assign,item_id:e.target.value,name:it?it.name:assign.name});}}><option value="">اختر/يدوي…</option>{items.map(it=><option key={it.id} value={it.id}>{it.name}</option>)}</select></F><F l="الكمية"><input type="number" value={assign.qty} onChange={e=>setAssign({...assign,qty:e.target.value})}/></F></div>}
-      {assign.mode==="single"&&!assign.item_id&&<F l="اسم الصنف (يدوي)"><input value={assign.name} onChange={e=>setAssign({...assign,name:e.target.value})}/></F>}
-      <div className="sp-route auto"><Icon n="doc" s={13}/> يُوقّع الطرفان على FRM-OPS-001 ويُخصم المتوفّر من المخزون تلقائياً.</div>
-      <div className="sp-mact"><button className="sp-b brand" onClick={doAssign}><Icon n="save" s={14}/> تسليم وتوقيع</button><button className="sp-b ghost" onClick={()=>setAssign(null)}>إلغاء</button></div>
+      <F l="تاريخ التسليم الفعلي (بداية العمر والإهلاك)"><input type="date" value={assign.date} max={today()} onChange={e=>setAssign({...assign,date:e.target.value})}/></F>
+      <div className="sp-modechips"><button className={assign.mode==="kit"?"on":""} onClick={()=>setAssign({...assign,mode:"kit"})}>القائمة القياسية ({KIT_KEYS.length} صنفاً)</button><button className={assign.mode==="single"?"on":""} onClick={()=>setAssign({...assign,mode:"single"})}>صنف مفرد</button></div>
+      {assign.mode==="kit"?<div className="sp-kit">{KIT_KEYS.map(k=><span key={k} className={"sp-kitc"+(plan&&plan.skipped.includes(k)?" off":"")}>{(catalogByKey(k)||{}).name}</span>)}</div>:
+      <F l="الصنف"><select value={assign.key} onChange={e=>setAssign({...assign,key:e.target.value})}><option value="">اختر…</option>{SINGLE_KEYS.map(k=><option key={k} value={k}>{(catalogByKey(k)||{}).name}</option>)}</select></F>}
+      {plan&&<div className="sp-route auto"><Icon n="doc" s={13}/> سيُسجَّل {plan.inserts.length} جديد{plan.activate.length?` + تفعيل ${plan.activate.length} «ناقصة»`:""}{plan.skipped.length?` · ${plan.skipped.length} مسجّلة مسبقاً لا تتكرّر`:""} — البداية {assign.date||"—"}</div>}
+      <div className="sp-mact"><button className="sp-b brand" disabled={saving} onClick={doAssign}><Icon n="save" s={14}/> {saving?"جارٍ التسليم…":"تسليم وتوقيع"}</button><button className="sp-b ghost" onClick={()=>setAssign(null)}>إلغاء</button></div>
     </Modal>}
   </div>);
 }
@@ -338,6 +338,7 @@ const CSS=`
 .sp-cust-it{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:7px 10px}
 .sp-cust-nm{font-size:12px;font-weight:700;color:var(--ink-2)}
 .sp-out{font-style:normal;font-size:9px;background:var(--warn-bg);color:var(--warn-ink);padding:1px 6px;border-radius:20px;margin-inline-start:5px}
+.sp-cust-d{font-size:10.5px;font-weight:700;color:var(--mut-2);flex:none;direction:ltr}
 .sp-cust-a{display:flex;gap:5px;flex:none}
 .sp-cust-a button{border:none;background:var(--info-bg);color:var(--info-ink);width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .sp-cust-a button.lost{background:var(--bad-bg);color:var(--bad-ink)}
@@ -380,5 +381,6 @@ const CSS=`
 .sp-modechips button.on{border-color:var(--p);background:var(--p-50);color:var(--warn-ink)}
 .sp-kit{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .sp-kitc{font-size:11px;font-weight:700;background:var(--soft);color:var(--ink-2);border-radius:20px;padding:4px 10px}
+.sp-kitc.off{text-decoration:line-through;opacity:.5}
 @media(max-width:720px){.sp-kpis{grid-template-columns:1fr}.sp-cust{grid-template-columns:1fr}.sp-g2{grid-template-columns:1fr}.sp-line{grid-template-columns:1fr 1fr;gap:6px}}
 `;

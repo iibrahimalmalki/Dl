@@ -27,7 +27,7 @@ export function baselineState(rows=[]){
 const RANK={good:0,fair:1,poor:2,damaged:3};
 export const worst=conds=>conds.filter(Boolean).reduce((a,c)=>(RANK[c]??0)>(RANK[a]??-1)?c:a,null);
 
-const addMonths=(iso,m)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()+Math.round(Number(m)||0));return d.toISOString().slice(0,10);};
+export const addMonths=(iso,m)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()+Math.round(Number(m)||0));return d.toISOString().slice(0,10);};
 // أسطر اعتماد التسجيل الأول: قطعة لكل مفتاح كتالوج. قطعة نشطة لنفس البايكر ونفس الصنف (من الجولات) ⇒ تُربط ولا يتغيّر تاريخها.
 // items: أصناف الإقرار · assets: قطع custody_assets لنفس البايكر (عبر employees) · start: تاريخ بداية القطع الجديدة
 // ⇒ {lines, unmapped}: unmapped = أصناف بلا مفتاح كتالوج (يرفض الخادم الاعتماد إن وُجدت)
@@ -85,7 +85,7 @@ export function updateError(f={}){
 }
 
 // السجل الزمني لقطعة (صفحة العُهد): إنشاء، تسجيل/تحديث، اعتماد/رفض، استبدال
-const SRC={round:"من جولة ميدانية",declaration:"من إقرار العهدة",replacement:"بديل لقطعة مُستبدلة",manual:"يدوياً"};
+const SRC={round:"من جولة ميدانية",declaration:"من إقرار العهدة",replacement:"بديل لقطعة مُستبدلة",manual:"يدوياً",handover:"بتسليم عهدة (سلاسل الإمداد)"};
 export function timeline(asset,rows=[]){
   const ev=[];
   ev.push({at:asset.created_at||asset.start_date,type:"created",ar:`أُنشئت ${SRC[asset.source]||asset.source||""} · بداية العمر ${asset.start_date}`});
@@ -107,4 +107,4 @@ export function replacementRow(old,today,extra={}){
     item_type:old.item_type,category:old.category,name:old.name,name_en:old.name_en||null,
     start_date:today,life_months:life,lead_days:lead,end_date:addMonths(today,life),status:"active",source:"replacement",notes:`بديل عن ${old.id}`,...extra};
 }
-export{CATALOG};
+export{CATALOG,catalogByKey,catalogOfAsset};
