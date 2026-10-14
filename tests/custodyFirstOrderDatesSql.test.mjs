@@ -12,9 +12,12 @@ const err=sql=>{try{ps(sql);return null;}catch(e){return String(e.stderr||e.mess
 const F=fs.readFileSync(new URL('../docs/sql/custody_first_order_dates.sql',import.meta.url),'utf8');
 const cut=(a,b)=>F.slice(F.indexOf(a),b?F.indexOf(b):undefined);
 const P0=cut('-- ═══ 0)','-- ═══ 1)'),B1=cut('-- ═══ 1)','-- ═══ 2)'),B2=cut('-- ═══ 2)','-- ═══ التحقق'),V=cut('-- ═══ التحقق','-- ═══ التراجع');
-const PH="'____-__-__'";
-const fill=(s,...ds)=>ds.reduce((x,d)=>x.replace(PH,`'${d}'`),s);
-const b2=(code,d)=>fill(B2.replace("v_code text := '1648'",`v_code text := '${code}'`),d);
+// التواريخ المعتمدة في الملف (تقدير المالك 2026-10-14)؛ الاختبار يستبدلها ليجرّب حالات حدّية (31 من الشهر)
+const OWN={'1624':'2026-01-01','1648':'2026-02-01','1700':'2026-03-01'};
+const fill=(s,d)=>s.replace(`v_date date := date '${OWN['1624']}'`,`v_date date := date '${d}'`);
+const b2=(code,d)=>B2.replace("v_code text := '1648'",`v_code text := '${code}'`).replace(`when '${code}' then date '${OWN[code]}'`,`when '${code}' then date '${d}'`);
+const p0=(a,m,r)=>P0.replace(`('1624', date '${OWN['1624']}')`,`('1624', date '${a}')`).replace(`('1648', date '${OWN['1648']}')`,`('1648', date '${m}')`).replace(`('1700', date '${OWN['1700']}')`,`('1700', date '${r}')`);
+const EST='تاريخ تقديري = أول شهر عمل (قرار المالك 2026-10-14)';
 const tmp=fs.mkdtempSync(path.join(process.cwd(),'.cfo-test-'));
 ps(`create database ${db}`,'postgres');
 try{
@@ -55,14 +58,16 @@ seed('1648','2026-08-07');seed('1700','2026-08-05');
 
 ok('قبل تطبيق #86 ⇒ البندان يرفضان',(err(fill(B1,'2025-12-15'))||'').includes('#86')&&(err(b2('1648','2026-02-10'))||'').includes('#86'));
 ps(`create view public.my_custody_assets as select * from custody_assets`);
-ok('التاريخ غير المعبّأ يفشل (لا يعمل بند قبل تعبئته)',!!err(B1)&&!!err(B2)&&!!err(P0));
+ok('الملف يحمل تواريخ المالك: عريف 2026-01-01 · ميدول 2026-02-01 · رقيب 2026-03-01',!F.includes('____')&&Object.entries(OWN).every(([c,d])=>P0.includes(`('${c}', date '${d}')`))&&B1.includes(`v_date date := date '${OWN['1624']}'`)&&B2.includes(`when '1648' then date '${OWN['1648']}'`)&&B2.includes(`when '1700' then date '${OWN['1700']}'`));
+ok('أدوات الاستبدال في الاختبار تغيّر التاريخ فعلاً',fill(B1,'2025-12-31')!==B1&&b2('1648','2026-01-31')!==B2&&b2('1700','2026-03-10')!==B2&&p0('2025-12-31','2026-01-31','2026-03-10')!==P0);
 
 // ── البند 1: عريف ──
 ok('عريف: تاريخ في المستقبل ⇒ رفض',(err(fill(B1,'2099-01-01'))||'').includes('تاريخ غير مقبول'));
 ps(fill(B1,'2025-12-31'));
 const A=JSON.parse(ps(`select json_agg(a) from (select name,status,source,start_date::text s,end_date::text e,life_months::int life,lead_days lead,notes,sweater_id,biker_name from custody_assets a join employees e on e.id=a.employee_id where e.employee_id='1624') a`));
 ok('عريف: 20 صفاً، 12 active و8 due، المصدر handover، رقم البايكر والاسم',A.length===20&&A.filter(r=>r.status==='active').length===12&&A.filter(r=>r.status==='due').length===8&&A.every(r=>r.source==='handover'&&r.sweater_id==='1624'&&r.biker_name==='Ariful Islam'));
-ok('عريف: الثمانية due بالملاحظة الحرفية',A.filter(r=>r.status==='due').every(r=>r.notes==='تالفة — جولة 2026-10-01 — تحتاج استبدال (قرار المالك)'&&sqlCat.find(c=>c.name===r.name).damaged));
+ok('عريف: الثمانية due بالملاحظة الحرفية',A.filter(r=>r.status==='due').every(r=>r.notes==='تالفة — جولة 2026-10-01 — تحتاج استبدال (قرار المالك) · '+EST&&sqlCat.find(c=>c.name===r.name).damaged));
+ok('عريف: النشطة بملاحظة التسليم والتقدير',A.filter(r=>r.status==='active').every(r=>r.notes==='تسليم عهدة 2025-12-31 · '+EST));
 ok('عريف: البداية = تاريخ أول طلب، والنهاية = addMonths في الواجهة (31 ديسمبر + شهر = 31 يناير، +2 = 3 مارس)',A.every(r=>r.s==='2025-12-31'&&r.e===addMonths('2025-12-31',r.life))&&A.find(r=>r.name==='إسفنجات (بودي/إطارات)').e==='2026-03-03');
 ps(fill(B1,'2025-12-31'));
 ok('عريف: إعادة التشغيل لا تكرّر (20 صفاً)',ps(`select count(*) from custody_assets a join employees e on e.id=a.employee_id where e.employee_id='1624'`)==='20');
@@ -79,7 +84,7 @@ const M=JSON.parse(ps(`select json_agg(a) from (select e.employee_id code,name,s
 const mid=M.filter(r=>r.code==='1648'),rak=M.filter(r=>r.code==='1700');
 ok('ميدول: 20 قطعة بالبداية الجديدة والنهاية = addMonths (31 يناير + شهر = 3 مارس)',mid.length===20&&mid.every(r=>r.s==='2026-01-31'&&r.e===addMonths('2026-01-31',r.life))&&mid.find(r=>r.name==='صابون/شامبو').e==='2026-03-03');
 ok('رقيب: 20 قطعة من 2026-03-10',rak.length===20&&rak.every(r=>r.s==='2026-03-10'&&r.e===addMonths('2026-03-10',r.life)));
-ok('ملاحظة التصحيح تذكر التاريخ السابق، والحالة لم تتغيّر',mid.every(r=>/صُحّح التاريخ [0-9-]+ إلى أول طلب في سويتر \(كان 2026-08-07 — أول جولة\)/.test(r.notes)&&r.status==='active')&&rak.every(r=>r.notes.includes('كان 2026-08-05')));
+ok('ملاحظة التصحيح تذكر التاريخ السابق، والحالة لم تتغيّر',mid.every(r=>/^صُحّح التاريخ [0-9-]+ إلى أول شهر عمل \(كان 2026-08-07 — أول جولة\) · تاريخ تقديري = أول شهر عمل \(قرار المالك 2026-10-14\)$/.test(r.notes)&&r.status==='active')&&rak.every(r=>r.notes.includes('كان 2026-08-05')));
 ok('لا يمسّ عهدة عريف',ps(`select count(*) from custody_assets a join employees e on e.id=a.employee_id where e.employee_id='1624' and start_date='2025-12-31'`)==='20'&&before===ps(`select count(*) from custody_assets a join employees e on e.id=a.employee_id where e.employee_id<>'1648'`));
 const snap=ps(`select string_agg(id::text||start_date||end_date||notes,',' order by id) from custody_assets`);
 ps(b2('1648','2026-01-31'));
@@ -88,7 +93,7 @@ ok('تاريخ مختلف بعد التطبيق ⇒ رفض',(err(b2('1648','2026
 
 // ── المعاينة والتحقق ──
 const today=ps(`select (now() at time zone 'Asia/Riyadh')::date`);
-const R=JSON.parse(ps(`select json_agg(x) from (${fill(P0,'2025-12-31','2026-01-31','2026-03-10').replace(/;\s*$/,'')}) x`));
+const R=JSON.parse(ps(`select json_agg(x) from (${p0('2025-12-31','2026-01-31','2026-03-10').replace(/;\s*$/,'')}) x`));
 const st=r=>r.new_end<today?'منتهي':(Date.parse(r.new_end)-Date.parse(today))/864e5<=r.lead_days?'قارب الانتهاء':'سليم';
 ok('المعاينة: 60 سطراً (20 لكلٍّ من الثلاثة) والحالة من التاريخ والمهلة',R.length===60&&['Ariful','Midul','Rakib'].every(b=>R.filter(r=>r.biker===b).length===20)&&R.every(r=>r.state===st(r)&&r.new_end===addMonths(r.new_start,r.life_months)));
 ok('المعاينة: عريف يظهر بحالته المخطّطة (8 due)',R.filter(r=>r.biker==='Ariful'&&r.status==='due').length===8);

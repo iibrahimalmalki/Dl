@@ -1,10 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- custody_first_order_dates.sql — تاريخ استلام العهدة = تاريخ أول طلب للبايكر في سويتر (قاعدة المالك 2026-10-14)
--- الحالة: **لم يُطبَّق** — ينتظر: (1) تطبيق round_custody_check.sql (#86)، (2) التواريخ الثلاثة من المالك، (3) «نفّذ» لكل بند.
+-- الحالة: **لم يُطبَّق** — #86 طُبِّق 2026-10-14، والتواريخ معبّأة (تقدير المالك). ينتظر «نفّذ» لكل بند بعد مراجعة المعاينة.
 -- ═══════════════════════════════════════════════════════════════════════════
 -- الشرح
 --   أ) عريف (1624): لا عهدة له في custody_assets اليوم. تُسجَّل القائمة القياسية (20 صنفاً = الكتالوج عدا الجوال وخزان الماء)
---      بتاريخ أول طلب له في سويتر، المصدر handover:
+--      بتاريخ أول طلب (تقديراً: أول شهر عمل)، المصدر handover:
 --        • 12 صنفاً «active».
 --        • 8 أصناف (الصدرية، حذاء السلامة، مواد التنظيف الست) كانت موجودة لكنها تالفة حسب جولة 2026-10-01 ⇒ «due»
 --          بملاحظة «تالفة — جولة 2026-10-01 — تحتاج استبدال (قرار المالك)»، فتظهر «بانتظار الاستبدال» وفي إعادة الطلب. ليست «ناقصة».
@@ -15,8 +15,9 @@
 --   فبداية 31 يناير + شهر = 3 مارس كما في الواجهة (لا 28 فبراير).
 --   «منتهي» = النهاية قبل اليوم؛ «قارب الانتهاء» = الباقي ≤ مهلة التخطيط (نفس dep() في Custody.jsx). الحالة المخزّنة تبقى active —
 --   الانتهاء يُحسب من التاريخ في الواجهة.
--- المدخلات: ثلاثة تواريخ يرسلها المالك. مكانها معلَّم بـ '____-__-__' (تحويله إلى date يفشل ⇒ لا يعمل البند قبل تعبئته).
---   بيانات النظام تبدأ من يناير 2026 ⇒ لا يُستعمل 01/01 تقديراً، ولا يُستنتج التاريخ من ops_biker_month.
+-- التواريخ (قرار المالك 2026-10-14): التاريخ الدقيق لأول طلب غير متاح (sweater_bookings فارغ) ⇒ تقدير = أول يوم من أول شهر عمل
+--   في ops_biker_month: عريف 1624 ⇒ 2026-01-01 · ميدول 1648 ⇒ 2026-02-01 · رقيب 1700 ⇒ 2026-03-01.
+--   كل قطعة تحمل في ملاحظتها: «تاريخ تقديري = أول شهر عمل (قرار المالك 2026-10-14)».
 -- الترتيب: بعد تطبيق #86. كل بند (1، 2، 3) معاملة مستقلة: تراجع إن اختلف العدد عن 20.
 -- بلا drop ولا delete ⇒ يُطبَّق عبر الأداة. آمن لإعادة التشغيل (البند المطبَّق يُتخطّى بإشعار).
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -24,9 +25,9 @@
 -- ═══ 0) المعاينة (قراءة فقط) — ما سيصبح «منتهي» أو «قارب الانتهاء» بعد التصحيح ═══
 -- تُشغَّل بعد تعبئة التواريخ الثلاثة، وتُرسل نتيجتها للمالك قبل البنود 1–3.
 with p(code, first_order) as (values
-    ('1624', '____-__-__'::date),   -- عريف
-    ('1648', '____-__-__'::date),   -- ميدول
-    ('1700', '____-__-__'::date)),  -- رقيب
+    ('1624', date '2026-01-01'),   -- عريف
+    ('1648', date '2026-02-01'),   -- ميدول
+    ('1700', date '2026-03-01')),  -- رقيب
 cat(k, name, life, lead, damaged) as (values
     ('moto','الدراجة النارية',36,90,false), ('uniform','الزي الرسمي',12,45,false), ('helmet','الخوذة',24,60,false),
     ('chest','الصدرية (واقي الصدر)',24,60,true), ('handsleg','واقي اليدين والأرجل',24,60,false), ('shoes','حذاء السلامة',12,45,true),
@@ -60,7 +61,8 @@ select biker, name, status, life as life_months, lead as lead_days, old_start, n
 
 -- ═══ 1) عريف — تسجيل القائمة القياسية بتاريخ أول طلب (20 صفاً: 12 active + 8 due) ═══
 do $$ declare
-  v_date date := '____-__-__';   -- تاريخ أول طلب لعريف في سويتر (من المالك)
+  v_date date := date '2026-01-01';   -- أول شهر عمل لعريف (تقدير — قرار المالك 2026-10-14)
+  v_note_est constant text := 'تاريخ تقديري = أول شهر عمل (قرار المالك 2026-10-14)';
   v_note_due constant text := 'تالفة — جولة 2026-10-01 — تحتاج استبدال (قرار المالك)';
   v_today date := (now() at time zone 'Asia/Riyadh')::date;
   e record; n_have int; n_ins int; n_due int;
@@ -82,7 +84,7 @@ begin
   select e.operator_id, e.id, e.full_name, e.employee_id, c.type, c.category, c.name, c.en,
          v_date, c.life, (date_trunc('month', v_date) + make_interval(months => c.life))::date + (extract(day from v_date)::int - 1),
          c.lead, case when c.damaged then 'due' else 'active' end, 'handover',
-         case when c.damaged then v_note_due else 'تسليم عهدة ' || v_date || ' (تاريخ أول طلب في سويتر — قاعدة المالك)' end
+         case when c.damaged then v_note_due || ' · ' || v_note_est else 'تسليم عهدة ' || v_date || ' · ' || v_note_est end
     from (values
       ('الدراجة النارية','Motorcycle','motorcycle','مركبة',36,90,false),
       ('الزي الرسمي','Official Uniform','uniform','زي',12,45,false),
@@ -114,10 +116,11 @@ end $$;
 
 -- ═══ 2) ميدول — تصحيح البداية من أول جولة (2026-08-07) إلى أول طلب، والنهاية من عمر الكتالوج ═══
 -- ═══ 3) رقيب — مثله (من 2026-08-05) ═══
--- البند نفسه لكلٍّ منهما: تُشغَّل الكتلة مرة لميدول ومرة لرقيب (معاملتان مستقلتان) بتغيير السطرين الأوّلين فقط.
+-- البند نفسه لكلٍّ منهما: تُشغَّل الكتلة مرة لميدول ومرة لرقيب (معاملتان مستقلتان) بتغيير v_code فقط (التاريخان مثبّتان داخل الكتلة).
 do $$ declare
   v_code text := '1648';            -- ميدول = 1648 · رقيب = 1700
-  v_date date := '____-__-__';      -- تاريخ أول طلب له في سويتر (من المالك)
+  v_date date;                      -- أول شهر عمل (تقدير — قرار المالك 2026-10-14)
+  v_note_est constant text := 'تاريخ تقديري = أول شهر عمل (قرار المالك 2026-10-14)';
   v_old  date;                      -- تاريخ أول جولة المسجّل حالياً (يُقرأ ويُتحقق منه)
   v_today date := (now() at time zone 'Asia/Riyadh')::date;
   v_emp uuid; n_live int; n_old int; n_new int; n_bad int; n_upd int;
@@ -125,6 +128,7 @@ begin
   if to_regclass('public.my_custody_assets') is null then
     raise exception '%: round_custody_check.sql (#86) لم يُطبَّق بعد — تراجع', v_code; end if;
   v_old := case v_code when '1648' then date '2026-08-07' when '1700' then date '2026-08-05' end;
+  v_date := case v_code when '1648' then date '2026-02-01' when '1700' then date '2026-03-01' end;
   if v_old is null then raise exception 'رمز غير متوقع % — تراجع', v_code; end if;
   if v_date > v_old or v_date < date '2020-01-01' then
     raise exception '%: تاريخ أول طلب % غير مقبول (يجب أن يسبق أول جولة %) — تراجع', v_code, v_date, v_old; end if;
@@ -155,7 +159,7 @@ begin
          lead_days = c.lead,
          end_date = (date_trunc('month', v_date) + make_interval(months => c.life))::date + (extract(day from v_date)::int - 1),
          notes = concat_ws(' · ', nullif(a.notes, ''),
-                           'صُحّح التاريخ ' || v_today || ' إلى أول طلب في سويتر (كان ' || v_old || ' — أول جولة)')
+                           'صُحّح التاريخ ' || v_today || ' إلى أول شهر عمل (كان ' || v_old || ' — أول جولة)', v_note_est)
     from _cat c
    where c.name = a.name and a.employee_id = v_emp and a.status in ('active','due') and a.start_date = v_old;
   get diagnostics n_upd = row_count;
@@ -184,6 +188,6 @@ select e.name_en, a.status, count(*) n, min(a.start_date) start_min, max(a.start
 --      set start_date = '<2026-08-07 لميدول | 2026-08-05 لرقيب>',
 --          end_date = (date_trunc('month', date '<التاريخ نفسه>') + make_interval(months => a.life_months::int))::date
 --                     + (extract(day from date '<التاريخ نفسه>')::int - 1),
---          notes = nullif(regexp_replace(a.notes, '( · )?صُحّح التاريخ [0-9-]+ إلى أول طلب في سويتر \(كان [0-9-]+ — أول جولة\)', ''), '')
+--          notes = nullif(regexp_replace(a.notes, '( · )?صُحّح التاريخ [0-9-]+ إلى أول شهر عمل \(كان [0-9-]+ — أول جولة\) · تاريخ تقديري = أول شهر عمل \(قرار المالك 2026-10-14\)', ''), '')
 --     from public.employees e
 --    where e.id = a.employee_id and e.employee_id = '<1648|1700>' and a.status in ('active','due') and a.start_date = '<تاريخ أول طلب>';
