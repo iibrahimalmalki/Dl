@@ -27,6 +27,7 @@ export default function Payroll({opId,owner}){
   const[stlTips,setStlTips]=useState(null);   // sweater_settlements.tip_amount للشهر
   const[supPay,setSupPay]=useState(null);   // حالة دفع سطر المشرف المحفوظ
   const[payLines,setPayLines]=useState([]); // أسطر المسير المحفوظة (بمعرّفاتها) لقسم «الدفع»
+  const[empNames,setEmpNames]=useState({}); // employee_id ⇒ {ar, bn} أسماء العرض لرسالة الواتساب (employees.name_ar/name_bn)
   const[supAuto,setSupAuto]=useState(true);  // اشتقاق مدخلات الفريق تلقائياً
   const[runId,setRunId]=useState(null);
   const[status,setStatus]=useState("draft");
@@ -42,12 +43,13 @@ export default function Payroll({opId,owner}){
   useEffect(()=>{let off=false;(async()=>{   // off: تغيّر الشهر/المشغّل قبل اكتمال التحميل ⇒ يُهمل الرد القديم
     setLoading(true);setMsg(null);
     // كل الموظفين الحقيقيين؛ الفرز للمسير (بايكر نشط في الشهر) في payrollRoster
-    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id,staff_role,start_date,is_test").order("employee_id"); // التجريبي يُستبعد في payrollRoster (ويُعرف رقمه فلا يظهر «غير مربوط»)
+    let q=supabase.from("employees").select("id,full_name,employee_id,operator_id,staff_role,start_date,is_test,name_ar,name_bn").order("employee_id"); // التجريبي يُستبعد في payrollRoster (ويُعرف رقمه فلا يظهر «غير مربوط»)
     if(opId&&opId!=="all")q=q.eq("operator_id",opId);
     const[{data:emps},{data:offs},{data:stl}]=await Promise.all([q,
       supabase.from("offboarding").select("employee_id,sweater_id,last_day").not("last_day","is",null),
       (()=>{let sq=supabase.from("sweater_settlements").select("tip_amount").eq("period",period);if(opId&&opId!=="all")sq=sq.eq("operator_id",opId);return sq;})()]);
     if(off)return;
+    setEmpNames(Object.fromEntries((emps||[]).map(e=>[e.id,{ar:e.name_ar||"",bn:e.name_bn||""}])));
     const stlT=(stl||[]).filter(x=>Number(x.tip_amount)>0); // tip_amount افتراضه 0 قبل قبول الفاتورة ⇒ 0 = غير معروفsetStlTips(stlT.length?stlT.reduce((a,x)=>a+Number(x.tip_amount),0):null);
     // كشف محفوظ؟
     // وضع «الكل»: لا يُحمَّل مسير مشغّل بعينه (كان يأخذ مسيراً عشوائياً ثم يكتب فوقه)
@@ -269,7 +271,7 @@ export default function Payroll({opId,owner}){
 
     </fieldset>
 
-    {!allOps&&locked&&owner&&payLines.length>0&&<PaySection lines={payLines} period={period} onSaved={(line,res)=>{
+    {!allOps&&locked&&owner&&payLines.length>0&&<PaySection lines={payLines} period={period} names={empNames} onSaved={(line,res)=>{
       // تحديث محلي من رد الدالة (بلا إعادة تحميل الصفحة): السطر، وحالة المسير، وشارة الدفع في البطاقة
       const nl={...line,...res};setPayLines(ls=>ls.map(l=>l.id===line.id?nl:l));if(res.run_status)setStatus(res.run_status);
       if(line.role==="supervisor")setSupPay(payOf(nl));else setBikers(bs=>bs.map(b=>b.employee_id===line.employee_id?{...b,pay:payOf(nl)}:b));}}/>}
@@ -289,7 +291,7 @@ function PayRow({p}){if(!p)return null;const S=PAY_STATUS[p.st]||PAY_STATUS.pend
 // قسم «الدفع» (للمالك، المسير المعتمد): ملخص + سطر لكل فرد + نموذج تسجيل عبر record_payroll_payment.
 // خارج fieldset المسير لأنه معطّل في المسير المقفل؛ القاعدة تفرض الصلاحية والقواعد، والنموذج يعرض رفضها كما هو.
 const riyadhToday=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
-function PaySection({lines,period,onSaved}){
+function PaySection({lines,period,names={},onSaved}){
   const[open,setOpen]=useState(null);const[msgOpen,setMsgOpen]=useState(null);const[bulk,setBulk]=useState(false);const T=payTotals(lines);
   return(<div className="pr-paysec">
     <div className="pr-sec-h"><Icon n="payroll" s={16}/> الدفع <span>({lines.length})</span>
@@ -309,7 +311,7 @@ function PaySection({lines,period,onSaved}){
         {l.payment_status==="paid"&&msgOpen!==l.id&&<button className="pr-btn ghost" onClick={()=>setMsgOpen(l.id)}><Icon n="chat" s={13}/> نسخ رسالة الواتساب</button>}
         {open!==l.id&&<button className="pr-btn ghost" onClick={()=>setOpen(l.id)}><Icon n="edit" s={13}/> تسجيل الدفع</button>}</div>
       <PayRow p={payOf(l)}/>
-      {msgOpen===l.id&&<MsgBox line={l} onClose={()=>setMsgOpen(null)}/>}
+      {msgOpen===l.id&&<MsgBox line={l} names={names[l.employee_id]} onClose={()=>setMsgOpen(null)}/>}
       {open===l.id&&<PayForm line={l} period={l.period||period} onClose={()=>setOpen(null)} onSaved={res=>{setOpen(null);onSaved(l,res);}}/>}
     </div>)}
   </div>);
@@ -358,7 +360,7 @@ function BulkPay({lines,period,onClose,onSaved}){
 }
 // رسالة الواتساب لسطر مدفوع بالنموذج المعتمد (عربي + English + বাংলা في رسالة واحدة؛ المشرف عربي) + «كلمة من الإدارة» بثلاث لغات + معاينة + نسخ.
 // الشكاوى المرفوعة/المرفوضة من ops_tickets
-function MsgBox({line,onClose}){
+function MsgBox({line,names,onClose}){
   const toast=useToast();const[notes,setNotes]=useState({ar:"",en:"",bn:""});const setN=(k,v)=>setNotes(x=>({...x,[k]:v}));
   const needCc=line.role==="biker"&&!!line.biker_id;const[cc,setCc]=useState(needCc?"loading":null);   // "loading" | {raised,counted,rejected} | "err" | null
   useEffect(()=>{if(!needCc)return;let off=false;
@@ -367,7 +369,7 @@ function MsgBox({line,onClose}){
     q.then(({data,error})=>{if(off)return;if(error||!data){setCc("err");return;}
       setCc(complaintCounts(data.filter(t=>String(t.sweater_id||"").trim()===String(line.biker_id).trim())));},()=>{if(!off)setCc("err");});
     return()=>{off=true;};},[line.id]);
-  const text=payrollMessage(line,{notes,complaints:cc&&typeof cc==="object"?cc:null});
+  const text=payrollMessage(line,{notes,names,complaints:cc&&typeof cc==="object"?cc:null});
   const copy=async()=>{
     let done=false;try{await navigator.clipboard.writeText(text);done=true;}catch(e){
       const t=document.createElement("textarea");t.value=text;t.setAttribute("readonly","");t.style.cssText="position:fixed;top:0;left:-9999px;opacity:0";
