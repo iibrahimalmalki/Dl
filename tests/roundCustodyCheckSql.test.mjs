@@ -18,6 +18,7 @@ const BIKE='20000000-0000-0000-0000-000000000001',PHONE='20000000-0000-0000-0000
   RAKIB_TOWEL='20000000-0000-0000-0000-000000000007',OLD='20000000-0000-0000-0000-000000000008',GONE='20000000-0000-0000-0000-000000000009';
 const R1='30000000-0000-0000-0000-000000000001',R0='30000000-0000-0000-0000-000000000000',RX='30000000-0000-0000-0000-00000000000f';
 const IMEI='490154203237518';
+const PH=n=>`https://x.supabase.co/storage/v1/object/public/field-evidence/default/2026-10/1648/${n}`;
 
 ps(`create database ${db}`,'postgres');
 try{
@@ -67,44 +68,44 @@ ok('anon لا يملك تنفيذ الدالتين، والمسجّل يملك',
 const L=a=>`'${JSON.stringify(a)}'::jsonb`;
 const chk=(uid,round,lines)=>as(uid,`select round_custody_check('${round}',${L(lines)})::text`);
 const chkErr=(uid,round,lines)=>asErr(uid,`select round_custody_check('${round}',${L(lines)})`)||'';
-const okLines=[{asset_id:BIKE,condition:'ok',photo:'b.jpg'},{asset_id:PHONE,condition:'ok',photo:'p.jpg',imei:'4901 5420 3237 518'},{asset_id:BOX,condition:'ok',photo:'x.jpg'},{asset_id:TOWEL,condition:'ok'}];
+const okLines=[{asset_id:BIKE,condition:'ok',photo:PH('b.jpg')},{asset_id:PHONE,condition:'ok',photo:PH('p.jpg'),imei:'4901 5420 3237 518'},{asset_id:BOX,condition:'ok',photo:PH('x.jpg')},{asset_id:TOWEL,condition:'ok'}];
 
 // ── الرفض ──
 ok('عرض فقط بلا تعديل الجولات ⇒ مرفوض',/ROUND_CUSTODY_DENIED/.test(chkErr(VIEW,R1,okLines)));
 ok('أمين الإمداد بلا «الجولات» ⇒ مرفوض',/ROUND_CUSTODY_DENIED/.test(chkErr(STORE,R1,okLines)));
 ok('جولة بلا موظف ⇒ لا يُخمَّن',/ROUND_NO_EMPLOYEE/.test(chkErr(SUP,RX,okLines)));
 ok('قطعة بايكر آخر ⇒ مرفوضة',/CUSTODY_CHECK_ASSET/.test(chkErr(SUP,R1,[{asset_id:RAKIB_TOWEL,condition:'ok'}])));
-ok('قطعة مُستبدلة ⇒ مرفوضة',/CUSTODY_CHECK_ASSET/.test(chkErr(SUP,R1,[{asset_id:OLD,condition:'ok',photo:'h'}])));
+ok('قطعة مُستبدلة ⇒ مرفوضة',/CUSTODY_CHECK_ASSET/.test(chkErr(SUP,R1,[{asset_id:OLD,condition:'ok',photo:PH('h')}])));
 ok('قطعة مكرّرة ⇒ مرفوضة',/CUSTODY_CHECK_DUP/.test(chkErr(SUP,R1,[{asset_id:TOWEL,condition:'ok'},{asset_id:TOWEL,condition:'ok'}])));
 ok('حالة غير معروفة ⇒ مرفوضة',/CUSTODY_CHECK_CONDITION/.test(chkErr(SUP,R1,[{asset_id:TOWEL,condition:'fine'}])));
 ok('تالفة بلا ملاحظة ⇒ مرفوضة',/CUSTODY_CHECK_NOTE/.test(chkErr(SUP,R1,[{asset_id:TOWEL,condition:'damaged',note:' '}])));
 ok('الدراجة/الصندوق بلا صورة ⇒ مرفوضة، والمفقودة بلا صورة مقبولة',/CUSTODY_CHECK_PHOTO/.test(chkErr(SUP,R1,[{asset_id:BIKE,condition:'ok'}]))&&/CUSTODY_CHECK_PHOTO/.test(chkErr(SUP,R1,[{asset_id:BOX,condition:'damaged',note:'مكسور'}])));
-ok('الجوال بلا IMEI ⇒ مرفوض',/CUSTODY_CHECK_IMEI/.test(chkErr(SUP,R1,[{asset_id:PHONE,condition:'ok',photo:'p'}])));
+ok('الجوال بلا IMEI ⇒ مرفوض',/CUSTODY_CHECK_IMEI/.test(chkErr(SUP,R1,[{asset_id:PHONE,condition:'ok',photo:PH('p')}])));
 ok('الرفض لا يغيّر شيئاً (معاملة واحدة)',ps(`select count(last_check_at) from custody_assets`)==='0'&&ps(`select custody_check::text from field_rounds where id='${R1}'`)==='[]');
 
 // ── جرد سليم ──
 const r1=JSON.parse(chk(SUP,R1,okLines));
 ok('جرد سليم: 4 أسطر، 4 قطع محدّثة، لا شيء بانتظار القرار',r1.lines===4&&r1.updated===4&&r1.pending===0);
-ok('على القطعة: تاريخ الجولة والحالة ورقم الجولة، وround_id الأصلي (جولة الإنشاء) كما هو',ps(`select last_check_at||'|'||last_check_condition||'|'||(last_check_round_id='${R1}')||'|'||(round_id='${R0}')||'|'||last_check_photo||'|'||status from custody_assets where id='${BIKE}'`)==='2026-10-03|ok|true|true|b.jpg|active');
+ok('على القطعة: تاريخ الجولة والحالة ورقم الجولة، وround_id الأصلي (جولة الإنشاء) كما هو',ps(`select last_check_at||'|'||last_check_condition||'|'||(last_check_round_id='${R1}')||'|'||(round_id='${R0}')||'|'||(last_check_photo=$$${PH('b.jpg')}$$)||'|'||status from custody_assets where id='${BIKE}'`)==='2026-10-03|ok|true|true|true|active');
 ok('الجوال: IMEI مطابق رغم المسافات ⇒ ✅، وعلى الجولة آخر 4 أرقام فقط',ps(`select last_check_imei_ok from custody_assets where id='${PHONE}'`)==='t'&&ps(`select (l->>'imei_ok')||'|'||(l->>'imei_last4')||'|'||(position('${IMEI}' in custody_check::text)>0) from field_rounds, jsonb_array_elements(custody_check) l where id='${R1}' and l->>'asset_id'='${PHONE}'`)==='true|7518|false');
 ok('القطعة «مستحقة» (due) تُجرد، وحالتها لا تتغيّر',ps(`select status||'|'||last_check_condition from custody_assets where id='${TOWEL}'`)==='due|ok');
 
 // ── تالف/مفقود/IMEI مختلف ⇒ بانتظار قرار المالك ──
-const r2=JSON.parse(chk(SUP,R1,[{asset_id:PHONE,condition:'ok',photo:'p2',imei:'356938035643809'},{asset_id:BOX,condition:'damaged',note:'القفل مكسور',photo:'x2'},{asset_id:SOAP,condition:'lost',note:'غير موجودة'}]));
+const r2=JSON.parse(chk(SUP,R1,[{asset_id:PHONE,condition:'ok',photo:PH('p2'),imei:'356938035643809'},{asset_id:BOX,condition:'damaged',note:'القفل مكسور',photo:PH('x2')},{asset_id:SOAP,condition:'lost',note:'غير موجودة'}]));
 ok('تعديل الجولة نفسها: 3 أسطر، والثلاث بانتظار القرار',r2.lines===3&&r2.updated===3&&r2.pending===3);
 ok('IMEI مختلف ⇒ ❌ وبانتظار القرار',ps(`select last_check_imei_ok||'|'||decision_status from custody_assets where id='${PHONE}'`)==='false|pending');
 ok('التالفة والمفقودة: بانتظار القرار، وstatus بلا تغيير (لا تحميل ولا إغلاق تلقائي)',ps(`select string_agg(last_check_condition||':'||decision_status||':'||status,',' order by name) from custody_assets where id in ('${BOX}','${SOAP}')`)==='lost:pending:active,damaged:pending:active');
 ok('الجولة تحفظ الأسطر الجديدة وتُبقي أسطرها السابقة للقطع غير المرسلة (3 + الدراجة والمناشف)',ps(`select jsonb_array_length(custody_check) from field_rounds where id='${R1}'`)==='5'&&ps(`select string_agg(l->>'condition',',' order by l->>'name') from field_rounds, jsonb_array_elements(custody_check) l where id='${R1}'`)==='ok,ok,lost,damaged,ok');
-const r2b=JSON.parse(chk(SUP,R1,[{asset_id:PHONE,condition:'ok',photo:'p3'}]));
+const r2b=JSON.parse(chk(SUP,R1,[{asset_id:PHONE,condition:'ok',photo:PH('p3')}]));
 ok('تعديل الجولة بلا IMEI جديد ⇒ تبقى نتيجة المطابقة المحفوظة (❌ و…3809)، ولا علامة جديدة',r2b.pending===0&&ps(`select last_check_imei_ok::text from custody_assets where id='${PHONE}'`)==='false'&&ps(`select l->>'imei_last4' from field_rounds, jsonb_array_elements(custody_check) l where id='${R1}' and l->>'asset_id'='${PHONE}'`)==='3809');
-ok('جولة أخرى بلا IMEI للجوال ⇒ مرفوض (لا نتيجة محفوظة لها)',/CUSTODY_CHECK_IMEI/.test(chkErr(SUP,R0,[{asset_id:PHONE,condition:'ok',photo:'p'}])));
+ok('جولة أخرى بلا IMEI للجوال ⇒ مرفوض (لا نتيجة محفوظة لها)',/CUSTODY_CHECK_IMEI/.test(chkErr(SUP,R0,[{asset_id:PHONE,condition:'ok',photo:PH('p')}])));
 
 // ── جولة أقدم لا تكتب فوق جرد أحدث ──
-const r3=JSON.parse(chk(SUP,R0,[{asset_id:BOX,condition:'ok',photo:'old'}]));
-ok('جولة 30/09 بعد جرد 03/10: تُحفظ على الجولة ولا تمسّ القطعة',r3.lines===1&&r3.updated===0&&ps(`select last_check_condition||'|'||last_check_photo from custody_assets where id='${BOX}'`)==='damaged|x2');
+const r3=JSON.parse(chk(SUP,R0,[{asset_id:BOX,condition:'ok',photo:PH('old')}]));
+ok('جولة 30/09 بعد جرد 03/10: تُحفظ على الجولة ولا تمسّ القطعة',r3.lines===1&&r3.updated===0&&ps(`select last_check_condition||'|'||(last_check_photo=$$${PH('x2')}$$) from custody_assets where id='${BOX}'`)==='damaged|true');
 
 // ── «سليمة» لا تمسح العلامة، والقرار للمالك وحده ──
-chk(SUP,R1,[{asset_id:BOX,condition:'ok',photo:'x3'}]);
+chk(SUP,R1,[{asset_id:BOX,condition:'ok',photo:PH('x3')}]);
 ok('جرد لاحق «سليمة» لا يمسح «بانتظار القرار»',ps(`select last_check_condition||'|'||decision_status from custody_assets where id='${BOX}'`)==='ok|pending');
 ok('غير المالك لا يقرّر ولا يمسح العلامة مباشرة',/CUSTODY_CHECK_GUARD/.test(asErr(SUP,`update custody_assets set decision_status='decided',decision_note='x' where id='${BOX}'`)||'')
   &&/CUSTODY_CHECK_GUARD/.test(asErr(STORE,`update custody_assets set decision_status=null where id='${SOAP}'`)||''));
@@ -114,16 +115,26 @@ ok('تعديلات غير المالك الأخرى تمرّ (ملاحظة/حا�
 ok('المالك يقرّر',!asErr(OWNER,`update custody_assets set decision_status='decided',decision_note='إصلاح على الشركة',decided_by=auth.uid(),decided_at=now() where id='${BOX}'`)
   &&ps(`select decision_status||'|'||decision_note||'|'||(decided_by='${OWNER}') from custody_assets where id='${BOX}'`)==='decided|إصلاح على الشركة|true');
 ok('غير المالك لا يعيد قراراً مسجّلاً إلى «بانتظار»',/CUSTODY_CHECK_GUARD/.test(asErr(SUP,`update custody_assets set decision_status='pending',decision_note=null,decided_by=null,decided_at=null where id='${BOX}'`)||''));
-chk(SUP,R1,[{asset_id:BOX,condition:'damaged',note:'كسر جديد',photo:'x4'}]);
+chk(SUP,R1,[{asset_id:BOX,condition:'damaged',note:'كسر جديد',photo:PH('x4')}]);
 ok('تلف جديد بعد القرار ⇒ بانتظار القرار من جديد بحقول قرار فارغة',ps(`select decision_status||'|'||coalesce(decision_note,'-')||'|'||coalesce(decided_by::text,'-') from custody_assets where id='${BOX}'`)==='pending|-|-');
 as(OWNER,`update custody_assets set decision_status='decided',decision_note='استبدال على الشركة',decided_by=auth.uid(),decided_at=now() where id='${BOX}'`);
-const r5=JSON.parse(chk(SUP,R1,[{asset_id:BOX,condition:'damaged',note:'كسر جديد — تصحيح إملائي',photo:'x4'}]));
+const r5=JSON.parse(chk(SUP,R1,[{asset_id:BOX,condition:'damaged',note:'كسر جديد — تصحيح إملائي',photo:PH('x4')}]));
 ok('إعادة حفظ الجولة نفسها بالحالة نفسها لا تمسح قرار المالك',r5.pending===0&&ps(`select decision_status||'|'||decision_note from custody_assets where id='${BOX}'`)==='decided|استبدال على الشركة');
+const R3='30000000-0000-0000-0000-000000000003',RF='30000000-0000-0000-0000-00000000000e';
+ps(`insert into field_rounds values ('${R3}','${E_MIDUL}','1648','2026-10-10'),('${RF}','${E_MIDUL}','1648',((now() at time zone 'Asia/Riyadh')::date+2))`);
+ok('تاريخ جولة في المستقبل ⇒ مرفوض',/ROUND_DATE_FUTURE/.test(chkErr(SUP,RF,[{asset_id:TOWEL,condition:'ok'}])));
+ok('صورة ليست من مخزن field-evidence ⇒ مرفوضة',/ليست من مخزن/.test(chkErr(SUP,R3,[{asset_id:BIKE,condition:'ok',photo:'x'}]))&&/ليست من مخزن/.test(chkErr(SUP,R3,[{asset_id:BIKE,condition:'ok',photo:'https://evil.example/storage/v1/object/public/other/a.jpg'}])));
+const r6=JSON.parse(chk(SUP,R3,[{asset_id:BOX,condition:'damaged',note:'التلف نفسه',photo:PH('x5')}]));
+ok('جولة لاحقة تجد التلف نفسه الذي قرّر فيه المالك ⇒ لا تعيد «بانتظار» ولا تمسح القرار',r6.pending===0&&ps(`select decision_status||'|'||(last_check_round_id='${R3}') from custody_assets where id='${BOX}'`)==='decided|true');
+ps(`update field_rounds set custody_check='[{"asset_id":"${PHONE}","condition":"ok","imei_ok":true,"imei_last4":"7518"},{"asset_id":"${RAKIB_TOWEL}","condition":"ok"}]' where id='${R3}'`);
+ok('custody_check مزوّر على الجولة لا يمرّر الجوال بلا IMEI (النتيجة تُقرأ من القطعة المحمية فقط)',/CUSTODY_CHECK_IMEI/.test(chkErr(SUP,R3,[{asset_id:PHONE,condition:'ok',photo:PH('p')}])));
+chk(SUP,R3,[{asset_id:TOWEL,condition:'ok'}]);
+ok('الأسطر المُبقاة لقطع بايكر الجولة فقط (سطر قطعة بايكر آخر يسقط)',ps(`select string_agg(l->>'asset_id',',' order by l->>'asset_id') from field_rounds, jsonb_array_elements(custody_check) l where id='${R3}'`)===[PHONE,TOWEL].sort().join(','));
 
 // ── «ناقص» بلا عدّاد ──
 ok('ناقص بتاريخ نهاية ⇒ مرفوض بالقيد، وبلا نهاية مقبول',/custody_assets_missing_ck/.test(asErr(SUP,`insert into custody_assets (employee_id,name,status,end_date) values ('${E_MIDUL}','x','missing','2027-01-01')`)||'')
   &&!asErr(SUP,`insert into custody_assets (id,employee_id,sweater_id,item_type,name,start_date,life_months,status,end_date,round_id) values ('${GONE}','${E_MIDUL}','1648','safety','الخوذة','2026-10-03',24,'missing',null,'${R1}')`));
-ok('القطعة الناقصة لا تُجرد (ليست بيد البايكر)',/CUSTODY_CHECK_ASSET/.test(chkErr(SUP,R1,[{asset_id:GONE,condition:'ok',photo:'h'}])));
+ok('القطعة الناقصة لا تُجرد (ليست بيد البايكر)',/CUSTODY_CHECK_ASSET/.test(chkErr(SUP,R1,[{asset_id:GONE,condition:'ok',photo:PH('h')}])));
 
 // ── تسليم طلب الإمداد ⇒ تجديد الدورة ──
 const Q1=ps(`insert into supply_requests (ref,round_id,sweater_id) values ('DW-1648-20261003-0900','${R1}','1648') returning id`);

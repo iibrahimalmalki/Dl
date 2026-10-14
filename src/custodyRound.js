@@ -5,7 +5,7 @@
 // القاعدة هي المرجع: مطابقة IMEI ورفض الأسطر تتم فيها، وهنا للعرض والتنبيه قبل الإرسال فقط.
 // من custodyLifecycle (لا custodyCatalog مباشرة) ومع استعمال isLive منه: يبقى الكتالوج داخل حزمة custodyLifecycle كما في main،
 // فلا تنشأ حزمة كتالوج مستقلة تُضاف إلى قائمة تحميل بوابة البايكر في الحزمة الرئيسية
-import{CATALOG,catalogByKey,catalogOfAsset,isLive}from"./custodyLifecycle";
+import{CATALOG,catalogByKey,catalogOfAsset,isLive,addMonths}from"./custodyLifecycle";
 
 export const CONDS=[
   {v:"ok",ar:"سليمة",tone:"g"},
@@ -88,7 +88,6 @@ export function extractPlan(round={}){
   return{available,missing,unknown:order.filter(k=>!avail.has(k)&&!miss.has(k))};
 }
 
-const addMonths=(iso,m)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()+Math.round(Number(m)||0));return d.toISOString().slice(0,10);};
 // صفوف custody_assets للاستخراج: المسجّل للبايكر (أي قطعة غير مُستبدلة/مُرجعة، ومنها «الناقصة») لا يُكرَّر
 // ctx: {operator_id, employee_id, biker_name} ⇒ {rows, skipped, unknown}
 export function extractRows(round={},existing=[],ctx={}){

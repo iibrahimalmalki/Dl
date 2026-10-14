@@ -47,11 +47,13 @@ export default function Custody({opId,owner,onGo}){
 
   const empBySid=useMemo(()=>{const m={};emps.forEach(x=>{if(x.employee_id)m[String(x.employee_id).trim()]=x;});return m;},[emps]);
   // «ناقصة» (سُجّلت ناقصة في جولة): بلا عدّاد حتى تُسلَّم
+  // «بانتظار قرار المالك» للقطع القائمة فقط (المُستبدلة/المُرجعة تبقى علامتها في سجلها ولا تُعدّ)
+  const pendingLive=r=>r.decision_status==="pending"&&r.status!=="replaced"&&r.status!=="returned";
   const dep=r=>{if(r.status==="missing")return{age:0,rem:null,used:0,end:null,due:false};const life=(r.life_months||12)*30;const age=Math.max(0,daysBetween(r.start_date,today()));const end=r.end_date||addMonths(r.start_date,r.life_months||12);const rem=daysBetween(today(),end);const used=Math.min(100,Math.max(0,Math.round(age/life*100)));const due=r.status!=="replaced"&&r.status!=="returned"&&rem<=(r.lead_days||60);return{age,rem,used,end,due};};
   const shown=useMemo(()=>{
     let a=rows;if(tab==="due")a=rows.filter(r=>dep(r).due&&r.status!=="replaced"&&r.status!=="returned");
     else if(tab==="active")a=rows.filter(r=>r.status==="active"||r.status==="due");
-    else if(tab==="pending")a=rows.filter(r=>r.decision_status==="pending");
+    else if(tab==="pending")a=rows.filter(pendingLive);
     else if(tab==="reorder")a=rows.filter(r=>MODE_OF(r.item_type)==="reorder");
     return a;
   },[rows,tab]);
@@ -59,7 +61,7 @@ export default function Custody({opId,owner,onGo}){
     total:rows.length,due:due.length,
     buy:due.filter(r=>MODE_OF(r.item_type)==="buy").length,
     reorder:due.filter(r=>MODE_OF(r.item_type)==="reorder").length,
-    pending:rows.filter(r=>r.decision_status==="pending").length,
+    pending:rows.filter(pendingLive).length,
   };},[rows]);
 
   const pickCat=k=>{const c=CATALOG.find(x=>x.key===k);setF(p=>({...p,catKey:k,name:c?c.name:"",life_months:c?c.life:12,lead_days:c?c.lead:60}));};
@@ -157,7 +159,8 @@ export default function Custody({opId,owner,onGo}){
     if(error||!data){setMsg({ok:false,t:"تعذّر التحديث: "+errText(error)});return;}
     setRows(p=>p.map(x=>x.id===r.id?data:x));setMsg({ok:true,t:`«${r.name}» نشطة من اليوم حتى ${data.end_date}`});
   };
-  const openPhoto=async u=>{const s=await signedUrl(u).catch(()=>null);window.open(s||u,"_blank","noopener");};
+  // النافذة تُفتح داخل النقرة (لا يحجبها المتصفح)، ثم يُوضع الرابط الموقّع
+  const openPhoto=async u=>{const w=window.open("","_blank");const s=await signedUrl(u).catch(()=>null);if(w){w.opener=null;w.location.href=s||u;}};
   const del=async(r)=>{if(!confirm("حذف العُهدة؟"))return;const{error}=await supabase.from("custody_assets").delete().eq("id",r.id);if(!error)setRows(p=>p.filter(x=>x.id!==r.id));};
 
   if(loading)return<div className="g-skel" style={{height:280}}/>;

@@ -27,7 +27,7 @@ export function baselineState(rows=[]){
 const RANK={good:0,fair:1,poor:2,damaged:3};
 export const worst=conds=>conds.filter(Boolean).reduce((a,c)=>(RANK[c]??0)>(RANK[a]??-1)?c:a,null);
 
-const addMonths=(iso,m)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()+Math.round(Number(m)||0));return d.toISOString().slice(0,10);};
+export const addMonths=(iso,m)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()+Math.round(Number(m)||0));return d.toISOString().slice(0,10);};
 // أسطر اعتماد التسجيل الأول: قطعة لكل مفتاح كتالوج. قطعة نشطة لنفس البايكر ونفس الصنف (من الجولات) ⇒ تُربط ولا يتغيّر تاريخها.
 // items: أصناف الإقرار · assets: قطع custody_assets لنفس البايكر (عبر employees) · start: تاريخ بداية القطع الجديدة
 // ⇒ {lines, unmapped}: unmapped = أصناف بلا مفتاح كتالوج (يرفض الخادم الاعتماد إن وُجدت)

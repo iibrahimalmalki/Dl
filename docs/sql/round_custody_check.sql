@@ -8,10 +8,11 @@
 --        last_check_at (تاريخ الجولة) · last_check_condition · last_check_round_id · last_check_note · last_check_photo · last_check_imei_ok
 --      • الأصول المعمّرة (الدراجة، الجوال، صندوق الخدمة، الخوذة): صورة إلزامية (إلا «مفقودة»).
 --      • الجوال: IMEI المُدخل (*#06#) يُطابَق في القاعدة مع serial_no ⇒ last_check_imei_ok (✅/❌). يُحفظ آخر 4 أرقام فقط على الجولة.
---        عند تعديل الجولة نفسها بلا IMEI جديد تبقى نتيجة المطابقة المحفوظة على الجولة.
+--        عند تعديل الجولة نفسها بلا IMEI جديد تبقى نتيجة المطابقة المحفوظة على القطعة (إن كان آخر جرد لها من هذه الجولة).
+--      • الصورة من مخزن field-evidence فقط. تاريخ الجولة في المستقبل ⇒ مرفوض.
 --      • التالفة/المفقودة أو IMEI غير مطابق ⇒ decision_status = 'pending' («بانتظار قرار المالك»). لا تحميل على البايكر،
 --        ولا تتغيّر حالة القطعة (status) — القرار للمالك. «سليمة» لا تمسح علامة قائمة؛ المالك وحده يمسحها.
---        إعادة حفظ الجولة نفسها بالحالة نفسها لا تعيد «بانتظار القرار» ولا تمسح قراراً سجّله المالك.
+--        إعادة حفظ الجولة نفسها، أو جولة لاحقة تجد الحالة نفسها التي قرّر فيها المالك، لا تعيد «بانتظار القرار» ولا تمسح القرار.
 --      • تعديل جولة أقدم لا يكتب فوق جرد أحدث (round_date < last_check_at ⇒ تُحفظ على الجولة فقط).
 --        أسطر الجولة المحفوظة لقطع لم تُرسل في التعديل (استُبدلت بعدها مثلاً) تبقى على الجولة.
 --      • round_id القائم (الجولة التي أنشأت القطعة) لا يتغيّر؛ رقم جولة آخر جرد في last_check_round_id.
@@ -111,7 +112,7 @@ end $$;
 create or replace function public.round_custody_check(p_round uuid, p_lines jsonb) returns jsonb
 language plpgsql security definer set search_path to 'public' as $$
 declare
-  r public.field_rounds; a public.custody_assets; l jsonb; v_old jsonb; v_prev jsonb; v_id uuid; v_ids uuid[] := '{}';
+  r public.field_rounds; a public.custody_assets; l jsonb; v_old jsonb; v_id uuid; v_ids uuid[] := '{}';
   v_cond text; v_note text; v_photo text; v_imei text; v_last4 text; v_ok boolean; v_flag boolean;
   v_out jsonb := '[]'::jsonb; v_upd int := 0; v_pending int := 0;
 begin
@@ -119,6 +120,10 @@ begin
   select * into r from public.field_rounds where id = p_round for update;
   if not found then raise exception 'ROUND_NOT_FOUND: الجولة غير موجودة'; end if;
   if r.employee_id is null then raise exception 'ROUND_NO_EMPLOYEE: الجولة غير مربوطة بموظف — لا يُخمَّن'; end if;
+  -- تاريخ مستقبلي (خطأ إدخال) يجمّد ترتيب «آخر جرد» ⇒ مرفوض
+  if r.round_date is null or r.round_date > (now() at time zone 'Asia/Riyadh')::date then
+    raise exception 'ROUND_DATE_FUTURE: تاريخ الجولة فارغ أو في المستقبل';
+  end if;
   if jsonb_typeof(coalesce(p_lines, '[]'::jsonb)) <> 'array' then raise exception 'CUSTODY_CHECK_LINES: الأسطر ليست قائمة'; end if;
   v_old := case when jsonb_typeof(r.custody_check) = 'array' then r.custody_check else '[]'::jsonb end;
   perform set_config('app.custody_rpc', 'on', true);
@@ -138,25 +143,33 @@ begin
     if (a.item_type in ('motorcycle', 'device') or a.name in ('صندوق الخدمة', 'الخوذة')) and v_cond <> 'lost' and v_photo is null then
       raise exception 'CUSTODY_CHECK_PHOTO: صورة «%» إلزامية', a.name;
     end if;
+    -- الصورة من مخزن أدلة الجولات فقط (field-evidence) — لا نص عشوائي ولا رابط خارجي
+    if v_photo is not null and v_photo !~ '/storage/v1/object/(public|sign|authenticated)/field-evidence/' then
+      raise exception 'CUSTODY_CHECK_PHOTO: صورة «%» ليست من مخزن أدلة الجولات', a.name;
+    end if;
     v_ok := null; v_last4 := null;
     if a.item_type = 'device' and v_cond <> 'lost' then
       v_imei := regexp_replace(coalesce(l ->> 'imei', ''), '\D', '', 'g');
       if v_imei <> '' then
         v_ok := v_imei = regexp_replace(coalesce(a.serial_no, ''), '\D', '', 'g'); v_last4 := right(v_imei, 4);
       else
-        -- تعديل الجولة نفسها بلا IMEI جديد ⇒ نتيجة المطابقة المحفوظة على سطرها
-        select x into v_prev from jsonb_array_elements(v_old) x where x ->> 'asset_id' = a.id::text and x ->> 'imei_ok' is not null limit 1;
-        if v_prev is null then raise exception 'CUSTODY_CHECK_IMEI: أدخل IMEI الجوال (اطلب *#06#)'; end if;
-        v_ok := (v_prev ->> 'imei_ok')::boolean; v_last4 := v_prev ->> 'imei_last4';
+        -- تعديل الجولة نفسها بلا IMEI جديد ⇒ نتيجة المطابقة المحفوظة على القطعة (محمية بالمشغّل) إن كان آخر جرد لها من هذه الجولة؛
+        -- لا تُقرأ النتيجة من custody_check (يكتبه محرّر الجولات مباشرة)
+        if not (a.last_check_round_id is not distinct from r.id and a.last_check_imei_ok is not null) then
+          raise exception 'CUSTODY_CHECK_IMEI: أدخل IMEI الجوال (اطلب *#06#)';
+        end if;
+        v_ok := a.last_check_imei_ok;
+        select x ->> 'imei_last4' into v_last4 from jsonb_array_elements(v_old) x where x ->> 'asset_id' = a.id::text limit 1;
       end if;
     end if;
     v_out := v_out || jsonb_build_object('asset_id', a.id, 'name', a.name, 'condition', v_cond, 'note', v_note, 'photo', v_photo,
       'imei_ok', v_ok, 'imei_last4', v_last4);
     if a.last_check_at is null or r.round_date >= a.last_check_at then
-      -- علامة جديدة فقط إن تغيّر ما تسجّله هذه الجولة (إعادة الحفظ بالحالة نفسها لا تمسّ قرار المالك)
+      -- علامة جديدة فقط إن تغيّرت الحالة عن آخر جرد: إعادة حفظ الجولة نفسها، أو جولة لاحقة تجد التلف نفسه الذي قرّر فيه المالك،
+      -- لا تعيد «بانتظار القرار» ولا تمسح القرار
       v_flag := (v_cond <> 'ok' or v_ok is false)
-        and not (a.last_check_round_id is not distinct from r.id and a.last_check_condition is not distinct from v_cond
-                 and a.last_check_imei_ok is not distinct from v_ok);
+        and not (a.last_check_condition is not distinct from v_cond and a.last_check_imei_ok is not distinct from v_ok
+                 and (a.last_check_round_id is not distinct from r.id or a.decision_status is not null));
       update public.custody_assets set
         last_check_at = r.round_date, last_check_condition = v_cond, last_check_round_id = r.id,
         last_check_note = v_note, last_check_photo = v_photo, last_check_imei_ok = v_ok,
@@ -170,9 +183,10 @@ begin
     end if;
   end loop;
 
-  -- أسطر الجولة السابقة لقطع لم تُرسل هذه المرة تبقى (تاريخ الجولة لا يُمحى)
+  -- أسطر الجولة السابقة لقطع لم تُرسل هذه المرة تبقى (تاريخ الجولة لا يُمحى) — لقطع بايكر الجولة فقط (تغيّر البايكر ⇒ تسقط أسطر السابق)
   update public.field_rounds set custody_check = v_out || coalesce((select jsonb_agg(x) from jsonb_array_elements(v_old) x
-      where not (coalesce(nullif(x ->> 'asset_id', ''), '00000000-0000-0000-0000-000000000000')::uuid = any(v_ids))), '[]'::jsonb)
+      join public.custody_assets c on c.id::text = x ->> 'asset_id' and c.employee_id = r.employee_id
+      where not (c.id = any(v_ids))), '[]'::jsonb)
     where id = r.id;
   perform set_config('app.custody_rpc', '', true);
   return jsonb_build_object('lines', jsonb_array_length(v_out), 'updated', v_upd, 'pending', v_pending);
