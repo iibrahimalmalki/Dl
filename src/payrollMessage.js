@@ -26,20 +26,14 @@ const MONTHS = {
 export const monthOnly = (period, lang = "ar") => (MONTHS[lang] || MONTHS.ar)[+String(period || "").split("-")[1] - 1] || "";
 export const monthName = (period, lang = "ar") => `${monthOnly(period, lang)} ${String(period || "").split("-")[0] || ""}`.trim();
 
-// أسماء العرض برقم البايكر (قرار المالك 2026-10-14، مؤقتاً حتى خانتَي «الاسم بالعربي/بالبنغالي» في ملف الموظف — PR مستقل):
-// العربي بإملاء «عريف / رقيب / ميدول» (لا نموذج يونيو مكتوباً في المستودع)، والإنجليزي الاسم الأول، والبنغالي بالحروف البنغالية.
-// غير المعروف: العربي والبنغالي = الاسم المحفوظ، والإنجليزي = أول كلمة منه
-const NAMES = {
-  "1624": { ar: "عريف", en: "Ariful", bn: "আরিফুল" },
-  "1648": { ar: "ميدول", en: "Midul", bn: "মিদুল" },
-  "1700": { ar: "رقيب", en: "Rakib", bn: "রাকিব" },
-};
-export function displayName(line = {}, lang = "ar") {
-  const k = NAMES[String(line.biker_id || "").trim()], full = String(line.name || "").trim();
-  if (k && k[lang]) return k[lang];
-  return lang === "en" ? full.split(/\s+/)[0] || full : full;
+// أسماء العرض من ملف الموظف (employees.name_ar / name_bn — docs/sql/employee_display_names.sql)، تمرَّر في names = {ar, bn}.
+// الفارغ ⇒ الاسم الأول من الاسم المسجّل (full_name / سطر المسير). الإنجليزي دائماً الاسم الأول المسجّل.
+export function displayName(line = {}, lang = "ar", names = {}) {
+  const own = String((names && names[lang]) || "").trim();
+  if (own && lang !== "en") return own;
+  const full = String(line.name || "").trim();
+  return full.split(/\s+/)[0] || full;
 }
-export const arName = line => displayName(line, "ar");
 
 // أرقام السطر من computed (ما حُسب به المسير فعلاً) مع inputs احتياطاً
 export function lineFacts(line = {}, complaints = null) {
@@ -64,7 +58,7 @@ const SEP = "━━━━━━━━━━━━━━━━━━━━", RULE
 const v = x => (x == null || x === "" ? "—" : x);
 
 // notes: {ar, en, bn} — «كلمة من الإدارة»؛ لغة فارغة لا يظهر سطرها، والثلاث فارغة ⇒ لا قسم
-function bikerText(line, f, notes = {}) {
+function bikerText(line, f, notes = {}, names = {}) {
   const p = line.period, y = String(p || "").split("-")[0] || "";
   const mAr = monthOnly(p, "ar"), mEn = monthOnly(p, "en"), mBn = monthOnly(p, "bn");
   const L = [
@@ -72,9 +66,9 @@ function bikerText(line, f, notes = {}) {
     `Bucket & Foam × Sweater | ${mEn} ${y}`,
     `ডালু ওয়ারগওয়া × সুইটার | ${mBn} ${y}`,
     "",
-    `السلام عليكم أخ *${displayName(line, "ar")}* 👋`,
-    `Assalamu Alaikum, Brother *${displayName(line, "en")}*`,
-    `আস-সালামু আলাইকুম, ভাই *${displayName(line, "bn")}*`,
+    `السلام عليكم أخ *${displayName(line, "ar", names)}* 👋`,
+    `Assalamu Alaikum, Brother *${displayName(line, "en", names)}*`,
+    `আস-সালামু আলাইকুম, ভাই *${displayName(line, "bn", names)}*`,
     "",
     SEP,
     `✅ *تم صرف مكافأة ${mAr}*`,
@@ -145,10 +139,10 @@ function supervisorText(line, note) {
   return latin(L.join("\n"));
 }
 
-// notes: {ar, en, bn} للبايكر؛ المشرف يأخذ notes.ar فقط
-export function payrollMessage(line = {}, { notes = {}, complaints = null } = {}) {
+// notes: {ar, en, bn} للبايكر؛ المشرف يأخذ notes.ar فقط · names: {ar, bn} من ملف الموظف
+export function payrollMessage(line = {}, { notes = {}, complaints = null, names = {} } = {}) {
   if (line.role === "supervisor") return supervisorText(line, notes.ar);
-  return bikerText(line, lineFacts(line, complaints), notes);
+  return bikerText(line, lineFacts(line, complaints), notes, names);
 }
 
 // عدّ شكاوى الشهر للبايكر من ops_tickets: مرفوعة = كل التذاكر، محسوبة = approved، مرفوضة = rejected
