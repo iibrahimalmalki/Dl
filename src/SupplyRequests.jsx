@@ -5,6 +5,7 @@ import{useToast}from"./ui";
 import{buildSupplyRequestMsg,buildEscalationMsg,buildConsolidatedMsg,classifyOpenRequests,elapsedBoth}from"./fieldReport";
 import ActivityLog from"./ActivityLog";
 import{signedUrls}from"./storageUrl";
+import{renewTargets}from"./custodyRound";
 const SR_FL={status:"الحالة",requesting_dept:"الجهة الطالبة",biker_name:"البايكر",sweater_id:"رقم البايكر",ref:"المرجع",sla_hours:"مهلة (ساعة)"};
 const SR_DV={open:"مفتوح",escalated:"مُصعّد",completed:"مكتمل",cancelled:"ملغى"};
 
@@ -78,9 +79,21 @@ export default function SupplyRequests({opId,owner}){
   };
   const complete=async(r)=>{
     const note=prompt("ملاحظة الاكتمال (اختياري) — ما الذي تم توفيره؟","تم التوفير")||null;
-    const{data}=await supabase.from("supply_requests").update({status:"completed",completed_at:new Date().toISOString(),completion_note:note}).eq("id",r.id).select().single();
+    // طلب مرتبط بجولة: التسليم يجدّد دورة العهدة المطابقة لنفس البايكر والصنف (البداية = يوم التسليم) — src/custodyRound.js
+    let targets=[];
+    if(r.round_id){
+      const{data:rd}=await supabase.from("field_rounds").select("employee_id").eq("id",r.round_id).maybeSingle();
+      if(rd&&rd.employee_id){
+        const{data:as}=await supabase.from("custody_assets").select("id,employee_id,name,name_en,item_type,status").eq("employee_id",rd.employee_id).in("status",["active","due","missing"]);
+        targets=renewTargets(r.items,as||[],rd.employee_id);
+      }
+    }
+    if(targets.length&&!confirm(`تسليم ${r.ref} يجدّد دورة هذه العُهد لـ ${r.biker_name||r.sweater_id} (البداية اليوم):\n• ${targets.map(a=>a.name+(a.status==="missing"?" (كانت ناقصة)":"")).join("\n• ")}\n\nمتابعة؟`))return;
+    const{data:res,error}=await supabase.rpc("supply_request_complete",{p_request:r.id,p_note:note,p_assets:targets.map(a=>a.id)});
+    if(error){setMsg({ok:false,t:"تعذّر إغلاق الطلب: "+(error.message||error)});return;}
+    const{data}=await supabase.from("supply_requests").select("*").eq("id",r.id).single();
     if(data)setRows(p=>p.map(x=>x.id===r.id?data:x));
-    setMsg({ok:true,t:`تم إغلاق الطلب ${r.ref} كمكتمل`});
+    setMsg({ok:true,t:`تم إغلاق الطلب ${r.ref} كمكتمل`+(res&&res.renewed?` · جُدّدت ${res.renewed} عُهدة من ${res.start}`:"")});
   };
   const del=async(r)=>{if(!confirm("حذف هذا الطلب؟"))return;const{error}=await supabase.from("supply_requests").delete().eq("id",r.id);if(!error)setRows(p=>p.filter(x=>x.id!==r.id));};
 

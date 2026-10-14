@@ -5,9 +5,11 @@ import{useToast}from"./ui";
 import ActivityLog from"./ActivityLog";
 import CustodyDeclarations from"./CustodyDeclarations";
 import{timeline,replacementRow}from"./custodyLifecycle";
+import{extractRows,condAr}from"./custodyRound";
 import{ACCESSORIES,blankPhone,imeiDigits,imeiError,brandError,simError,phoneSpecs,maskImei,accLabels,isDevice,imeiServerError}from"./custodyPhone";
 const CU_FL={name:"العهدة",status:"الحالة",start_date:"البداية",end_date:"النهاية",biker_name:"البايكر",sweater_id:"رقم البايكر",life_months:"العمر (شهر)",category:"الفئة"};
-const CU_DV={active:"نشطة",due:"مستحقة",replaced:"مُستبدلة",returned:"مُرجعة",planned:"مخطّطة"};
+const CU_FL_X={last_check_at:"آخر جرد",last_check_condition:"حالة آخر جرد",decision_status:"قرار المالك",decision_note:"نص القرار"};
+const CU_DV={active:"نشطة",due:"مستحقة",replaced:"مُستبدلة",returned:"مُرجعة",planned:"مخطّطة",missing:"ناقصة",ok:"سليمة",damaged:"تالفة",lost:"مفقودة",pending:"بانتظار قرار المالك",decided:"قرّر المالك"};
 
 // الكتالوج وخريطة أصناف بوابة البايكر في ملف مستقل (تستعمله البوابة أيضاً)
 import{CATALOG}from"./custodyCatalog";
@@ -43,10 +45,12 @@ export default function Custody({opId,owner,onGo}){
   })();},[opId,rev]);
 
   const empBySid=useMemo(()=>{const m={};emps.forEach(x=>{if(x.employee_id)m[String(x.employee_id).trim()]=x;});return m;},[emps]);
-  const dep=r=>{const life=(r.life_months||12)*30;const age=Math.max(0,daysBetween(r.start_date,today()));const end=r.end_date||addMonths(r.start_date,r.life_months||12);const rem=daysBetween(today(),end);const used=Math.min(100,Math.max(0,Math.round(age/life*100)));const due=r.status!=="replaced"&&r.status!=="returned"&&rem<=(r.lead_days||60);return{age,rem,used,end,due};};
+  // «ناقصة» (سُجّلت ناقصة في جولة): بلا عدّاد حتى تُسلَّم
+  const dep=r=>{if(r.status==="missing")return{age:0,rem:null,used:0,end:null,due:false};const life=(r.life_months||12)*30;const age=Math.max(0,daysBetween(r.start_date,today()));const end=r.end_date||addMonths(r.start_date,r.life_months||12);const rem=daysBetween(today(),end);const used=Math.min(100,Math.max(0,Math.round(age/life*100)));const due=r.status!=="replaced"&&r.status!=="returned"&&rem<=(r.lead_days||60);return{age,rem,used,end,due};};
   const shown=useMemo(()=>{
     let a=rows;if(tab==="due")a=rows.filter(r=>dep(r).due&&r.status!=="replaced"&&r.status!=="returned");
     else if(tab==="active")a=rows.filter(r=>r.status==="active"||r.status==="due");
+    else if(tab==="pending")a=rows.filter(r=>r.decision_status==="pending");
     else if(tab==="reorder")a=rows.filter(r=>MODE_OF(r.item_type)==="reorder");
     return a;
   },[rows,tab]);
@@ -54,6 +58,7 @@ export default function Custody({opId,owner,onGo}){
     total:rows.length,due:due.length,
     buy:due.filter(r=>MODE_OF(r.item_type)==="buy").length,
     reorder:due.filter(r=>MODE_OF(r.item_type)==="reorder").length,
+    pending:rows.filter(r=>r.decision_status==="pending").length,
   };},[rows]);
 
   const pickCat=k=>{const c=CATALOG.find(x=>x.key===k);setF(p=>({...p,catKey:k,name:c?c.name:"",life_months:c?c.life:12,lead_days:c?c.lead:60}));};
@@ -75,19 +80,21 @@ export default function Custody({opId,owner,onGo}){
   const extractFromRound=async()=>{
     const r=rounds.find(x=>x.id===exRound);if(!r){setMsg({ok:false,t:"اختر جولة"});return;}
     const emp=empBySid[String(r.sweater_id).trim()];
-    const existing=new Set(rows.filter(x=>String(x.sweater_id)===String(r.sweater_id)&&x.status!=="replaced"&&x.status!=="returned").map(x=>x.name));
+    // ما سُجّل متوفّراً ⇒ نشط من تاريخ الجولة · ما سُجّل ناقصاً ⇒ «ناقصة» بلا عدّاد · غير المسجّل لا يُضاف (src/custodyRound.js)
     // الجوال لا يُستخرج من جولة: يحتاج IMEI الجهاز (يُضاف من «إضافة عُهدة» أو من إقرار البايكر)
-    const toAdd=CATALOG.filter(c=>c.type!=="device"&&!existing.has(c.name)).map(c=>({operator_id:(opId&&opId!=="all")?opId:null,employee_id:emp?.id||null,biker_name:emp?.full_name||r.biker_name||"",sweater_id:r.sweater_id,
-      item_type:c.type,category:c.category,name:c.name,name_en:c.en,start_date:r.round_date,life_months:c.life,end_date:addMonths(r.round_date,c.life),lead_days:c.lead,source:"round",round_id:r.id}));
-    if(!toAdd.length){setMsg({ok:false,t:"كل عُهد الكتالوج مسجّلة لهذا البايكر"});setShowExtract(false);return;}
+    const mine=rows.filter(x=>emp?x.employee_id===emp.id:String(x.sweater_id)===String(r.sweater_id));
+    const{rows:toAdd,unknown}=extractRows(r,mine,{operator_id:(opId&&opId!=="all")?opId:null,employee_id:emp?.id||null,biker_name:emp?.full_name||r.biker_name||""});
+    const unk=unknown.length?` · لم تُسجَّل في الجولة (أضِفها يدوياً إن وُجدت): ${unknown.map(k=>(CATALOG.find(c=>c.key===k)||{}).name).join("، ")}`:"";
+    if(!toAdd.length){setMsg({ok:false,t:"لا أصناف جديدة من هذه الجولة — المسجّل فيها مسجّل للبايكر مسبقاً"+unk});setShowExtract(false);return;}
     const{data,error}=await supabase.from("custody_assets").insert(toAdd).select();
     if(error){setMsg({ok:false,t:"خطأ: "+error.message});return;}
     setRows(p=>[...p,...(data||[])].sort((a,b)=>(a.end_date||"")<(b.end_date||"")?-1:1));setShowExtract(false);setExRound("");
-    setMsg({ok:true,t:`تمت إضافة ${data?.length||0} عُهدة من الجولة (بداية ${r.round_date})`});
+    const nMiss=(data||[]).filter(x=>x.status==="missing").length;
+    setMsg({ok:true,t:`تمت إضافة ${(data?.length||0)-nMiss} عُهدة نشطة (بداية ${r.round_date})${nMiss?` و${nMiss} «ناقصة» بلا عدّاد`:""}${unk}`});
   };
   const openExtract=async()=>{
     setShowExtract(true);setShowAdd(false);
-    let q=supabase.from("field_rounds").select("id,biker_name,sweater_id,round_date").order("round_date",{ascending:false}).limit(40);
+    let q=supabase.from("field_rounds").select("id,biker_name,sweater_id,round_date,results,item_parts").order("round_date",{ascending:false}).limit(40);
     if(opId&&opId!=="all")q=q.or("operator_id.eq."+opId+",operator_id.is.null");
     const{data}=await q;setRounds(data||[]);
   };
@@ -132,6 +139,15 @@ export default function Custody({opId,owner,onGo}){
     setRows(p=>[...p.map(x=>x.id===r.id&&old?old:x),nw]);setRepl(null);
     setMsg(e2||!old?{ok:false,t:"أُنشئ الجهاز البديل لكن تعذّر وسم القديم «مُستبدلاً»: "+errText(e2)}:{ok:true,t:`استُبدل الجوال ✓ — الجديد IMEI ${maskImei(imei)} حتى ${nw.end_date}`});
   };
+  // قرار المالك على التالفة/المفقودة: نص القرار إلزامي، ولا تحميل على البايكر من هنا (القرار يُنفَّذ بإجرائه المعتاد)
+  const decide=async(r)=>{
+    const note=(prompt(`قرار المالك على «${r.name}» (${condAr(r.last_check_condition)}${r.last_check_imei_ok===false?" · IMEI غير مطابق":""}) — اكتب القرار:`,"")||"").trim();
+    if(!note)return;
+    const{data:{user}}=await supabase.auth.getUser();
+    const{data,error}=await supabase.from("custody_assets").update({decision_status:"decided",decision_note:note,decided_by:user?.id||null,decided_at:new Date().toISOString()}).eq("id",r.id).select().single();
+    if(error||!data){setMsg({ok:false,t:"تعذّر حفظ القرار: "+errText(error)});return;}
+    setRows(p=>p.map(x=>x.id===r.id?data:x));setMsg({ok:true,t:`سُجّل القرار على «${r.name}»`});
+  };
   const del=async(r)=>{if(!confirm("حذف العُهدة؟"))return;const{error}=await supabase.from("custody_assets").delete().eq("id",r.id);if(!error)setRows(p=>p.filter(x=>x.id!==r.id));};
 
   if(loading)return<div className="g-skel" style={{height:280}}/>;
@@ -160,12 +176,12 @@ export default function Custody({opId,owner,onGo}){
     </div>}
 
     {showExtract&&<div className="cu-form">
-      <div className="cu-fh"><Icon n="rounds" s={15}/> استخراج عُهد الكتالوج من جولة ميدانية (تاريخ البداية = تاريخ الجولة)</div>
+      <div className="cu-fh"><Icon n="rounds" s={15}/> استخراج العُهد من جولة ميدانية (تاريخ البداية = تاريخ الجولة)</div>
       <div className="cu-exrow">
         <select value={exRound} onChange={e=>setExRound(e.target.value)}><option value="">اختر جولة…</option>{rounds.map(r=><option key={r.id} value={r.id}>{r.biker_name||r.sweater_id} · #{r.sweater_id} · {r.round_date}</option>)}</select>
         <button className="cu-btn ok" onClick={extractFromRound}><Icon n="check" s={15}/> استخراج</button>
       </div>
-      <div className="cu-note">يضيف عُهد الكتالوج غير المسجّلة للبايكر (دراجة، زي، معدات حماية، أدوات، مواد تنظيف، مناشف) ببداية تاريخ الجولة وأعمارها الافتراضية — عدّلها بعد الإضافة.</div>
+      <div className="cu-note">يضيف فقط ما سُجّل <b>متوفّراً</b> في الجولة (ببداية تاريخ الجولة وعمره الافتراضي)، وما سُجّل <b>ناقصاً</b> يُضاف «ناقصة» بلا عدّاد حتى يُسلَّم بطلب إمداد. ما لم يُسجَّل في الجولة لا يُضاف — أضِفه يدوياً. المسجّل للبايكر لا يتكرّر.</div>
     </div>}
 
     <div className="cu-kpis">
@@ -176,30 +192,36 @@ export default function Custody({opId,owner,onGo}){
     </div>
     <div className="cu-hint"><Icon n="alert" s={13}/> يُحسب الإهلاك من تاريخ البداية × العمر الافتراضي. قبل النهاية بمهلة التخطيط: الأصول المعمّرة (الدراجة) → «خطّط للشراء»، والمواد المستهلكة → «طلب سويتر» يُنشئ طلب إمداد ويعيد ضبط دورة العُهدة.</div>
 
-    <div className="cu-tabs">{[["all","الكل"],["due","قارب الانتهاء"],["reorder","المستهلكات"],["active","النشطة"]].map(([k,l])=><button key={k} className={"cu-tab"+(tab===k?" on":"")} onClick={()=>setTab(k)}>{l}</button>)}</div>
+    {kpis.pending>0&&<button className="cu-pend" onClick={()=>setTab("pending")}><Icon n="alert" s={14}/> {kpis.pending} قطعة تالفة/مفقودة من الجولات — بانتظار قرار المالك</button>}
+    <div className="cu-tabs">{[["all","الكل"],["due","قارب الانتهاء"],["reorder","المستهلكات"],["active","النشطة"],["pending",`بانتظار القرار${kpis.pending?` (${kpis.pending})`:""}`]].map(([k,l])=><button key={k} className={"cu-tab"+(tab===k?" on":"")} onClick={()=>setTab(k)}>{l}</button>)}</div>
 
     {shown.length===0?<div className="cu-empty"><div className="cu-empty-ic"><Icon n="bucket" s={30}/></div><h3>لا عُهد</h3><p>أضِف عُهدة يدوياً أو استخرجها من جولة ميدانية — ويبدأ احتساب الإهلاك وتخطيط الاستبدال/إعادة الطلب.</p></div>:
-    shown.map(r=>{const d=dep(r);const mode=MODE_OF(r.item_type);const col=r.status==="replaced"?"var(--mut-2)":d.due?"var(--bad)":d.used>=70?"var(--warn)":"var(--ok)";
+    shown.map(r=>{const d=dep(r);const mode=MODE_OF(r.item_type);const miss=r.status==="missing";const col=r.status==="replaced"||miss?"var(--mut-2)":d.due?"var(--bad)":d.used>=70?"var(--warn)":"var(--ok)";
       return(
       <div className={"cu-card"+(d.due?" due":"")} key={r.id} style={{borderInlineStartColor:col}}>
         <div className="cu-top">
-          <div><div className="cu-name">{r.name}<span className="cu-cat">{r.category}</span>{r.status==="replaced"&&<span className="cu-badge rep">مُستبدلة</span>}{d.due&&r.status!=="replaced"&&<span className="cu-badge due">قارب الانتهاء</span>}</div>
+          <div><div className="cu-name">{r.name}<span className="cu-cat">{r.category}</span>{r.status==="replaced"&&<span className="cu-badge rep">مُستبدلة</span>}{miss&&<span className="cu-badge rep">ناقصة — لا عدّاد</span>}{d.due&&r.status!=="replaced"&&<span className="cu-badge due">قارب الانتهاء</span>}{r.decision_status==="pending"&&<span className="cu-badge due">بانتظار قرار المالك</span>}</div>
             <div className="cu-sub">{r.biker_name||"—"} · #{r.sweater_id||"—"} · {r.name_en||""}</div></div>
-          <div className="cu-rem" style={{color:col}}>{r.status==="replaced"?"—":d.rem>=0?`${d.rem} يوم`:`متأخر ${Math.abs(d.rem)} يوم`}</div>
+          <div className="cu-rem" style={{color:col}}>{r.status==="replaced"||miss?"—":d.rem>=0?`${d.rem} يوم`:`متأخر ${Math.abs(d.rem)} يوم`}</div>
         </div>
         {isDevice(r)&&<div className="cu-dev"><span dir="ltr" title={r.serial_no||""}>IMEI {maskImei(r.serial_no)||"—"}</span>{r.specs&&r.specs.brand_model&&<span dir="ltr">{r.specs.brand_model}</span>}
           {r.specs&&r.specs.sim&&<span dir="ltr">☎ {r.specs.sim}</span>}{accLabels(r.specs&&r.specs.acc).map(a=><span key={a} className="cu-cat">{a}</span>)}</div>}
+        {miss?<div className="cu-dates">🗓️ سُجّلت ناقصة في جولة <b>{r.start_date}</b> — يبدأ العدّاد عند تسليمها بطلب إمداد</div>:<>
         <div className="cu-dates">🗓️ البداية: <b>{r.start_date}</b> · الانتهاء المتوقّع: <b>{d.end}</b> · العمر: {r.life_months} شهر</div>
         <div className="cu-bar-t"><div style={{width:d.used+"%",background:col}}/></div>
-        <div className="cu-used">استُهلك {d.used}% من العمر الافتراضي</div>
+        <div className="cu-used">استُهلك {d.used}% من العمر الافتراضي</div></>}
+        {r.last_check_at&&<div className={"cu-chk "+(r.last_check_condition||"")}>🔎 آخر جرد: <b>{r.last_check_at}</b> · {condAr(r.last_check_condition)}{r.last_check_imei_ok===true?" · IMEI ✅":r.last_check_imei_ok===false?" · IMEI ❌ غير مطابق":""}{r.last_check_note?` — ${r.last_check_note}`:""}
+          {r.last_check_photo&&<a href={r.last_check_photo} target="_blank" rel="noreferrer"> · صورة</a>}</div>}
+        {r.decision_status==="pending"&&<div className="cu-dec"><Icon n="alert" s={13}/> بانتظار قرار المالك — لا يُحمَّل على البايكر تلقائياً{owner&&<button className="cu-b plan" onClick={()=>decide(r)}><Icon n="check" s={12}/> تسجيل القرار</button>}</div>}
+        {r.decision_status==="decided"&&r.decision_note&&<div className="cu-notes">⚖️ قرار المالك{r.decided_at?` (${String(r.decided_at).slice(0,10)})`:""}: {r.decision_note}</div>}
         {r.notes&&<div className="cu-notes">{r.notes}</div>}
         <div className="cu-actions">
           {r.status!=="replaced"&&d.due&&mode==="reorder"&&<button className="cu-b reorder" onClick={()=>reorder(r)}><Icon n="refresh" s={13}/> طلب سويتر (إعادة)</button>}
           {r.status!=="replaced"&&d.due&&mode==="buy"&&<button className="cu-b buy" onClick={()=>planReplace(r)}><Icon n="bike" s={13}/> خطّط لشراء دراجة</button>}
           {r.status!=="replaced"&&d.due&&mode==="replace"&&<button className="cu-b plan" onClick={()=>planReplace(r)}><Icon n="alert" s={13}/> خطّط للاستبدال</button>}
-          {r.status!=="replaced"&&<button className="cu-b done" onClick={()=>markReplaced(r)}><Icon n="check" s={13}/> استُبدلت</button>}
+          {r.status!=="replaced"&&!miss&&<button className="cu-b done" onClick={()=>markReplaced(r)}><Icon n="check" s={13}/> استُبدلت</button>}
           <button className="cu-b" onClick={()=>setTlOpen(tlOpen===r.id?null:r.id)} aria-expanded={tlOpen===r.id}><Icon n="clock" s={13}/> سجل القطعة</button>
-          <ActivityLog table="custody_assets" rowId={r.id} labels={CU_FL} valueMap={CU_DV} entityName="العهدة"/>
+          <ActivityLog table="custody_assets" rowId={r.id} labels={{...CU_FL,...CU_FL_X}} valueMap={CU_DV} entityName="العهدة"/>
           <div style={{flex:1}}/>
           {owner&&<button className="cu-b del" onClick={()=>del(r)}><Icon n="trash" s={12}/></button>}
         </div>
@@ -271,6 +293,11 @@ const CSS=`
 .cu-dates{font-size:11px;color:var(--mut);margin-top:8px}.cu-dates b{color:var(--ink)}
 .cu-bar-t{height:7px;background:var(--track);border-radius:5px;overflow:hidden;margin-top:7px}.cu-bar-t div{height:100%;border-radius:5px}
 .cu-used{font-size:10.5px;color:var(--mut-2);margin-top:4px}
+.cu-pend{display:flex;align-items:center;gap:7px;width:100%;margin-bottom:12px;padding:10px 12px;border-radius:11px;border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);background:var(--warn-bg);color:var(--warn-ink);font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;text-align:start}
+.cu-chk{margin-top:8px;font-size:11.5px;font-weight:600;color:var(--ok-ink);background:var(--ok-bg);border-radius:8px;padding:6px 10px}
+.cu-chk.damaged,.cu-chk.lost{color:var(--warn-ink);background:var(--warn-bg)}.cu-chk a{color:inherit;font-weight:800}
+.cu-dec{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:8px;font-size:11.5px;font-weight:800;color:var(--bad-ink);background:var(--bad-bg);border-radius:8px;padding:6px 10px}
+.cu-dec .cu-b{margin-inline-start:auto}
 .cu-notes{margin-top:8px;font-size:11.5px;color:var(--ink-2);background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
 .cu-actions{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:11px}
 .cu-b{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:9px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink-2);font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer}

@@ -11,8 +11,8 @@ export const kindOf=r=>(r&&r.kind)||"baseline";
 
 const CLOSED=["replaced","returned"];
 export const isLive=a=>!!a&&!CLOSED.includes(a.status);
-// قطع «عهدتي الحالية»: النشطة/المستحقة، والدراجة لها تبويبها الخاص (الاستلام)
-export const myPieces=(assets=[])=>assets.filter(a=>isLive(a)&&a.item_type!=="motorcycle");
+// قطع «عهدتي الحالية»: النشطة/المستحقة، والدراجة لها تبويبها الخاص (الاستلام)، و«الناقصة» (سُجّلت ناقصة في جولة) ليست بيد البايكر
+export const myPieces=(assets=[])=>assets.filter(a=>isLive(a)&&a.status!=="missing"&&a.item_type!=="motorcycle");
 
 // حالة التسجيل الأول للبايكر من صفوفه في biker_assets ⇒ none | pending | approved | rejected (مع الصف)
 export function baselineState(rows=[]){
@@ -107,4 +107,4 @@ export function replacementRow(old,today,extra={}){
     item_type:old.item_type,category:old.category,name:old.name,name_en:old.name_en||null,
     start_date:today,life_months:life,lead_days:lead,end_date:addMonths(today,life),status:"active",source:"replacement",notes:`بديل عن ${old.id}`,...extra};
 }
-export{CATALOG};
+export{CATALOG,catalogByKey,catalogOfAsset};

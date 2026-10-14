@@ -61,6 +61,7 @@ s=L.pieceState(BR,[base,rej,appr]);
 ok('اعتماد لاحق يُخفي الرفض الأقدم ويحدّث الحالة',s.lastRejection===null&&s.condition==='fair');
 ok('قطعة مستبدلة ⇒ لا تحديث',!L.pieceState({id:'x',status:'replaced'},[]).canUpdate);
 ok('الدراجة ليست ضمن «عهدتي»',L.myPieces([{item_type:'motorcycle',status:'active'},{item_type:'tool',status:'due'},{item_type:'tool',status:'replaced'}]).length===1);
+ok('«الناقصة» ليست ضمن «عهدتي» (ليست بيد البايكر)',L.myPieces([{item_type:'safety',status:'missing'},{item_type:'tool',status:'active'}]).length===1);
 
 // ── التحقق ──
 const photo={name:'a.jpg'};

@@ -9,6 +9,7 @@ import{openReport,shortageItems,makeRef,buildSupplyRequestMsg}from"./fieldReport
 const SUPPORT_WA="https://chat.whatsapp.com/K5ePnROKEcFD03UesTbeJV";
 import FieldChecklistForm,{FCF_CSS}from"./FieldChecklistForm";
 import ActivityLog from"./ActivityLog";
+import{CONDS,condAr,isDurable,isPhone,checkable,imeiMatch,checkError,checkArgs,allOkPatch,linesFromRound,checkSummary}from"./custodyRound";
 const FR_FL={biker_name:"البايكر",sweater_id:"رقم البايكر",round_date:"تاريخ الجولة",round_time:"الوقت",location:"الموقع",compliance_pct:"نسبة الالتزام %",status:"الحالة",effect:"الأثر",notes:"ملاحظات",inspector:"المفتّش"};
 const FR_DV={requested:"مطلوبة",submitted:"مُرسلة (ذاتي)",reviewed:"مُراجعة"};
 
@@ -43,8 +44,12 @@ export default function FieldRounds({opId,onGo}){
   // رسائل النجاح → Toast؛ الأخطاء تبقى بجانب النموذج
   const setMsg=m=>{if(m&&m.ok){toast.ok(m.t,undefined,m.t.length>60?7000:undefined);setMsgRaw(null);}else setMsgRaw(m);};
   const[viewer,setViewer]=useState(null); // رابط صورة للعرض المكبّر
+  // جرد العهدة (docs/sql/round_custody_check.sql): قطع البايكر النشطة وسطر لكل قطعة {condition, note, photo, imei}
+  const[cAssets,setCAssets]=useState([]);const[cLines,setCLines]=useState({});const[cLoad,setCLoad]=useState(false);
+  const setCLine=(id,patch)=>setCLines(p=>({...p,[id]:{...(p[id]||{}),...patch}}));
 
-  const upload=async(n,idx,file)=>{
+  // set: مُحدِّث حالة الصور (صور البنود افتراضياً، أو صورة قطعة في جرد العهدة)
+  const upload=async(n,idx,file,set=setPhotos)=>{
     if(!file)return;const key=`${n}-${idx}`;setUploading(key);setMsg(null);
     try{
       await ensureFreshToken();
@@ -53,7 +58,7 @@ export default function FieldRounds({opId,onGo}){
       const op=(opId&&opId!=="all")?opId:"default";
       const path=`${op}/${hd.date.slice(0,7)}/${hd.sweater_id||"x"}/${n}-${idx}-${Date.now()}-${rand}.jpg`;
       const publicUrl=await uploadAuthed("field-evidence",path,img,"image/jpeg");
-      setPhotos(p=>{const a=[...(p[n]||[])];a[idx]=publicUrl;return{...p,[n]:a};});
+      set(p=>{const a=[...(p[n]||[])];a[idx]=publicUrl;return{...p,[n]:a};});
     }catch(e){setMsg({ok:false,t:"تعذّر رفع الصورة: "+(e.message||e)});}
     setUploading("");
   };
@@ -94,9 +99,20 @@ export default function FieldRounds({opId,onGo}){
   const cAxis=useMemo(()=>complianceByAxis(res),[res]);
   const eff=effUI(comp.pct);
   const empBySid=useMemo(()=>{const m={};emps.forEach(e=>{if(e.employee_id)m[String(e.employee_id).trim()]=e;});return m;},[emps]);
+  const cEmp=hd.sweater_id?empBySid[String(hd.sweater_id).trim()]:null;
+  // قطع البايكر المختار تُحمَّل مع فتح النموذج أو تغيير البايكر
+  useEffect(()=>{
+    if(!showNew||!cEmp){setCAssets([]);return;}
+    let live=true;setCLoad(true);
+    supabase.from("custody_assets").select("id,employee_id,name,name_en,item_type,category,status,serial_no,last_check_at,last_check_condition").eq("employee_id",cEmp.id).in("status",["active","due"])
+      .then(({data})=>{if(live){setCAssets(checkable(data||[],cEmp.id));setCLoad(false);}});
+    return()=>{live=false;};
+  },[showNew,cEmp&&cEmp.id]);
+  // صورة قطعة الجرد: upload() يكتب بمفتاح "c-<id>" ⇒ تُنقل إلى photo في سطر القطعة
+  const setCPhotos=fn=>setCLines(prev=>{const nx=fn({});const o={...prev};Object.entries(nx).forEach(([k,a])=>{if(k.startsWith("c-")&&a&&a[0]){const id=k.slice(2);o[id]={...(o[id]||{}),photo:a[0]};}});return o;});
 
   // تفريغ النموذج للحالة الابتدائية
-  const resetForm=()=>{setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setItemParts({});setPhotos({});setNotes("");setEditId(null);};
+  const resetForm=()=>{setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setItemParts({});setPhotos({});setNotes("");setEditId(null);setCLines({});};
   // فتح جولة جديدة لبايكر محدّد من المساعد/لوحة القيادة: dw:open {view:'field_rounds',action:'new',sweater_id}
   useEffect(()=>{
     const startFor=d=>{if(!d||d.view!=="field_rounds"||d.action!=="new"||!d.sweater_id)return;resetForm();setHd(h=>({...h,sweater_id:String(d.sweater_id)}));setShowReq(false);setShowNew(true);};
@@ -108,7 +124,7 @@ export default function FieldRounds({opId,onGo}){
   const startEdit=(r)=>{
     setEditId(r.id);
     setHd({sweater_id:r.sweater_id||"",date:r.round_date||todayStr(),time:r.round_time||"",location:r.location||"",location_url:r.location_url||"",gps_lat:r.gps_lat??null,gps_lng:r.gps_lng??null,inspector:r.inspector||me||""});
-    setRes(r.results||{});setItemNotes(r.item_notes||{});setItemParts(r.item_parts||{});setPhotos(r.photos||{});setNotes(r.notes||"");
+    setRes(r.results||{});setItemNotes(r.item_notes||{});setItemParts(r.item_parts||{});setPhotos(r.photos||{});setNotes(r.notes||"");setCLines(linesFromRound(r.custody_check));
     setGeo(r.gps_lat?"done":"");setShowReq(false);setShowNew(true);setMsg(null);
     if(typeof window!=="undefined")window.scrollTo({top:0,behavior:"smooth"});
   };
@@ -116,6 +132,8 @@ export default function FieldRounds({opId,onGo}){
 
   const save=async()=>{
     if(!hd.sweater_id){setMsg({ok:false,t:"اختر البايكر"});return;}
+    // جرد العهدة: كل قطعة نشطة تُجرد قبل الحفظ (نفس قواعد القاعدة)
+    const ce=cAssets.length?checkError(cLines,cAssets):null;if(ce){setMsg({ok:false,t:"جرد العهدة: "+ce});return;}
     setSaving(true);setMsg(null);
     try{
       const emp=empBySid[String(hd.sweater_id).trim()];
@@ -129,18 +147,26 @@ export default function FieldRounds({opId,onGo}){
       const roundObj={results:res,item_notes:cleanNotes,compliance_pct:comp.pct,round_date:hd.date,biker_name:emp?.full_name||"",sweater_id:hd.sweater_id,action_items:comp.actions};
       const analysis=analyzeRound(roundObj,(hist||[]).slice(0,12));
       const row={operator_id:(opId&&opId!=="all")?opId:null,period:hd.date.slice(0,7),employee_id:emp?.id||null,sweater_id:hd.sweater_id,biker_name:emp?.full_name||"",round_date:hd.date,round_time:hd.time||null,location:hd.location||null,location_url:hd.location_url||null,gps_lat:hd.gps_lat,gps_lng:hd.gps_lng,inspector:hd.inspector||me||null,results:res,item_notes:cleanNotes,item_parts:cleanParts,photos:cleanPhotos,compliance_pct:comp.pct,effect:eff.key,action_items:comp.actions,by_axis:cAxis,ai_analysis:analysis,notes:notes||null};
+      let saved;
       if(editId){
         const{data,error}=await supabase.from("field_rounds").update(row).eq("id",editId).select().single();
-        if(error)throw error;
-        // إن تغيّر الشهر خارج الفلتر الحالي نُزيل السطر، وإلا نُحدّثه في مكانه
-        setRounds(p=>row.period===period?p.map(x=>x.id===editId?data:x):p.filter(x=>x.id!==editId));
-        setMsg({ok:true,t:"تم حفظ التعديلات على الجولة"});
+        if(error)throw error;saved=data;
       }else{
         const{data,error}=await supabase.from("field_rounds").insert(row).select().single();
-        if(error)throw error;
-        if(row.period===period)setRounds(p=>[data,...p]);
-        setMsg({ok:true,t:"تم حفظ الجولة"});
+        if(error)throw error;saved=data;
       }
+      // جرد العهدة بعد حفظ الجولة (يحتاج رقمها) — معاملة واحدة في القاعدة
+      let cErr=null,cRes=null;
+      if(cAssets.length){
+        const{data:cr,error:ce2}=await supabase.rpc("round_custody_check",{p_round:saved.id,p_lines:checkArgs(cLines,cAssets)});
+        if(ce2)cErr=ce2.message||String(ce2);else{cRes=cr;const{data:fresh}=await supabase.from("field_rounds").select("*").eq("id",saved.id).single();if(fresh)saved=fresh;}
+      }
+      // إن تغيّر الشهر خارج الفلتر الحالي نُزيل السطر، وإلا نُحدّثه في مكانه
+      const wasEdit=!!editId;
+      setRounds(p=>{const o=p.filter(x=>x.id!==saved.id);return row.period===period?(wasEdit?p.map(x=>x.id===saved.id?saved:x):[saved,...o]):o;});
+      if(cErr){setEditId(saved.id);setMsg({ok:false,t:"حُفظت الجولة، وتعذّر حفظ جرد العهدة: "+cErr+" — صحّح واضغط «حفظ التعديلات»."});setSaving(false);return;}
+      const pend=cRes&&cRes.pending?` · ${cRes.pending} بانتظار قرار المالك`:"";
+      setMsg({ok:true,t:(wasEdit?"تم حفظ التعديلات على الجولة":"تم حفظ الجولة")+(cRes?` · جُردت ${cRes.lines} قطعة${pend}`:"")});
       setShowNew(false);resetForm();
     }catch(e){setMsg({ok:false,t:"خطأ: "+(e.message||e)});}
     setSaving(false);
@@ -222,7 +248,7 @@ export default function FieldRounds({opId,onGo}){
       {/* رأس الجولة */}
       <div className="fr-hd">
         <label className="fr-fld"><span>البايكر</span>
-          <select value={hd.sweater_id} onChange={e=>setHd({...hd,sweater_id:e.target.value})}>
+          <select value={hd.sweater_id} onChange={e=>{setHd({...hd,sweater_id:e.target.value});setCLines({});}}>
             <option value="">اختر…</option>{emps.map(e=><option key={e.id} value={e.employee_id}>{e.full_name} · #{e.employee_id}</option>)}
           </select></label>
         <label className="fr-fld"><span>تاريخ الجولة</span><input type="date" value={hd.date} onChange={e=>setHd({...hd,date:e.target.value})}/></label>
@@ -240,6 +266,7 @@ export default function FieldRounds({opId,onGo}){
       </div>
 
       <FieldChecklistForm items={ITEMS} res={res} onRes={(n,v)=>setRes(p=>({...p,[n]:v}))} notes={itemNotes} onNote={(n,t)=>setItemNotes(p=>({...p,[n]:t}))} parts={itemParts} onPart={(n,pt)=>setItemParts(p=>{const cur=p[n]||[];const nx=cur.includes(pt)?cur.filter(x=>x!==pt):[...cur,pt];const o={...p};if(nx.length)o[n]=nx;else delete o[n];return o;})} photos={photos} onUpload={upload} uploading={uploading} onView={setViewer}/>
+      {hd.sweater_id&&<CustodyCheck emp={cEmp} assets={cAssets} loading={cLoad} lines={cLines} setLine={setCLine} setAll={p=>setCLines(x=>({...x,...p}))} onUpload={(n,idx,f)=>upload(n,idx,f,setCPhotos)} uploading={uploading} onView={setViewer}/>}
       <label className="fr-fld" style={{marginTop:4}}><span>ملاحظات / إجراءات تصحيحية</span><input value={notes} onChange={e=>setNotes(e.target.value)} placeholder="اختياري"/></label>
 
       {/* مؤشرات المحاور */}
@@ -278,6 +305,7 @@ export default function FieldRounds({opId,onGo}){
         {r.status!=="requested"&&r.ai_analysis&&<AiPanel a={r.ai_analysis}/>}
         {(r.action_items||[]).length>0&&<div className="fr-c-act"><Icon n="wrench" s={12}/> بنود إدارة معلّقة: {(r.action_items||[]).map(n=>"#"+n).join("، ")}</div>}
         {r.notes&&<div className="fr-c-notes">{r.notes}</div>}
+        {(r.custody_check||[]).length>0&&(()=>{const s=checkSummary(r.custody_check);return<div className={"fr-c-cc"+(s.damaged||s.lost||s.imeiBad?" bad":"")}><Icon n="bucket" s={12}/> جرد العهدة: {s.ok} سليمة{s.damaged?` · ${s.damaged} تالفة`:""}{s.lost?` · ${s.lost} مفقودة`:""}{s.imeiBad?" · IMEI ❌":""}{s.damaged||s.lost||s.imeiBad?" — بانتظار قرار المالك":""}</div>;})()}
         {(()=>{const all=Object.values(r.photos||{}).flat().filter(Boolean);return all.length>0&&<div className="fr-c-gal"><div className="fr-c-gal-h"><Icon n="camera" s={12}/> {all.length} صورة توثيق</div><div className="fr-c-thumbs">{all.slice(0,8).map((u,i)=><img key={i} src={u} onClick={()=>setViewer(u)}/>)}{all.length>8&&<span className="fr-more">+{all.length-8}</span>}</div></div>;})()}
         <div className="fr-c-actions">
           {r.status!=="requested"&&<button className="fr-report" disabled={reporting===r.id} onClick={()=>openReportV2(r)}><Icon n="print" s={14}/> {reporting===r.id?"جارٍ التجهيز…":"تقرير الجولة"}</button>}
@@ -291,6 +319,31 @@ export default function FieldRounds({opId,onGo}){
       </div>);})}
 
     {viewer&&<div className="fr-viewer" onClick={()=>setViewer(null)}><img src={viewer}/><button className="fr-v-close"><Icon n="x" s={20}/></button></div>}
+  </div>);
+}
+// قسم «جرد العهدة» في نموذج الجولة: لكل قطعة نشطة سليمة/تالفة/مفقودة + ملاحظة، وصورة للمعمّرة، وIMEI للجوال
+function CustodyCheck({emp,assets,loading,lines,setLine,setAll,onUpload,uploading,onView}){
+  if(!emp)return <div className="fr-cc"><div className="fr-cc-h"><Icon n="bucket" s={15}/> جرد العهدة</div><div className="fr-cc-empty">البايكر غير مربوط بملف موظف — لا جرد.</div></div>;
+  const done=assets.filter(a=>lines[a.id]&&lines[a.id].condition).length;
+  const rest=assets.filter(a=>!isDurable(a)&&!(lines[a.id]&&lines[a.id].condition)).length;
+  return(<div className="fr-cc">
+    <div className="fr-cc-h"><Icon n="bucket" s={15}/> جرد العهدة <small>{loading?"…":`${done}/${assets.length}`}</small><div style={{flex:1}}/>
+      {rest>0&&<button type="button" className="fr-cc-all" onClick={()=>setAll(allOkPatch(lines,assets))}><Icon n="check" s={12}/> الباقي سليم ({rest})</button>}</div>
+    {!loading&&assets.length===0&&<div className="fr-cc-empty">لا عُهد نشطة مسجّلة لهذا البايكر.</div>}
+    {assets.map(a=>{const l=lines[a.id]||{};const dur=isDurable(a),ph=isPhone(a),lost=l.condition==="lost";const m=ph?imeiMatch(l.imei,a.serial_no):null;const key="c-"+a.id;return(
+      <div className="fr-cc-it" key={a.id}>
+        <div className="fr-cc-row">
+          <div className="fr-cc-nm">{a.name}{dur&&<span className="fr-cc-tag">معمّرة · صورة</span>}<div className="fr-cc-sub">{a.last_check_at?`آخر جرد ${a.last_check_at} · ${condAr(a.last_check_condition)}`:"لم تُجرد من قبل"}{a.status==="due"?" · مستحقة":""}</div></div>
+          <div className="fr-cc-opts">{CONDS.map(c=><button type="button" key={c.v} className={"fr-cc-o "+c.tone+(l.condition===c.v?" on":"")} onClick={()=>setLine(a.id,{condition:c.v})}>{c.ar}</button>)}</div>
+        </div>
+        {l.condition&&l.condition!=="ok"&&<div className="fr-exnote"><Icon n="alert" s={13}/><input value={l.note||""} onChange={e=>setLine(a.id,{note:e.target.value})} placeholder={lost?"ملاحظة إلزامية: متى وأين فُقدت؟":"ملاحظة إلزامية: ما التلف بالضبط؟"}/></div>}
+        {(dur||ph)&&!lost&&<div className="fr-cc-ex">
+          {dur&&<label className={"fr-ph"+(l.photo?" has":"")}>{l.photo?<img src={l.photo} onClick={e=>{e.preventDefault();onView(l.photo);}}/>:uploading===key+"-0"?<span className="fr-ph-up">…</span>:<><Icon n="camera" s={16}/><span>صورة إلزامية</span></>}
+            <input type="file" accept="image/*" capture="environment" hidden onChange={e=>onUpload(key,0,e.target.files&&e.target.files[0])}/></label>}
+          {ph&&<div className="fr-cc-imei"><span>IMEI الجوال (اطلب <b dir="ltr">*#06#</b>)</span>
+            <div><input dir="ltr" inputMode="numeric" value={l.imei||""} onChange={e=>setLine(a.id,{imei:e.target.value})} placeholder="15 رقماً"/><b className={m==null?"":m?"ok":"bad"}>{m==null?"":m?"✅ مطابق":"❌ غير مطابق"}</b></div></div>}
+        </div>}
+      </div>);})}
   </div>);
 }
 function K({ic,c,bg,t,v}){return(<div className="fr-kpi"><span className="fr-ki" style={{background:bg,color:c}}><Icon n={ic} s={17}/></span><div><div className="fr-kv">{v}</div><div className="fr-kl">{t}</div></div></div>);}
@@ -385,6 +438,29 @@ const CSS=`
 .fr-exnote input{flex:1;border:1px solid var(--line-2);border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;outline:none;background:var(--p-50)}
 .fr-exnote input:focus{border-color:var(--warn-ink);box-shadow:0 0 0 3px rgba(181,71,8,.1)}
 .fr-exnote>svg{color:var(--warn-ink);flex:none}
+.fr-cc{margin-top:14px;border:1px solid var(--line);border-radius:13px;padding:10px 12px;background:var(--soft)}
+.fr-cc-h{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800;color:var(--ink);padding-bottom:6px;border-bottom:1px solid var(--line)}
+.fr-cc-h small{color:var(--mut-2);font-weight:700}
+.fr-cc-all{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:8px;border:1px solid color-mix(in srgb,var(--ok) 35%,transparent);background:var(--ok-bg);color:var(--ok-ink);font-family:inherit;font-size:11px;font-weight:800;cursor:pointer}
+.fr-cc-empty{font-size:11.5px;color:var(--mut-2);padding:8px 0}
+.fr-cc-it{padding:9px 0;border-bottom:1px solid var(--line)}.fr-cc-it:last-child{border-bottom:none}
+.fr-cc-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.fr-cc-nm{flex:1;min-width:150px;font-size:12.5px;font-weight:700;color:var(--ink)}
+.fr-cc-sub{font-size:10px;color:var(--mut-2);font-weight:600;margin-top:2px}
+.fr-cc-tag{display:inline-block;margin-inline-start:6px;background:var(--info-bg);color:var(--info-ink);font-size:9.5px;font-weight:800;padding:1px 7px;border-radius:20px}
+.fr-cc-opts{display:flex;gap:4px;flex:none}
+.fr-cc-o{padding:6px 10px;border-radius:9px;border:1px solid var(--line-2);background:var(--glass-2);font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer;color:var(--mut)}
+.fr-cc-o.g.on{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok-ink)}
+.fr-cc-o.a.on{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 35%,transparent);color:var(--warn-ink)}
+.fr-cc-o.r.on{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent);color:var(--bad-ink)}
+.fr-cc-ex{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:8px}
+.fr-cc-imei{display:flex;flex-direction:column;gap:4px;flex:1;min-width:190px}
+.fr-cc-imei>span{font-size:10.5px;color:var(--mut);font-weight:700}
+.fr-cc-imei>div{display:flex;align-items:center;gap:8px}
+.fr-cc-imei input{flex:1;min-width:0;border:1px solid var(--line-2);border-radius:9px;padding:8px 10px;font-family:inherit;font-size:13px;font-weight:700;letter-spacing:.5px;outline:none;background:var(--glass-3)}
+.fr-cc-imei b{font-size:11.5px;white-space:nowrap}.fr-cc-imei b.ok{color:var(--ok-ink)}.fr-cc-imei b.bad{color:var(--bad-ink)}
+.fr-c-cc{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11.5px;font-weight:700;color:var(--ok-ink);background:var(--ok-bg);border-radius:8px;padding:6px 10px}
+.fr-c-cc.bad{color:var(--warn-ink);background:var(--warn-bg)}
 .fr-axmeters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
 .fr-axm{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
 .fr-axm-h{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:var(--mut);font-weight:700;margin-bottom:6px}
