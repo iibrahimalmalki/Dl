@@ -5,7 +5,7 @@ import{useToast}from"./ui";
 import{LEVELS,computeBiker,computeSupervisor,summarize,complaintPct,complaintRatio,IN_KIND_TOTAL}from"./payrollEngine";
 import{payrollRoster,tipsCheck}from"./payrollRoster";
 import{PAY_ST,capOf,payFormInit,payFormError,payArgs,payTotals,statusPatch,bulkEligible,bulkTotal,bulkError,bulkArgs}from"./payrollPayForm";
-import{payrollMessage,complaintCounts,MSG_LANGS}from"./payrollMessage";
+import{payrollMessage,complaintCounts}from"./payrollMessage";
 const PAY_STATUS=Object.fromEntries(PAY_ST.map(x=>[x.v,x]));
 
 const RUN_ST={approved:"معتمد",partially_paid:"مدفوع جزئياً",paid:"مدفوع"};
@@ -356,9 +356,10 @@ function BulkPay({lines,period,onClose,onSaved}){
     <div className="pr-payact"><button className="pr-btn ok" onClick={submit} disabled={busy}><Icon n="check" s={14}/> {busy?"جارٍ التسجيل…":"تسجيل الحوالة"}</button><button className="pr-btn ghost" onClick={onClose} disabled={busy}>إغلاق</button></div>
   </div>);
 }
-// رسالة الواتساب لسطر مدفوع: اللغة (الثلاث افتراضاً؛ المشرف عربي) + «كلمة من الإدارة» + معاينة + نسخ. الشكاوى المرفوعة/المرفوضة من ops_tickets
+// رسالة الواتساب لسطر مدفوع بالنموذج المعتمد (عربي + English + বাংলা في رسالة واحدة؛ المشرف عربي) + «كلمة من الإدارة» بثلاث لغات + معاينة + نسخ.
+// الشكاوى المرفوعة/المرفوضة من ops_tickets
 function MsgBox({line,onClose}){
-  const toast=useToast();const[lang,setLang]=useState("all");const[note,setNote]=useState("");
+  const toast=useToast();const[notes,setNotes]=useState({ar:"",en:"",bn:""});const setN=(k,v)=>setNotes(x=>({...x,[k]:v}));
   const needCc=line.role==="biker"&&!!line.biker_id;const[cc,setCc]=useState(needCc?"loading":null);   // "loading" | {raised,counted,rejected} | "err" | null
   useEffect(()=>{if(!needCc)return;let off=false;
     // تذاكر البايكر في الشهر لنفس المشغّل (رقم البايكر قد يتكرر بين مشغّلين؛ والمحفوظ قد يحمل مسافات ⇒ المطابقة بعد trim)
@@ -366,16 +367,19 @@ function MsgBox({line,onClose}){
     q.then(({data,error})=>{if(off)return;if(error||!data){setCc("err");return;}
       setCc(complaintCounts(data.filter(t=>String(t.sweater_id||"").trim()===String(line.biker_id).trim())));},()=>{if(!off)setCc("err");});
     return()=>{off=true;};},[line.id]);
-  const text=payrollMessage(line,{lang,note,complaints:cc&&typeof cc==="object"?cc:null});
+  const text=payrollMessage(line,{notes,complaints:cc&&typeof cc==="object"?cc:null});
   const copy=async()=>{
     let done=false;try{await navigator.clipboard.writeText(text);done=true;}catch(e){
       const t=document.createElement("textarea");t.value=text;t.setAttribute("readonly","");t.style.cssText="position:fixed;top:0;left:-9999px;opacity:0";
       document.body.appendChild(t);t.select();try{done=document.execCommand("copy");}catch(x){done=false;}t.remove();}
     if(done)toast.ok("نُسخت الرسالة ✓ — الصقها في واتساب");else toast.warn("تعذّر النسخ — حدّد النص في المربع وانسخه يدوياً");};
   return(<div className="pr-payf">
-    {line.role==="biker"?<div className="pr-payst">{MSG_LANGS.map(o=><label key={o.v} className={lang===o.v?"on":""}><input type="radio" name={"ml_"+line.id} checked={lang===o.v} onChange={()=>setLang(o.v)}/>{o.ar}</label>)}</div>
-      :<div className="pr-fh">رسالة المشرف بالعربي فقط.</div>}
-    <div className="pr-inputs"><Fld l="كلمة من الإدارة (اختياري)"><input value={note} onChange={e=>setNote(e.target.value)} placeholder="شكراً على جهدك هذا الشهر"/></Fld></div>
+    {line.role==="biker"?<div className="pr-inputs pr-notes3">
+      <Fld l="كلمة من الإدارة — عربي"><textarea rows={2} value={notes.ar} onChange={e=>setN("ar",e.target.value)}/></Fld>
+      <Fld l="Management — English"><textarea rows={2} dir="ltr" value={notes.en} onChange={e=>setN("en",e.target.value)}/></Fld>
+      <Fld l="ম্যানেজমেন্ট — বাংলা"><textarea rows={2} value={notes.bn} onChange={e=>setN("bn",e.target.value)}/></Fld>
+    </div>:<><div className="pr-fh">رسالة المشرف بالعربي فقط.</div>
+      <div className="pr-inputs"><Fld l="كلمة من الإدارة (اختياري)"><textarea rows={2} value={notes.ar} onChange={e=>setN("ar",e.target.value)}/></Fld></div></>}
     {cc==="loading"&&<div className="pr-fh">جارٍ تحميل عدد الشكاوى…</div>}
     {cc==="err"&&<div className="pr-msg err">تعذّر تحميل الشكاوى المرفوعة/المرفوضة — الرسالة بالمحسوبة من المسير فقط.</div>}
     <pre className="pr-msgpre" dir="auto">{text}</pre>
@@ -468,6 +472,8 @@ const CSS=`
 .pr-fh{font-size:12px;color:var(--ink-2);margin-bottom:8px}
 .pr-bulk{display:flex;flex-direction:column;gap:5px;margin-bottom:9px}.pr-bulk label{display:flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid var(--line-2);border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;flex-wrap:wrap}
 .pr-bulk label.on{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}.pr-bulk span{color:var(--mut);font-size:11.5px;font-weight:600}
+.pr-notes3{grid-template-columns:repeat(3,1fr)}.pr-fld textarea{border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;font-family:inherit;font-size:13px;color:var(--ink);background:var(--glass-3);resize:vertical;width:100%;box-sizing:border-box}
+@media(max-width:720px){.pr-notes3{grid-template-columns:1fr}}
 .pr-msgpre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;line-height:1.75;max-height:420px;overflow:auto;margin:8px 0}
 .pr-payact{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
 .pr-chip.good{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok-ink)}.pr-chip.good b{color:var(--ok-ink)}
