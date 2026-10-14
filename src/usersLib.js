@@ -67,7 +67,8 @@ export function lastActive(ts, now = Date.now()) {
 }
 
 // آخر تسجيل للبايكر في البوابة (أحدث ما سجّله بنفسه) ← {t, tone}. undefined = غير متاح بعد
-export const PORTAL_KIND = { bike_receive: "استلام دراجة", bike_return: "تسليم دراجة", custody: "إقرار عهدة", custody_update: "تحديث حالة عهدة", fuel: "طلب وقود", support: "دعم" };
+export const PORTAL_KIND = { bike_receive: "استلام دراجة", bike_return: "تسليم دراجة", custody: "إقرار عهدة", custody_update: "تحديث حالة عهدة", fuel: "طلب وقود", support: "دعم",
+  fuel_fill: "تعبئة وقود", oil: "تغيير زيت", daily: "استلام يومي" };
 export function portalLast(ts, kind, now = Date.now()) {
   if (ts === undefined) return null;
   if (!ts) return { t: "آخر تسجيل في البوابة: لا شيء بعد", tone: "warn" };

@@ -12,10 +12,15 @@
 --         وقائع 2026-10-14: not_after فارغ في كل الجلسات (لا انتهاء مضبوط)، فـ«نشطة» = موجودة.
 --     • portal_last_at / portal_last_kind — للبايكر فقط (app_users.biker_employee_id غير فارغ): أحدث ما سجّله بنفسه في البوابة:
 --         bike_handovers.created_at (استلام دراجة direction='receive'، وغيره تسليم) · biker_assets.created_at (إقرار عهدة؛ kind='update' تحديث حالة)
---         · fuel_requests.requested_at (طلب وقود) · support_tickets.created_at (دعم).
---       portal_last_kind: bike_receive · bike_return · custody · custody_update · fuel · support (الواجهة تترجمها — src/usersLib.js PORTAL_KIND).
+--         · fuel_requests.requested_at (طلب وقود) · support_tickets.created_at (دعم)
+--         · fuel_logs.created_at (تعبئة وقود) · maintenance_requests.requested_at و done_at (طلب وتأكيد تغيير زيت)
+--         · daily_deliveries.created_at (استلام يومي من المندوب) و daily_shares.confirmed_at (تأكيد حصته اليومية) — قرار المالك 2026-10-14.
+--       portal_last_kind: bike_receive · bike_return · custody · custody_update · fuel · support · fuel_fill · oil · daily
+--         (الواجهة تترجمها — src/usersLib.js PORTAL_KIND).
 --       المطابقة بحساب البايكر نفسه (created_by / user_id = app_users.id) لا بالاسم ولا برقم البايكر — فما أدخله المشرف
---       نيابة عنه لا يُحسب نشاطاً له في البوابة (وقائع 2026-10-14: 3 من 9 استلامات أدخلها حساب إداري).
+--       نيابة عنه لا يُحسب نشاطاً له في البوابة (وقائع 2026-10-14: 3 من 9 استلامات، و7 من 10 تعبئات وقود (مستوردة/إدارية) بحساب غير البايكر).
+--       استثناءان موثّقان: تأكيد الزيت (لا عمود حساب له) يُنسب لصاحب الطلب لأن confirm_oil_change لا يقبله إلا منه؛
+--       والاستلام اليومي يحفظ الموظف (employees.id) لا الحساب، وسياسات الكتابة تقصره على الموظف نفسه ⇒ يُربط بحسابه بالهوية الموثّقة.
 --   الصلاحية: المالك فقط (غيره ⇒ 42501 «owner only»)، security definer لقراءة auth.*، وبلا تنفيذ لـ anon.
 --   دالة جديدة لا تعديل لـ admin_users_activity(): تغيير أعمدة الإرجاع يحتاج حذف الدالة، والأداة لا تشغّل الحذف.
 -- الترتيب: تُطبَّق قبل دمج PR الواجهة (الواجهة تقرأ الجديدة، وعند غيابها تعود إلى admin_users_activity ولا يظهر السطران).
@@ -38,7 +43,19 @@ begin
                    case when h.direction = 'receive' then 'bike_receive' else 'bike_return' end::text as kind from public.bike_handovers h
             union all select b.created_by, b.created_at, case when b.kind = 'update' then 'custody_update' else 'custody' end from public.biker_assets b
             union all select f.created_by, f.requested_at, 'fuel' from public.fuel_requests f
-            union all select t.user_id, t.created_at, 'support' from public.support_tickets t) x
+            union all select t.user_id, t.created_at, 'support' from public.support_tickets t
+            -- تعبئة وقود: add_fuel_fill تكتب created_by = حساب البايكر؛ ما أدخلته الإدارة (ومنه المستورد legacy) بحسابها فلا يُحسب
+            union all select l.created_by, l.created_at, 'fuel_fill' from public.fuel_logs l
+            -- تغيير زيت: الطلب (request_oil_change ⇒ created_by = البايكر) والتأكيد (confirm_oil_change ⇒ done_at، يقبله البايكر صاحب الطلب وحده)
+            union all select m.created_by, m.requested_at, 'oil' from public.maintenance_requests m
+            union all select m.created_by, m.done_at, 'oil' from public.maintenance_requests m where m.done_at is not null
+            -- استلام يومي: الجدولان يحفظان الموظف لا الحساب، وسياساتهما لا تقبل الكتابة إلا من الموظف نفسه
+            -- (received_by / employee_id = my_employee_uuid()) ⇒ الحساب بالهوية الموثّقة نفسها: app_users.biker_employee_id = employees.employee_id
+            union all select a.id, d.created_at, 'daily' from public.daily_deliveries d
+              join public.employees e on e.id = d.received_by join public.app_users a on btrim(a.biker_employee_id) = e.employee_id
+            union all select a.id, sh.confirmed_at, 'daily' from public.daily_shares sh
+              join public.employees e on e.id = sh.employee_id join public.app_users a on btrim(a.biker_employee_id) = e.employee_id
+             where sh.status in ('confirmed', 'short') and sh.confirmed_at is not null) x
      where x.uid is not null and x.at is not null)
   select au.id, u.last_sign_in_at, s.at,
          case when nullif(btrim(au.biker_employee_id), '') is not null then p.at end,
