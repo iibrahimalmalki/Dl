@@ -11,7 +11,7 @@ try{
   execSync(`npx esbuild ${tmp}/entry.js --bundle --format=esm --platform=node --outfile=${tmp}/t.mjs --log-level=error`,{stdio:'inherit'});
   M=await import(`${tmp}/t.mjs`);
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
-const{ITEMS,CONDS,isDurable,checkable,imeiMatch,lineError,checkError,checkArgs,allOkPatch,linesFromRound,checkSummary,extractPlan,extractRows,renewKeys,renewTargets}=M;
+const{ITEMS,CONDS,isDurable,checkable,editable,imeiMatch,lineError,checkError,checkArgs,allOkPatch,linesFromRound,checkSummary,extractPlan,extractRows,renewKeys,renewTargets}=M;
 const E='e-midul',X='e-other',IMEI='490154203237518';
 const A=(id,name,item_type,status='active',extra={})=>({id,employee_id:E,name,item_type,status,...extra});
 const bike=A('b','الدراجة النارية','motorcycle'),phone=A('p','الجوال','device','active',{serial_no:IMEI}),box=A('x','صندوق الخدمة','tool'),helm=A('h','الخوذة','safety'),
@@ -39,6 +39,8 @@ const args=checkArgs(full,C);
 ok('الوسائط: سطر لكل قطعة، والمفقودة بلا صورة ولا IMEI، والملاحظة مقصوصة',args.length===7&&args.find(a=>a.asset_id==='p').photo===null&&args.find(a=>a.asset_id==='p').imei===null&&args.find(a=>a.asset_id==='x').note==='القفل'&&args.find(a=>a.asset_id==='b').photo==='b.jpg');
 const saved=[{asset_id:'b',condition:'ok',photo:'b.jpg'},{asset_id:'p',condition:'ok',photo:'p.jpg',imei_ok:false,imei_last4:'3809'},{asset_id:'x',condition:'damaged',note:'القفل'},{asset_id:'s',condition:'lost',note:'لا يوجد'}];
 ok('تعديل جولة: الأسطر المحفوظة تعود للنموذج والـIMEI يُعاد إدخاله',linesFromRound(saved).x.note==='القفل'&&linesFromRound(saved).p.imei===''&&linesFromRound(null)&&Object.keys(linesFromRound(null)).length===0);
+ok('تعديل الجولة: الجوال بلا رقم جديد مقبول بنتيجة المطابقة المحفوظة (imeiPrev)',linesFromRound(saved).p.imeiPrev===false&&lineError({...linesFromRound(saved).p,photo:'p.jpg'},phone)===null&&linesFromRound(saved).b.imeiPrev===null);
+ok('تعديل الجولة: تُجرد فقط القطع التي جُردت فيها، والجولة بلا جرد ⇒ لا شيء',editable(C,saved).map(a=>a.id).sort().join()==='b,p,s,x'&&editable(C,[]).length===0&&editable(C,null).length===0);
 const S=checkSummary(saved);
 ok('ملخص البطاقة: 2 سليمة، 1 تالفة، 1 مفقودة، 1 IMEI غير مطابق',S.ok===2&&S.damaged===1&&S.lost===1&&S.imeiBad===1);
 

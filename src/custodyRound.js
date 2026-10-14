@@ -35,7 +35,8 @@ export function lineError(line={},asset={}){
   if(line.condition!=="ok"&&!String(line.note||"").trim())return`اكتب ملاحظة لـ«${nm}» (تالفة/مفقودة).`;
   if(line.condition==="lost")return null;
   if(isDurable(asset)&&!line.photo)return`صورة «${nm}» إلزامية.`;
-  if(isPhone(asset)&&!imeiOf(line.imei))return"أدخل IMEI الجوال (اطلب *#06#).";
+  // تعديل الجولة: نتيجة المطابقة المحفوظة على سطرها تكفي إن لم يُدخل رقم جديد (القاعدة تعيد استعمالها)
+  if(isPhone(asset)&&!imeiOf(line.imei)&&line.imeiPrev==null)return"أدخل IMEI الجوال (اطلب *#06#).";
   return null;
 }
 // كل قطع البايكر يجب أن تُجرد ⇒ أول خطأ أو null
@@ -48,8 +49,10 @@ export const checkArgs=(lines={},assets=[])=>assets.map(a=>{const l=lines[a.id]|
   asset_id:a.id,condition:l.condition,note:String(l.note||"").trim(),photo:lost?null:(l.photo||null),imei:isPhone(a)&&!lost?imeiOf(l.imei):null};});
 // «الكل سليم» للقطع غير المعمّرة التي لم تُجرد بعد — المعمّرة تحتاج صورة فتُجرد واحدة واحدة
 export const allOkPatch=(lines={},assets=[])=>{const o={};assets.forEach(a=>{if(!isDurable(a)&&!(lines[a.id]&&lines[a.id].condition))o[a.id]={...(lines[a.id]||{}),condition:"ok"};});return o;};
-// أسطر جولة محفوظة (field_rounds.custody_check) ⇒ حالة النموذج للتعديل (الـIMEI لا يُحفظ كاملاً ⇒ يُعاد إدخاله)
-export const linesFromRound=(saved=[])=>{const o={};(Array.isArray(saved)?saved:[]).forEach(l=>{if(l&&l.asset_id)o[l.asset_id]={condition:l.condition,note:l.note||"",photo:l.photo||null,imei:""};});return o;};
+// أسطر جولة محفوظة (field_rounds.custody_check) ⇒ حالة النموذج للتعديل. الـIMEI لا يُحفظ كاملاً: imeiPrev = نتيجة المطابقة المحفوظة
+export const linesFromRound=(saved=[])=>{const o={};(Array.isArray(saved)?saved:[]).forEach(l=>{if(l&&l.asset_id)o[l.asset_id]={condition:l.condition,note:l.note||"",photo:l.photo||null,imei:"",imeiPrev:l.imei_ok==null?null:!!l.imei_ok};});return o;};
+// تعديل جولة: تُجرد فقط القطع التي جُردت فيها (لا تُسجَّل حالة اليوم بتاريخ جولة قديمة)، والجولة بلا جرد لا تُجرد عند تعديلها
+export const editable=(assets=[],saved=[])=>{const ids=new Set((Array.isArray(saved)?saved:[]).map(l=>l&&l.asset_id));return assets.filter(a=>ids.has(a.id));};
 // ملخص الجرد لبطاقة الجولة ⇒ {ok, damaged, lost, imeiBad}
 export const checkSummary=(saved=[])=>{const s={ok:0,damaged:0,lost:0,imeiBad:0};(Array.isArray(saved)?saved:[]).forEach(l=>{if(s[l.condition]!=null)s[l.condition]++;if(l.imei_ok===false)s.imeiBad++;});return s;};
 

@@ -38,7 +38,8 @@ export function baselineLines(items=[],assets=[],start){
     if(!groups.has(ck))groups.set(ck,[]);groups.get(ck).push(it);});
   const lines=[...groups.entries()].map(([ck,its])=>{
     const c=catalogByKey(ck);
-    const ex=assets.find(a=>isLive(a)&&catalogOfAsset(a)&&catalogOfAsset(a).key===ck)||null;
+    // «الناقصة» لا تُربط: يُنشأ للإقرار قطعة جديدة وتُغلق الناقصة في القاعدة (custody_missing_supersede)
+    const ex=assets.find(a=>isLive(a)&&a.status!=="missing"&&catalogOfAsset(a)&&catalogOfAsset(a).key===ck)||null;
     return{catalog_key:ck,item_keys:its.map(i=>i.key),asset_id:ex?ex.id:null,
       name:c.name,name_en:c.en,item_type:c.type,category:c.category,life_months:c.life,lead_days:c.lead,
       condition:worst(its.map(i=>i.condition)),

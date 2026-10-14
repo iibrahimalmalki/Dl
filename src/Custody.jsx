@@ -6,6 +6,7 @@ import ActivityLog from"./ActivityLog";
 import CustodyDeclarations from"./CustodyDeclarations";
 import{timeline,replacementRow}from"./custodyLifecycle";
 import{extractRows,condAr}from"./custodyRound";
+import{signedUrl}from"./storageUrl";
 import{ACCESSORIES,blankPhone,imeiDigits,imeiError,brandError,simError,phoneSpecs,maskImei,accLabels,isDevice,imeiServerError}from"./custodyPhone";
 const CU_FL={name:"العهدة",status:"الحالة",start_date:"البداية",end_date:"النهاية",biker_name:"البايكر",sweater_id:"رقم البايكر",life_months:"العمر (شهر)",category:"الفئة"};
 const CU_FL_X={last_check_at:"آخر جرد",last_check_condition:"حالة آخر جرد",decision_status:"قرار المالك",decision_note:"نص القرار"};
@@ -148,6 +149,15 @@ export default function Custody({opId,owner,onGo}){
     if(error||!data){setMsg({ok:false,t:"تعذّر حفظ القرار: "+errText(error)});return;}
     setRows(p=>p.map(x=>x.id===r.id?data:x));setMsg({ok:true,t:`سُجّل القرار على «${r.name}»`});
   };
+  // «ناقصة» سُلّمت خارج طلب إمداد: تصبح نشطة ويبدأ عدّادها اليوم
+  const activate=async(r)=>{
+    if(!confirm(`تأكيد تسليم «${r.name}» لـ ${r.biker_name||"—"}؟ يبدأ العدّاد اليوم بعمر ${r.life_months} شهر.`))return;
+    const t=today();
+    const{data,error}=await supabase.from("custody_assets").update({status:"active",start_date:t,end_date:addMonths(t,Number(r.life_months||12)),notes:(r.notes?r.notes+" · ":"")+`سُلّمت ${t}`}).eq("id",r.id).select().single();
+    if(error||!data){setMsg({ok:false,t:"تعذّر التحديث: "+errText(error)});return;}
+    setRows(p=>p.map(x=>x.id===r.id?data:x));setMsg({ok:true,t:`«${r.name}» نشطة من اليوم حتى ${data.end_date}`});
+  };
+  const openPhoto=async u=>{const s=await signedUrl(u).catch(()=>null);window.open(s||u,"_blank","noopener");};
   const del=async(r)=>{if(!confirm("حذف العُهدة؟"))return;const{error}=await supabase.from("custody_assets").delete().eq("id",r.id);if(!error)setRows(p=>p.filter(x=>x.id!==r.id));};
 
   if(loading)return<div className="g-skel" style={{height:280}}/>;
@@ -211,7 +221,7 @@ export default function Custody({opId,owner,onGo}){
         <div className="cu-bar-t"><div style={{width:d.used+"%",background:col}}/></div>
         <div className="cu-used">استُهلك {d.used}% من العمر الافتراضي</div></>}
         {r.last_check_at&&<div className={"cu-chk "+(r.last_check_condition||"")}>🔎 آخر جرد: <b>{r.last_check_at}</b> · {condAr(r.last_check_condition)}{r.last_check_imei_ok===true?" · IMEI ✅":r.last_check_imei_ok===false?" · IMEI ❌ غير مطابق":""}{r.last_check_note?` — ${r.last_check_note}`:""}
-          {r.last_check_photo&&<a href={r.last_check_photo} target="_blank" rel="noreferrer"> · صورة</a>}</div>}
+          {r.last_check_photo&&<a href={r.last_check_photo} onClick={e=>{e.preventDefault();openPhoto(r.last_check_photo);}}> · صورة</a>}</div>}
         {r.decision_status==="pending"&&<div className="cu-dec"><Icon n="alert" s={13}/> بانتظار قرار المالك — لا يُحمَّل على البايكر تلقائياً{owner&&<button className="cu-b plan" onClick={()=>decide(r)}><Icon n="check" s={12}/> تسجيل القرار</button>}</div>}
         {r.decision_status==="decided"&&r.decision_note&&<div className="cu-notes">⚖️ قرار المالك{r.decided_at?` (${String(r.decided_at).slice(0,10)})`:""}: {r.decision_note}</div>}
         {r.notes&&<div className="cu-notes">{r.notes}</div>}
@@ -219,6 +229,7 @@ export default function Custody({opId,owner,onGo}){
           {r.status!=="replaced"&&d.due&&mode==="reorder"&&<button className="cu-b reorder" onClick={()=>reorder(r)}><Icon n="refresh" s={13}/> طلب سويتر (إعادة)</button>}
           {r.status!=="replaced"&&d.due&&mode==="buy"&&<button className="cu-b buy" onClick={()=>planReplace(r)}><Icon n="bike" s={13}/> خطّط لشراء دراجة</button>}
           {r.status!=="replaced"&&d.due&&mode==="replace"&&<button className="cu-b plan" onClick={()=>planReplace(r)}><Icon n="alert" s={13}/> خطّط للاستبدال</button>}
+          {miss&&<button className="cu-b done" onClick={()=>activate(r)}><Icon n="check" s={13}/> سُلّمت (يبدأ العدّاد)</button>}
           {r.status!=="replaced"&&!miss&&<button className="cu-b done" onClick={()=>markReplaced(r)}><Icon n="check" s={13}/> استُبدلت</button>}
           <button className="cu-b" onClick={()=>setTlOpen(tlOpen===r.id?null:r.id)} aria-expanded={tlOpen===r.id}><Icon n="clock" s={13}/> سجل القطعة</button>
           <ActivityLog table="custody_assets" rowId={r.id} labels={{...CU_FL,...CU_FL_X}} valueMap={CU_DV} entityName="العهدة"/>

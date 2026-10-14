@@ -9,7 +9,7 @@ import{openReport,shortageItems,makeRef,buildSupplyRequestMsg}from"./fieldReport
 const SUPPORT_WA="https://chat.whatsapp.com/K5ePnROKEcFD03UesTbeJV";
 import FieldChecklistForm,{FCF_CSS}from"./FieldChecklistForm";
 import ActivityLog from"./ActivityLog";
-import{CONDS,condAr,isDurable,isPhone,checkable,imeiMatch,checkError,checkArgs,allOkPatch,linesFromRound,checkSummary}from"./custodyRound";
+import{CONDS,condAr,isDurable,isPhone,checkable,editable,imeiMatch,checkError,checkArgs,allOkPatch,linesFromRound,checkSummary}from"./custodyRound";
 const FR_FL={biker_name:"البايكر",sweater_id:"رقم البايكر",round_date:"تاريخ الجولة",round_time:"الوقت",location:"الموقع",compliance_pct:"نسبة الالتزام %",status:"الحالة",effect:"الأثر",notes:"ملاحظات",inspector:"المفتّش"};
 const FR_DV={requested:"مطلوبة",submitted:"مُرسلة (ذاتي)",reviewed:"مُراجعة"};
 
@@ -45,7 +45,8 @@ export default function FieldRounds({opId,onGo}){
   const setMsg=m=>{if(m&&m.ok){toast.ok(m.t,undefined,m.t.length>60?7000:undefined);setMsgRaw(null);}else setMsgRaw(m);};
   const[viewer,setViewer]=useState(null); // رابط صورة للعرض المكبّر
   // جرد العهدة (docs/sql/round_custody_check.sql): قطع البايكر النشطة وسطر لكل قطعة {condition, note, photo, imei}
-  const[cAssets,setCAssets]=useState([]);const[cLines,setCLines]=useState({});const[cLoad,setCLoad]=useState(false);
+  const[cAssets,setCAssets]=useState([]);const[cLines,setCLines]=useState({});const[cLoad,setCLoad]=useState(false);const[cErr,setCErr]=useState(null);
+  const[cRetry,setCRetry]=useState(false); // جولة جديدة حُفظت وتعذّر جردها ⇒ تبقى «جديدة» في الجرد عند إعادة المحاولة
   const setCLine=(id,patch)=>setCLines(p=>({...p,[id]:{...(p[id]||{}),...patch}}));
 
   // set: مُحدِّث حالة الصور (صور البنود افتراضياً، أو صورة قطعة في جرد العهدة)
@@ -100,19 +101,21 @@ export default function FieldRounds({opId,onGo}){
   const eff=effUI(comp.pct);
   const empBySid=useMemo(()=>{const m={};emps.forEach(e=>{if(e.employee_id)m[String(e.employee_id).trim()]=e;});return m;},[emps]);
   const cEmp=hd.sweater_id?empBySid[String(hd.sweater_id).trim()]:null;
-  // قطع البايكر المختار تُحمَّل مع فتح النموذج أو تغيير البايكر
+  // قطع البايكر المختار تُحمَّل مع فتح النموذج أو تغيير البايكر. تعديل جولة: فقط ما جُرد فيها (editable)
+  const cSaved=editId&&!cRetry?((rounds.find(x=>x.id===editId)||{}).custody_check||[]):null;
   useEffect(()=>{
-    if(!showNew||!cEmp){setCAssets([]);return;}
+    setCErr(null);
+    if(!showNew||!cEmp){setCAssets([]);setCLoad(false);return;}
     let live=true;setCLoad(true);
     supabase.from("custody_assets").select("id,employee_id,name,name_en,item_type,category,status,serial_no,last_check_at,last_check_condition").eq("employee_id",cEmp.id).in("status",["active","due"])
-      .then(({data})=>{if(live){setCAssets(checkable(data||[],cEmp.id));setCLoad(false);}});
+      .then(({data,error})=>{if(!live)return;if(error)setCErr(error.message||String(error));const l=checkable(data||[],cEmp.id);setCAssets(cSaved?editable(l,cSaved):l);setCLoad(false);});
     return()=>{live=false;};
-  },[showNew,cEmp&&cEmp.id]);
+  /*eslint-disable-next-line*/},[showNew,cEmp&&cEmp.id,editId,cRetry]);
   // صورة قطعة الجرد: upload() يكتب بمفتاح "c-<id>" ⇒ تُنقل إلى photo في سطر القطعة
   const setCPhotos=fn=>setCLines(prev=>{const nx=fn({});const o={...prev};Object.entries(nx).forEach(([k,a])=>{if(k.startsWith("c-")&&a&&a[0]){const id=k.slice(2);o[id]={...(o[id]||{}),photo:a[0]};}});return o;});
 
   // تفريغ النموذج للحالة الابتدائية
-  const resetForm=()=>{setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setItemParts({});setPhotos({});setNotes("");setEditId(null);setCLines({});};
+  const resetForm=()=>{setHd({sweater_id:"",date:todayStr(),time:nowTime(),location:"",location_url:"",gps_lat:null,gps_lng:null,inspector:me});setGeo("");setRes({});setItemNotes({});setItemParts({});setPhotos({});setNotes("");setEditId(null);setCLines({});setCRetry(false);};
   // فتح جولة جديدة لبايكر محدّد من المساعد/لوحة القيادة: dw:open {view:'field_rounds',action:'new',sweater_id}
   useEffect(()=>{
     const startFor=d=>{if(!d||d.view!=="field_rounds"||d.action!=="new"||!d.sweater_id)return;resetForm();setHd(h=>({...h,sweater_id:String(d.sweater_id)}));setShowReq(false);setShowNew(true);};
@@ -124,7 +127,7 @@ export default function FieldRounds({opId,onGo}){
   const startEdit=(r)=>{
     setEditId(r.id);
     setHd({sweater_id:r.sweater_id||"",date:r.round_date||todayStr(),time:r.round_time||"",location:r.location||"",location_url:r.location_url||"",gps_lat:r.gps_lat??null,gps_lng:r.gps_lng??null,inspector:r.inspector||me||""});
-    setRes(r.results||{});setItemNotes(r.item_notes||{});setItemParts(r.item_parts||{});setPhotos(r.photos||{});setNotes(r.notes||"");setCLines(linesFromRound(r.custody_check));
+    setRes(r.results||{});setItemNotes(r.item_notes||{});setItemParts(r.item_parts||{});setPhotos(r.photos||{});setNotes(r.notes||"");setCLines(linesFromRound(r.custody_check));setCRetry(false);
     setGeo(r.gps_lat?"done":"");setShowReq(false);setShowNew(true);setMsg(null);
     if(typeof window!=="undefined")window.scrollTo({top:0,behavior:"smooth"});
   };
@@ -133,6 +136,8 @@ export default function FieldRounds({opId,onGo}){
   const save=async()=>{
     if(!hd.sweater_id){setMsg({ok:false,t:"اختر البايكر"});return;}
     // جرد العهدة: كل قطعة نشطة تُجرد قبل الحفظ (نفس قواعد القاعدة)
+    if(cEmp&&cLoad){setMsg({ok:false,t:"جرد العهدة: انتظر تحميل عهد البايكر"});return;}
+    if(cEmp&&cErr){setMsg({ok:false,t:"جرد العهدة: تعذّر تحميل عهد البايكر — "+cErr});return;}
     const ce=cAssets.length?checkError(cLines,cAssets):null;if(ce){setMsg({ok:false,t:"جرد العهدة: "+ce});return;}
     setSaving(true);setMsg(null);
     try{
@@ -156,15 +161,15 @@ export default function FieldRounds({opId,onGo}){
         if(error)throw error;saved=data;
       }
       // جرد العهدة بعد حفظ الجولة (يحتاج رقمها) — معاملة واحدة في القاعدة
-      let cErr=null,cRes=null;
+      let rpcErr=null,cRes=null;
       if(cAssets.length){
         const{data:cr,error:ce2}=await supabase.rpc("round_custody_check",{p_round:saved.id,p_lines:checkArgs(cLines,cAssets)});
-        if(ce2)cErr=ce2.message||String(ce2);else{cRes=cr;const{data:fresh}=await supabase.from("field_rounds").select("*").eq("id",saved.id).single();if(fresh)saved=fresh;}
+        if(ce2)rpcErr=ce2.message||String(ce2);else{cRes=cr;const{data:fresh}=await supabase.from("field_rounds").select("*").eq("id",saved.id).single();if(fresh)saved=fresh;}
       }
       // إن تغيّر الشهر خارج الفلتر الحالي نُزيل السطر، وإلا نُحدّثه في مكانه
       const wasEdit=!!editId;
       setRounds(p=>{const o=p.filter(x=>x.id!==saved.id);return row.period===period?(wasEdit?p.map(x=>x.id===saved.id?saved:x):[saved,...o]):o;});
-      if(cErr){setEditId(saved.id);setMsg({ok:false,t:"حُفظت الجولة، وتعذّر حفظ جرد العهدة: "+cErr+" — صحّح واضغط «حفظ التعديلات»."});setSaving(false);return;}
+      if(rpcErr){if(!wasEdit)setCRetry(true);setEditId(saved.id);setMsg({ok:false,t:"حُفظت الجولة، وتعذّر حفظ جرد العهدة: "+rpcErr+" — صحّح واضغط «حفظ التعديلات»."});setSaving(false);return;}
       const pend=cRes&&cRes.pending?` · ${cRes.pending} بانتظار قرار المالك`:"";
       setMsg({ok:true,t:(wasEdit?"تم حفظ التعديلات على الجولة":"تم حفظ الجولة")+(cRes?` · جُردت ${cRes.lines} قطعة${pend}`:"")});
       setShowNew(false);resetForm();
@@ -266,7 +271,7 @@ export default function FieldRounds({opId,onGo}){
       </div>
 
       <FieldChecklistForm items={ITEMS} res={res} onRes={(n,v)=>setRes(p=>({...p,[n]:v}))} notes={itemNotes} onNote={(n,t)=>setItemNotes(p=>({...p,[n]:t}))} parts={itemParts} onPart={(n,pt)=>setItemParts(p=>{const cur=p[n]||[];const nx=cur.includes(pt)?cur.filter(x=>x!==pt):[...cur,pt];const o={...p};if(nx.length)o[n]=nx;else delete o[n];return o;})} photos={photos} onUpload={upload} uploading={uploading} onView={setViewer}/>
-      {hd.sweater_id&&<CustodyCheck emp={cEmp} assets={cAssets} loading={cLoad} lines={cLines} setLine={setCLine} setAll={p=>setCLines(x=>({...x,...p}))} onUpload={(n,idx,f)=>upload(n,idx,f,setCPhotos)} uploading={uploading} onView={setViewer}/>}
+      {hd.sweater_id&&<CustodyCheck emp={cEmp} assets={cAssets} loading={cLoad} err={cErr} oldRound={!!cSaved&&!cSaved.length} lines={cLines} setLine={setCLine} setAll={p=>setCLines(x=>({...x,...p}))} onUpload={(n,idx,f)=>upload(n,idx,f,setCPhotos)} uploading={uploading} onView={setViewer}/>}
       <label className="fr-fld" style={{marginTop:4}}><span>ملاحظات / إجراءات تصحيحية</span><input value={notes} onChange={e=>setNotes(e.target.value)} placeholder="اختياري"/></label>
 
       {/* مؤشرات المحاور */}
@@ -305,7 +310,7 @@ export default function FieldRounds({opId,onGo}){
         {r.status!=="requested"&&r.ai_analysis&&<AiPanel a={r.ai_analysis}/>}
         {(r.action_items||[]).length>0&&<div className="fr-c-act"><Icon n="wrench" s={12}/> بنود إدارة معلّقة: {(r.action_items||[]).map(n=>"#"+n).join("، ")}</div>}
         {r.notes&&<div className="fr-c-notes">{r.notes}</div>}
-        {(r.custody_check||[]).length>0&&(()=>{const s=checkSummary(r.custody_check);return<div className={"fr-c-cc"+(s.damaged||s.lost||s.imeiBad?" bad":"")}><Icon n="bucket" s={12}/> جرد العهدة: {s.ok} سليمة{s.damaged?` · ${s.damaged} تالفة`:""}{s.lost?` · ${s.lost} مفقودة`:""}{s.imeiBad?" · IMEI ❌":""}{s.damaged||s.lost||s.imeiBad?" — بانتظار قرار المالك":""}</div>;})()}
+        {(r.custody_check||[]).length>0&&(()=>{const s=checkSummary(r.custody_check);return<div className={"fr-c-cc"+(s.damaged||s.lost||s.imeiBad?" bad":"")}><Icon n="bucket" s={12}/> جرد العهدة: {s.ok} سليمة{s.damaged?` · ${s.damaged} تالفة`:""}{s.lost?` · ${s.lost} مفقودة`:""}{s.imeiBad?" · IMEI ❌":""}</div>;})()}
         {(()=>{const all=Object.values(r.photos||{}).flat().filter(Boolean);return all.length>0&&<div className="fr-c-gal"><div className="fr-c-gal-h"><Icon n="camera" s={12}/> {all.length} صورة توثيق</div><div className="fr-c-thumbs">{all.slice(0,8).map((u,i)=><img key={i} src={u} onClick={()=>setViewer(u)}/>)}{all.length>8&&<span className="fr-more">+{all.length-8}</span>}</div></div>;})()}
         <div className="fr-c-actions">
           {r.status!=="requested"&&<button className="fr-report" disabled={reporting===r.id} onClick={()=>openReportV2(r)}><Icon n="print" s={14}/> {reporting===r.id?"جارٍ التجهيز…":"تقرير الجولة"}</button>}
@@ -322,15 +327,16 @@ export default function FieldRounds({opId,onGo}){
   </div>);
 }
 // قسم «جرد العهدة» في نموذج الجولة: لكل قطعة نشطة سليمة/تالفة/مفقودة + ملاحظة، وصورة للمعمّرة، وIMEI للجوال
-function CustodyCheck({emp,assets,loading,lines,setLine,setAll,onUpload,uploading,onView}){
+function CustodyCheck({emp,assets,loading,err,oldRound,lines,setLine,setAll,onUpload,uploading,onView}){
   if(!emp)return <div className="fr-cc"><div className="fr-cc-h"><Icon n="bucket" s={15}/> جرد العهدة</div><div className="fr-cc-empty">البايكر غير مربوط بملف موظف — لا جرد.</div></div>;
   const done=assets.filter(a=>lines[a.id]&&lines[a.id].condition).length;
   const rest=assets.filter(a=>!isDurable(a)&&!(lines[a.id]&&lines[a.id].condition)).length;
   return(<div className="fr-cc">
     <div className="fr-cc-h"><Icon n="bucket" s={15}/> جرد العهدة <small>{loading?"…":`${done}/${assets.length}`}</small><div style={{flex:1}}/>
       {rest>0&&<button type="button" className="fr-cc-all" onClick={()=>setAll(allOkPatch(lines,assets))}><Icon n="check" s={12}/> الباقي سليم ({rest})</button>}</div>
-    {!loading&&assets.length===0&&<div className="fr-cc-empty">لا عُهد نشطة مسجّلة لهذا البايكر.</div>}
-    {assets.map(a=>{const l=lines[a.id]||{};const dur=isDurable(a),ph=isPhone(a),lost=l.condition==="lost";const m=ph?imeiMatch(l.imei,a.serial_no):null;const key="c-"+a.id;return(
+    {err&&<div className="fr-cc-empty" style={{color:"var(--bad-ink)"}}>تعذّر تحميل العهد: {err}</div>}
+    {!loading&&!err&&assets.length===0&&<div className="fr-cc-empty">{oldRound?"جولة سُجّلت قبل جرد العهدة — لا جرد عند تعديلها.":"لا عُهد نشطة مسجّلة لهذا البايكر."}</div>}
+    {assets.map(a=>{const l=lines[a.id]||{};const dur=isDurable(a),ph=isPhone(a),lost=l.condition==="lost";const m=ph?(imeiMatch(l.imei,a.serial_no)??(l.imeiPrev??null)):null;const key="c-"+a.id;return(
       <div className="fr-cc-it" key={a.id}>
         <div className="fr-cc-row">
           <div className="fr-cc-nm">{a.name}{dur&&<span className="fr-cc-tag">معمّرة · صورة</span>}<div className="fr-cc-sub">{a.last_check_at?`آخر جرد ${a.last_check_at} · ${condAr(a.last_check_condition)}`:"لم تُجرد من قبل"}{a.status==="due"?" · مستحقة":""}</div></div>
@@ -341,7 +347,7 @@ function CustodyCheck({emp,assets,loading,lines,setLine,setAll,onUpload,uploadin
           {dur&&<label className={"fr-ph"+(l.photo?" has":"")}>{l.photo?<img src={l.photo} onClick={e=>{e.preventDefault();onView(l.photo);}}/>:uploading===key+"-0"?<span className="fr-ph-up">…</span>:<><Icon n="camera" s={16}/><span>صورة إلزامية</span></>}
             <input type="file" accept="image/*" capture="environment" hidden onChange={e=>onUpload(key,0,e.target.files&&e.target.files[0])}/></label>}
           {ph&&<div className="fr-cc-imei"><span>IMEI الجوال (اطلب <b dir="ltr">*#06#</b>)</span>
-            <div><input dir="ltr" inputMode="numeric" value={l.imei||""} onChange={e=>setLine(a.id,{imei:e.target.value})} placeholder="15 رقماً"/><b className={m==null?"":m?"ok":"bad"}>{m==null?"":m?"✅ مطابق":"❌ غير مطابق"}</b></div></div>}
+            <div><input dir="ltr" inputMode="numeric" value={l.imei||""} onChange={e=>setLine(a.id,{imei:e.target.value})} placeholder={l.imeiPrev!=null?"المطابقة المحفوظة — أدخل رقماً لإعادة الفحص":"15 رقماً"}/><b className={m==null?"":m?"ok":"bad"}>{m==null?"":m?"✅ مطابق":"❌ غير مطابق"}</b></div></div>}
         </div>}
       </div>);})}
   </div>);

@@ -94,7 +94,10 @@ const r2=JSON.parse(chk(SUP,R1,[{asset_id:PHONE,condition:'ok',photo:'p2',imei:'
 ok('تعديل الجولة نفسها: 3 أسطر، والثلاث بانتظار القرار',r2.lines===3&&r2.updated===3&&r2.pending===3);
 ok('IMEI مختلف ⇒ ❌ وبانتظار القرار',ps(`select last_check_imei_ok||'|'||decision_status from custody_assets where id='${PHONE}'`)==='false|pending');
 ok('التالفة والمفقودة: بانتظار القرار، وstatus بلا تغيير (لا تحميل ولا إغلاق تلقائي)',ps(`select string_agg(last_check_condition||':'||decision_status||':'||status,',' order by name) from custody_assets where id in ('${BOX}','${SOAP}')`)==='lost:pending:active,damaged:pending:active');
-ok('الجولة تحفظ آخر جرد لها فقط (3 أسطر)',ps(`select jsonb_array_length(custody_check) from field_rounds where id='${R1}'`)==='3');
+ok('الجولة تحفظ الأسطر الجديدة وتُبقي أسطرها السابقة للقطع غير المرسلة (3 + الدراجة والمناشف)',ps(`select jsonb_array_length(custody_check) from field_rounds where id='${R1}'`)==='5'&&ps(`select string_agg(l->>'condition',',' order by l->>'name') from field_rounds, jsonb_array_elements(custody_check) l where id='${R1}'`)==='ok,ok,lost,damaged,ok');
+const r2b=JSON.parse(chk(SUP,R1,[{asset_id:PHONE,condition:'ok',photo:'p3'}]));
+ok('تعديل الجولة بلا IMEI جديد ⇒ تبقى نتيجة المطابقة المحفوظة (❌ و…3809)، ولا علامة جديدة',r2b.pending===0&&ps(`select last_check_imei_ok::text from custody_assets where id='${PHONE}'`)==='false'&&ps(`select l->>'imei_last4' from field_rounds, jsonb_array_elements(custody_check) l where id='${R1}' and l->>'asset_id'='${PHONE}'`)==='3809');
+ok('جولة أخرى بلا IMEI للجوال ⇒ مرفوض (لا نتيجة محفوظة لها)',/CUSTODY_CHECK_IMEI/.test(chkErr(SUP,R0,[{asset_id:PHONE,condition:'ok',photo:'p'}])));
 
 // ── جولة أقدم لا تكتب فوق جرد أحدث ──
 const r3=JSON.parse(chk(SUP,R0,[{asset_id:BOX,condition:'ok',photo:'old'}]));
@@ -103,14 +106,19 @@ ok('جولة 30/09 بعد جرد 03/10: تُحفظ على الجولة ولا ت
 // ── «سليمة» لا تمسح العلامة، والقرار للمالك وحده ──
 chk(SUP,R1,[{asset_id:BOX,condition:'ok',photo:'x3'}]);
 ok('جرد لاحق «سليمة» لا يمسح «بانتظار القرار»',ps(`select last_check_condition||'|'||decision_status from custody_assets where id='${BOX}'`)==='ok|pending');
-ok('غير المالك لا يقرّر ولا يمسح العلامة مباشرة',/CUSTODY_DECISION_OWNER/.test(asErr(SUP,`update custody_assets set decision_status='decided',decision_note='x' where id='${BOX}'`)||'')
-  &&/CUSTODY_DECISION_OWNER/.test(asErr(STORE,`update custody_assets set decision_status=null where id='${SOAP}'`)||''));
-ok('غير المالك لا يُدرج قطعة بقرار جاهز',/CUSTODY_DECISION_OWNER/.test(asErr(SUP,`insert into custody_assets (employee_id,name,decision_status,decision_note) values ('${E_MIDUL}','x','decided','y')`)||''));
+ok('غير المالك لا يقرّر ولا يمسح العلامة مباشرة',/CUSTODY_CHECK_GUARD/.test(asErr(SUP,`update custody_assets set decision_status='decided',decision_note='x' where id='${BOX}'`)||'')
+  &&/CUSTODY_CHECK_GUARD/.test(asErr(STORE,`update custody_assets set decision_status=null where id='${SOAP}'`)||''));
+ok('غير المالك لا يكتب خانات الجرد مباشرة (IMEI ✅ مزيّف، حالة سليمة)',/CUSTODY_CHECK_GUARD/.test(asErr(STORE,`update custody_assets set last_check_imei_ok=true where id='${PHONE}'`)||'')&&/CUSTODY_CHECK_GUARD/.test(asErr(SUP,`update custody_assets set last_check_condition='ok' where id='${SOAP}'`)||''));
+ok('غير المالك لا يُدرج قطعة بقرار جاهز',/CUSTODY_CHECK_GUARD/.test(asErr(SUP,`insert into custody_assets (employee_id,name,decision_status,decision_note) values ('${E_MIDUL}','x','decided','y')`)||''));
 ok('تعديلات غير المالك الأخرى تمرّ (ملاحظة/حالة)',!asErr(STORE,`update custody_assets set notes='خُطّط للاستبدال', status='due' where id='${CHEST}'`));
 ok('المالك يقرّر',!asErr(OWNER,`update custody_assets set decision_status='decided',decision_note='إصلاح على الشركة',decided_by=auth.uid(),decided_at=now() where id='${BOX}'`)
   &&ps(`select decision_status||'|'||decision_note||'|'||(decided_by='${OWNER}') from custody_assets where id='${BOX}'`)==='decided|إصلاح على الشركة|true');
+ok('غير المالك لا يعيد قراراً مسجّلاً إلى «بانتظار»',/CUSTODY_CHECK_GUARD/.test(asErr(SUP,`update custody_assets set decision_status='pending',decision_note=null,decided_by=null,decided_at=null where id='${BOX}'`)||''));
 chk(SUP,R1,[{asset_id:BOX,condition:'damaged',note:'كسر جديد',photo:'x4'}]);
 ok('تلف جديد بعد القرار ⇒ بانتظار القرار من جديد بحقول قرار فارغة',ps(`select decision_status||'|'||coalesce(decision_note,'-')||'|'||coalesce(decided_by::text,'-') from custody_assets where id='${BOX}'`)==='pending|-|-');
+as(OWNER,`update custody_assets set decision_status='decided',decision_note='استبدال على الشركة',decided_by=auth.uid(),decided_at=now() where id='${BOX}'`);
+const r5=JSON.parse(chk(SUP,R1,[{asset_id:BOX,condition:'damaged',note:'كسر جديد — تصحيح إملائي',photo:'x4'}]));
+ok('إعادة حفظ الجولة نفسها بالحالة نفسها لا تمسح قرار المالك',r5.pending===0&&ps(`select decision_status||'|'||decision_note from custody_assets where id='${BOX}'`)==='decided|استبدال على الشركة');
 
 // ── «ناقص» بلا عدّاد ──
 ok('ناقص بتاريخ نهاية ⇒ مرفوض بالقيد، وبلا نهاية مقبول',/custody_assets_missing_ck/.test(asErr(SUP,`insert into custody_assets (employee_id,name,status,end_date) values ('${E_MIDUL}','x','missing','2027-01-01')`)||'')
@@ -127,7 +135,7 @@ ok('عرض فقط ⇒ مرفوض',/SUPPLY_COMPLETE_DENIED/.test(doneErr(VIEW,Q1,
 ok('قطعة بايكر آخر ⇒ مرفوض',/SUPPLY_ASSET/.test(doneErr(STORE,Q1,[RAKIB_TOWEL])));
 ok('الجوال والدراجة لا يُجدَّدان بالإمداد',/SUPPLY_ASSET_TYPE/.test(doneErr(STORE,Q1,[PHONE]))&&/SUPPLY_ASSET_TYPE/.test(doneErr(STORE,Q1,[BIKE])));
 ok('قطعة مُستبدلة ⇒ مرفوض',/SUPPLY_ASSET_CLOSED/.test(doneErr(STORE,Q1,[OLD])));
-ok('طلب بلا جولة مع قطع ⇒ مرفوض، وجولة بلا موظف ⇒ لا يُخمَّن',/SUPPLY_NO_ROUND/.test(doneErr(STORE,Q2,[SOAP]))&&/SUPPLY_NO_EMPLOYEE/.test(doneErr(STORE,Q3,[SOAP])));
+ok('طلب بلا جولة وقطعة غير مربوطة به ⇒ مرفوض، وجولة بلا موظف ⇒ لا يُخمَّن',/SUPPLY_ASSET/.test(doneErr(STORE,Q2,[SOAP]))&&/SUPPLY_ASSET/.test(doneErr(STORE,Q3,[SOAP])));
 ok('الرفض لا يغلق الطلب ولا يجدّد',ps(`select string_agg(status,',') from supply_requests`)==='open,open,open'&&ps(`select start_date from custody_assets where id='${SOAP}'`)==='2026-08-07');
 const d1=JSON.parse(done(STORE,Q1,[SOAP,GONE]));
 const day=ps(`select (now() at time zone 'Asia/Riyadh')::date`);
@@ -137,4 +145,14 @@ ok('الناقصة تصبح نشطة ويبدأ عدّادها من التسلي
 ok('التسليم لا يمسّ «بانتظار قرار المالك»',ps(`select decision_status from custody_assets where id='${SOAP}'`)==='pending');
 ok('الطلب مكتمل بتاريخه وملاحظته، ولا يُغلق مرتين',ps(`select status||'|'||(completed_at is not null)||'|'||completion_note from supply_requests where id='${Q1}'`)==='completed|true|تم'&&/SUPPLY_CLOSED/.test(doneErr(STORE,Q1,[])));
 ok('طلب بلا جولة يُغلق بلا قطع (كالسابق)',JSON.parse(done(SUP,Q2,[])).renewed===0&&ps(`select status from supply_requests where id='${Q2}'`)==='completed');
+// طلب استبدال من اعتماد إقرار (بلا جولة): القطعة «مستحقة» ومربوطة بالطلب ⇒ تتجدّد عند التسليم
+const Q4=ps(`insert into supply_requests (ref,round_id,sweater_id) values ('DW-1648-A1234',null,'1648') returning id`);
+ps(`update custody_assets set status='due', reorder_request_id='${Q4}' where id='${CHEST}'`);
+ok('طلب مربوط بالقطعة (reorder_request_id) بلا جولة ⇒ تتجدّد وتعود نشطة',JSON.parse(done(STORE,Q4,[CHEST])).renewed===1&&ps(`select status||'|'||(start_date='${day}') from custody_assets where id='${CHEST}'`)==='active|true');
+
+// ── «ناقصة» تُغلق عند وصول قطعة نشطة بالاسم نفسه ──
+const SH=as(SUP,`insert into custody_assets (employee_id,sweater_id,item_type,name,start_date,life_months,status,end_date) values ('${E_MIDUL}','1648','safety','حذاء السلامة','2026-10-03',12,'missing',null) returning id`);
+const SH2=as(STORE,`insert into custody_assets (employee_id,sweater_id,item_type,name,start_date,life_months,end_date) values ('${E_MIDUL}','1648','safety','حذاء السلامة','2026-10-14',12,'2027-10-14') returning id`);
+ok('إضافة قطعة نشطة ⇒ الناقصة «مُستبدلة» بملاحظة «استُبدلت YYYY-MM-DD» (يقرؤها سجل القطعة)',ps(`select status||'|'||(notes ~ 'كانت ناقصة — استُبدلت \\d{4}-\\d{2}-\\d{2} بقطعة ${SH2}') from custody_assets where id='${SH}'`)==='replaced|true');
+ok('لا تمسّ ناقصة بايكر آخر أو صنفاً آخر',!asErr(SUP,`insert into custody_assets (employee_id,name,status,end_date) values ('${E_RAKIB}','حذاء السلامة','missing',null)`)&&as(STORE,`insert into custody_assets (employee_id,name,end_date) values ('${E_MIDUL}','الكاب','2027-01-01') returning 1`)==='1'&&ps(`select count(*) from custody_assets where status='missing' and employee_id='${E_RAKIB}'`)==='1');
 }finally{ps(`drop database if exists ${db} with (force)`,'postgres');}
