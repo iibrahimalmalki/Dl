@@ -26,9 +26,20 @@ const MONTHS = {
 export const monthOnly = (period, lang = "ar") => (MONTHS[lang] || MONTHS.ar)[+String(period || "").split("-")[1] - 1] || "";
 export const monthName = (period, lang = "ar") => `${monthOnly(period, lang)} ${String(period || "").split("-")[0] || ""}`.trim();
 
-// أسماء العرض العربية (قرار المالك 2026-10-14: عريف ⇒ «عارف»، رقيب ⇒ «راكب»، ميدول ⇒ «ميدول») — برقم البايكر؛ وإلا الاسم المحفوظ
-export const AR_NAMES = { "1624": "عارف", "1648": "ميدول", "1700": "راكب" };
-export const arName = line => AR_NAMES[String(line && line.biker_id || "").trim()] || String(line && line.name || "").trim();
+// أسماء العرض برقم البايكر (قرار المالك 2026-10-14، مؤقتاً حتى خانتَي «الاسم بالعربي/بالبنغالي» في ملف الموظف — PR مستقل):
+// العربي بإملاء «عريف / رقيب / ميدول» (لا نموذج يونيو مكتوباً في المستودع)، والإنجليزي الاسم الأول، والبنغالي بالحروف البنغالية.
+// غير المعروف: العربي والبنغالي = الاسم المحفوظ، والإنجليزي = أول كلمة منه
+const NAMES = {
+  "1624": { ar: "عريف", en: "Ariful", bn: "আরিফুল" },
+  "1648": { ar: "ميدول", en: "Midul", bn: "মিদুল" },
+  "1700": { ar: "رقيب", en: "Rakib", bn: "রাকিব" },
+};
+export function displayName(line = {}, lang = "ar") {
+  const k = NAMES[String(line.biker_id || "").trim()], full = String(line.name || "").trim();
+  if (k && k[lang]) return k[lang];
+  return lang === "en" ? full.split(/\s+/)[0] || full : full;
+}
+export const arName = line => displayName(line, "ar");
 
 // أرقام السطر من computed (ما حُسب به المسير فعلاً) مع inputs احتياطاً
 export function lineFacts(line = {}, complaints = null) {
@@ -43,7 +54,7 @@ export function lineFacts(line = {}, complaints = null) {
     pct: c.complaint_pct,
     baseRate: Math.round((rate - q - s) * 100) / 100, quality: q, safety: s, rate,
     washBonus: Number(c.bonus_base) || Math.round((Number(c.net_washes) || 0) * rate * 100) / 100,
-    production: Number(c.production) || 0, tips: Number(c.tips ?? i.tips) || 0,
+    production: Number(c.production) || 0, tips: Number(c.tips ?? i.tips) || 0, deductions: Number(c.deductions) || 0,
     net: Number(line.net_bonus) || 0,
     paid: line.payment_status === "paid", paidAmount: line.paid_amount, paidAt: line.paid_at ? String(line.paid_at).slice(0, 10) : null, ref: last4(line.payment_ref),
   };
@@ -56,15 +67,14 @@ const v = x => (x == null || x === "" ? "—" : x);
 function bikerText(line, f, notes = {}) {
   const p = line.period, y = String(p || "").split("-")[0] || "";
   const mAr = monthOnly(p, "ar"), mEn = monthOnly(p, "en"), mBn = monthOnly(p, "bn");
-  const en = String(line.name || "").trim();
   const L = [
     `🟠 *دلو ورغوة × سويتر | ${mAr} ${y}*`,
     `Bucket & Foam × Sweater | ${mEn} ${y}`,
     `ডালু ওয়ারগওয়া × সুইটার | ${mBn} ${y}`,
     "",
-    `السلام عليكم أخ *${arName(line)}* 👋`,
-    `Assalamu Alaikum, Brother *${en}*`,
-    `আস-সালামু আলাইকুম, ভাই *${en}*`,
+    `السلام عليكم أخ *${displayName(line, "ar")}* 👋`,
+    `Assalamu Alaikum, Brother *${displayName(line, "en")}*`,
+    `আস-সালামু আলাইকুম, ভাই *${displayName(line, "bn")}*`,
     "",
     SEP,
     `✅ *تم صرف مكافأة ${mAr}*`,
@@ -100,6 +110,8 @@ function bikerText(line, f, notes = {}) {
     `   ${int(f.washes)} × ${n2(f.rate)}     =  ${n2(f.washBonus)}`,
   ];
   if (f.production > 0) L.push(`   Production:      + ${n2(f.production)} 🏆`);
+  // الاستقطاعات (قرار المالك 2026-10-14): بعد Production وعند > 0 فقط، حتى يساوي مجموع البنود صافي المكافأة
+  if (f.deductions > 0) L.push(`   Deductions:      − ${n2(f.deductions)}`);
   L.push(`   Tips:            + ${n2(f.tips)}`, RULE, `💵 *Net Bonus: ${n2(f.net)} SAR*`);
   if (f.paid && f.paidAmount != null)
     L.push(`💳 تم التحويل | Transferred: *${n2(f.paidAmount)} SAR*${f.paidAt ? ` · ${f.paidAt}` : ""}${f.ref ? ` · Ref ${f.ref}` : ""}`);
