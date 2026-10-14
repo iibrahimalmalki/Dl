@@ -26,11 +26,11 @@ const MONTHS = {
 export const monthOnly = (period, lang = "ar") => (MONTHS[lang] || MONTHS.ar)[+String(period || "").split("-")[1] - 1] || "";
 export const monthName = (period, lang = "ar") => `${monthOnly(period, lang)} ${String(period || "").split("-")[0] || ""}`.trim();
 
-// أسماء العرض من ملف الموظف (employees.name_ar / name_bn — docs/sql/employee_display_names.sql)، تمرَّر في names = {ar, bn}.
-// الفارغ ⇒ الاسم الأول من الاسم المسجّل (full_name / سطر المسير). الإنجليزي دائماً الاسم الأول المسجّل.
+// أسماء العرض من ملف الموظف (employees.name_ar / name_bn / name_en — docs/sql/employee_display_names.sql و employee_name_en.sql)،
+// تمرَّر في names = {ar, bn, en}. الفارغ ⇒ الاسم الأول من الاسم المسجّل (full_name / سطر المسير).
 export function displayName(line = {}, lang = "ar", names = {}) {
   const own = String((names && names[lang]) || "").trim();
-  if (own && lang !== "en") return own;
+  if (own) return own;
   const full = String(line.name || "").trim();
   return full.split(/\s+/)[0] || full;
 }
@@ -139,7 +139,7 @@ function supervisorText(line, note) {
   return latin(L.join("\n"));
 }
 
-// notes: {ar, en, bn} للبايكر؛ المشرف يأخذ notes.ar فقط · names: {ar, bn} من ملف الموظف
+// notes: {ar, en, bn} للبايكر؛ المشرف يأخذ notes.ar فقط · names: {ar, bn, en} من ملف الموظف
 export function payrollMessage(line = {}, { notes = {}, complaints = null, names = {} } = {}) {
   if (line.role === "supervisor") return supervisorText(line, notes.ar);
   return bikerText(line, lineFacts(line, complaints), notes, names);
