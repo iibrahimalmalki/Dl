@@ -56,7 +56,7 @@ function restReply(url,headers,scen){
     employees:[{id:EMP,full_name:'Midul Hassan',employee_id:'1648'}],
     operators:[{id:OP,name:'دلو ورغوة'}],
     fleet_vehicles:[{id:'40000000-0000-0000-0000-000000000001',plate:'5531 BG',make:'Honda',biker_employee_id:EMP,held_by:null,held_until:null,held_reason:null,needs_receipt_update:false,is_test:!!scen.test}],
-    biker_assets:scen.biker_assets,custody_assets:scen.custody_assets,
+    biker_assets:scen.biker_assets,custody_assets:scen.custody_assets,my_custody_assets:scen.custody_assets,
     ops_biker_month:scen.ops_biker_month||[],payroll_lines:scen.payroll_lines||[],
     fuel_requests:scen.fuel_requests||[],fuel_logs:scen.fuel_logs||[],maintenance_requests:scen.maintenance_requests||[],
   }[table]||[];

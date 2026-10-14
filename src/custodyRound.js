@@ -25,8 +25,8 @@ export const checkable=(assets=[],employeeId)=>(assets||[])
   .sort((x,y)=>(isDurable(y)-isDurable(x))||String(x.name||"").localeCompare(String(y.name||""),"ar"));
 
 const imeiOf=s=>String(s==null?"":s).replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[০-৯]/g,d=>"০১২৩৪৫৬৭৮৯".indexOf(d)).replace(/\D/g,"");
-// مطابقة IMEI المُدخل مع serial_no للعرض الحي ⇒ true/false، أو null قبل الإدخال
-export const imeiMatch=(entered,serial)=>{const e=imeiOf(entered);return e?e===imeiOf(serial):null;};
+// مطابقة IMEI 1 المُدخل مع serial_no للعرض الحي على أول 15 خانة (بعض الأجهزة تعرض 17) ⇒ true/false، أو null قبل الإدخال
+export const imeiMatch=(entered,serial)=>{const e=imeiOf(entered);return e?e.slice(0,15)===imeiOf(serial).slice(0,15):null;};
 
 // أول خطأ لسطر جرد ⇒ نص عربي أو null (line: {condition, note, photo, imei})
 export function lineError(line={},asset={}){
@@ -36,7 +36,7 @@ export function lineError(line={},asset={}){
   if(line.condition==="lost")return null;
   if(isDurable(asset)&&!line.photo)return`صورة «${nm}» إلزامية.`;
   // تعديل الجولة: نتيجة المطابقة المحفوظة على سطرها تكفي إن لم يُدخل رقم جديد (القاعدة تعيد استعمالها)
-  if(isPhone(asset)&&!imeiOf(line.imei)&&line.imeiPrev==null)return"أدخل IMEI الجوال (اطلب *#06#).";
+  if(isPhone(asset)&&!imeiOf(line.imei)&&line.imeiPrev==null)return"أدخل IMEI 1 (من *#06#).";
   return null;
 }
 // كل قطع البايكر يجب أن تُجرد ⇒ أول خطأ أو null

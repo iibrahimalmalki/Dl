@@ -21,6 +21,8 @@ const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
 const today=()=>new Date().toISOString().slice(0,10);
 // الجوال (device): IMEI إلزامي بفحص القاعدة نفسه، والماركة إلزامية، والخط اختياري ⇒ أول خطأ نصاً أو null
 const phoneFormError=p=>{const e=imeiError(p.imei)||brandError(p.brand_model)||simError(p.sim);return e?e.ar:null;};
+// أعمدة القراءة: كل أعمدة custody_assets عدا decision_note و decided_by (يقرؤهما المالك عبر custody_decisions — round_custody_check.sql §5)
+const CA_COLS="id,operator_id,employee_id,biker_name,sweater_id,item_type,category,name,name_en,start_date,life_months,end_date,lead_days,cost,status,source,round_id,reorder_request_id,notes,created_at,created_by,serial_no,specs,last_check_at,last_check_condition,last_check_round_id,last_check_note,last_check_photo,last_check_imei_ok,decision_status,decided_at";
 const errText=e=>imeiServerError(e&&e.message)||(e&&e.message)||"لا صلاحية";
 
 export default function Custody({opId,owner,onGo}){
@@ -38,12 +40,15 @@ export default function Custody({opId,owner,onGo}){
     setLoading(true);
     const[{data:e},ca,ba]=await Promise.all([
       supabase.from("employees").select("id,full_name,employee_id").not("employee_id","is",null).order("employee_id"),
-      (()=>{let q=supabase.from("custody_assets").select("*").order("end_date",{ascending:true});if(opId&&opId!=="all")q=q.or("operator_id.eq."+opId+",operator_id.is.null");return q;})(),
+      (()=>{let q=supabase.from("custody_assets").select(CA_COLS).order("end_date",{ascending:true});if(opId&&opId!=="all")q=q.or("operator_id.eq."+opId+",operator_id.is.null");return q;})(),
       // تصريحات البوابة (تسجيل أول/تحديث حالة) لسجل كل قطعة
       supabase.from("biker_assets").select("id,kind,asset_id,items,status,reject_reason,reviewed_at,request_id,created_at").order("created_at",{ascending:false}).limit(500),
     ]);
-    setEmps(e||[]);setRows(ca.data||[]);setDecls(ba.data||[]);setLoading(false);
-  })();},[opId,rev]);
+    // المالك: نص القرار ومن قرّر للقطع التي عليها قرار (غيره لا يقرؤهما)
+    let list=ca.data||[];const dec=list.filter(r=>r.decision_status).map(r=>r.id);
+    if(owner&&dec.length){const{data:d}=await supabase.rpc("custody_decisions",{p_ids:dec});const m=Object.fromEntries((d||[]).map(x=>[x.id,x]));list=list.map(r=>m[r.id]?{...r,decision_note:m[r.id].decision_note,decided_by:m[r.id].decided_by}:r);}
+    setEmps(e||[]);setRows(list);setDecls(ba.data||[]);setLoading(false);
+  })();},[opId,rev,owner]);
 
   const empBySid=useMemo(()=>{const m={};emps.forEach(x=>{if(x.employee_id)m[String(x.employee_id).trim()]=x;});return m;},[emps]);
   // «ناقصة» (سُجّلت ناقصة في جولة): بلا عدّاد حتى تُسلَّم
@@ -74,7 +79,7 @@ export default function Custody({opId,owner,onGo}){
       start_date:f.start_date,life_months:Number(f.life_months||12),end_date:addMonths(f.start_date,Number(f.life_months||12)),
       lead_days:Number(f.lead_days||60),cost:f.cost?Number(f.cost):null,source:"manual",
       ...(dev?{serial_no:imeiDigits(f.ph.imei),specs:phoneSpecs(f.ph)}:{})};
-    const{data,error}=await supabase.from("custody_assets").insert(row).select().single();
+    const{data,error}=await supabase.from("custody_assets").insert(row).select(CA_COLS).single();
     if(error){setMsg({ok:false,t:"خطأ: "+errText(error)});return;}
     if(dev)setF(p=>({...p,ph:blankPhone()}));
     setRows(p=>[...p,data].sort((a,b)=>(a.end_date||"")<(b.end_date||"")?-1:1));setShowAdd(false);setMsg({ok:true,t:"تمت إضافة العُهدة"});
@@ -89,7 +94,7 @@ export default function Custody({opId,owner,onGo}){
     const{rows:toAdd,unknown}=extractRows(r,mine,{operator_id:(opId&&opId!=="all")?opId:null,employee_id:emp?.id||null,biker_name:emp?.full_name||r.biker_name||""});
     const unk=unknown.length?` · لم تُسجَّل في الجولة (أضِفها يدوياً إن وُجدت): ${unknown.map(k=>(CATALOG.find(c=>c.key===k)||{}).name).join("، ")}`:"";
     if(!toAdd.length){setMsg({ok:false,t:"لا أصناف جديدة من هذه الجولة — المسجّل فيها مسجّل للبايكر مسبقاً"+unk});setShowExtract(false);return;}
-    const{data,error}=await supabase.from("custody_assets").insert(toAdd).select();
+    const{data,error}=await supabase.from("custody_assets").insert(toAdd).select(CA_COLS);
     if(error){setMsg({ok:false,t:"خطأ: "+error.message});return;}
     setRows(p=>[...p,...(data||[])].sort((a,b)=>(a.end_date||"")<(b.end_date||"")?-1:1));setShowExtract(false);setExRound("");
     const nMiss=(data||[]).filter(x=>x.status==="missing").length;
@@ -106,17 +111,16 @@ export default function Custody({opId,owner,onGo}){
     const p=n=>String(n).padStart(2,"0");const d=new Date();
     const ref=`DW-${r.sweater_id||"x"}-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-C${Math.floor(1000+Math.random()*9000)}`;
     const item={n:null,ar:r.name,en:r.name_en||"",type:r.item_type,category:r.category||"مستهلكات",category_en:"",status:"reorder",status_ar:"إعادة طلب (استهلاك دورة العُهدة)",status_en:"Reorder (consumable cycle)",note:`عُهدة بدأت ${r.start_date} — انتهت دورتها`,parts_ar:"",parts_en:""};
-    const{data:sr,error}=await supabase.from("supply_requests").insert({operator_id:r.operator_id||((opId&&opId!=="all")?opId:null),ref,round_id:r.round_id||null,biker_name:r.biker_name,sweater_id:r.sweater_id,requesting_dept:"التشغيل — دلو ورغوة",items:[item]}).select().single();
+    const{data:sr,error}=await supabase.from("supply_requests").insert({operator_id:r.operator_id||((opId&&opId!=="all")?opId:null),ref,round_id:r.round_id||null,biker_name:r.biker_name,sweater_id:r.sweater_id,requesting_dept:"التشغيل — دلو ورغوة",items:[item]}).select(CA_COLS).single();
     if(error){setMsg({ok:false,t:"خطأ في إنشاء الطلب: "+error.message});return;}
-    // إعادة ضبط دورة العُهدة المستهلكة
-    const ns=today(),ne=addMonths(ns,r.life_months||1);
-    const{data:up}=await supabase.from("custody_assets").update({start_date:ns,end_date:ne,status:"active",reorder_request_id:sr.id}).eq("id",r.id).select().single();
-    if(up)setRows(pr=>pr.map(x=>x.id===r.id?up:x));
-    setMsg({ok:true,t:`أُنشئ طلب سويتر ${ref} وأُعيدت دورة العُهدة — راجع «طلبات الإمداد»`});
+    // لا تجديد عند الطلب (قرار المالك 2026-10-14): القطعة «مستحقة» ومربوطة بالطلب، وتتجدّد دورتها عند التسليم فقط (supply_request_complete)
+    const{data:up,error:e2}=await supabase.from("custody_assets").update({status:"due",reorder_request_id:sr.id}).eq("id",r.id).select(CA_COLS).single();
+    if(up)setRows(pr=>pr.map(x=>x.id===r.id?{...x,...up}:x));
+    setMsg(e2?{ok:false,t:`أُنشئ طلب سويتر ${ref} لكن تعذّر ربطه بالعُهدة: `+errText(e2)}:{ok:true,t:`أُنشئ طلب سويتر ${ref} — العُهدة «مستحقة» وتتجدّد دورتها عند تسليم الطلب في «طلبات الإمداد»`});
   };
   const planReplace=async(r)=>{ // أصل معمّر/دراجة → وسم للتخطيط
-    const{data}=await supabase.from("custody_assets").update({status:"due",notes:(r.notes?r.notes+" · ":"")+`خُطّط للاستبدال ${today()}`}).eq("id",r.id).select().single();
-    if(data)setRows(p=>p.map(x=>x.id===r.id?data:x));
+    const{data}=await supabase.from("custody_assets").update({status:"due",notes:(r.notes?r.notes+" · ":"")+`خُطّط للاستبدال ${today()}`}).eq("id",r.id).select(CA_COLS).single();
+    if(data)setRows(p=>p.map(x=>x.id===r.id?{...x,...data}:x));
     setMsg({ok:true,t:r.item_type==="motorcycle"?"وُسمت الدراجة ضمن خطة الشراء":"وُسمت العُهدة للاستبدال"});
   };
   // الاستبدال الفعلي: القديمة «مُستبدلة»، وقطعة جديدة من نفس الصنف تبدأ اليوم بعمر كامل
@@ -124,10 +128,10 @@ export default function Custody({opId,owner,onGo}){
     if(isDevice(r)){setRepl({id:r.id,...blankPhone(),brand_model:(r.specs&&r.specs.brand_model)||""});return;}
     if(!confirm(`تأكيد استبدال «${r.name}» لـ ${r.biker_name||"—"}؟ تبدأ قطعة جديدة اليوم بعمر كامل.`))return;
     const t=today();
-    const{data:old,error}=await supabase.from("custody_assets").update({status:"replaced",notes:(r.notes?r.notes+" · ":"")+`استُبدلت ${t}`}).eq("id",r.id).select().single();
+    const{data:old,error}=await supabase.from("custody_assets").update({status:"replaced",notes:(r.notes?r.notes+" · ":"")+`استُبدلت ${t}`}).eq("id",r.id).select(CA_COLS).single();
     if(error||!old){setMsg({ok:false,t:"تعذّر الاستبدال: "+((error&&error.message)||"لا صلاحية")});return;}
-    const{data:nw,error:e2}=await supabase.from("custody_assets").insert(replacementRow(r,t)).select().single();
-    setRows(p=>[...p.map(x=>x.id===r.id?old:x),...(nw?[nw]:[])]);
+    const{data:nw,error:e2}=await supabase.from("custody_assets").insert(replacementRow(r,t)).select(CA_COLS).single();
+    setRows(p=>[...p.map(x=>x.id===r.id?{...x,...old}:x),...(nw?[nw]:[])]);
     setMsg(e2?{ok:false,t:"استُبدلت القديمة لكن تعذّر إنشاء البديلة: "+e2.message}:{ok:true,t:`استُبدلت ✓ — بدأت «${r.name}» جديدة اليوم حتى ${nw.end_date}`});
   };
   // استبدال الجوال: IMEI الجهاز البديل إلزامي. البديل يُنشأ أولاً (إن رُفض الـIMEI لا يتغيّر شيء) ثم تُوسم القديمة «مُستبدلة»
@@ -136,10 +140,10 @@ export default function Custody({opId,owner,onGo}){
     const imei=imeiDigits(repl.imei);
     if(imei===imeiDigits(r.serial_no)){setMsg({ok:false,t:"IMEI البديل نفس IMEI الجهاز الحالي — أدخل رقم الجهاز الجديد."});return;}
     const t=today();
-    const{data:nw,error:e1}=await supabase.from("custody_assets").insert(replacementRow(r,t,{serial_no:imei,specs:phoneSpecs(repl)})).select().single();
+    const{data:nw,error:e1}=await supabase.from("custody_assets").insert(replacementRow(r,t,{serial_no:imei,specs:phoneSpecs(repl)})).select(CA_COLS).single();
     if(e1||!nw){setMsg({ok:false,t:"تعذّر الاستبدال: "+errText(e1)});return;}
-    const{data:old,error:e2}=await supabase.from("custody_assets").update({status:"replaced",notes:(r.notes?r.notes+" · ":"")+`استُبدلت ${t}`}).eq("id",r.id).select().single();
-    setRows(p=>[...p.map(x=>x.id===r.id&&old?old:x),nw]);setRepl(null);
+    const{data:old,error:e2}=await supabase.from("custody_assets").update({status:"replaced",notes:(r.notes?r.notes+" · ":"")+`استُبدلت ${t}`}).eq("id",r.id).select(CA_COLS).single();
+    setRows(p=>[...p.map(x=>x.id===r.id&&old?{...x,...old}:x),nw]);setRepl(null);
     setMsg(e2||!old?{ok:false,t:"أُنشئ الجهاز البديل لكن تعذّر وسم القديم «مُستبدلاً»: "+errText(e2)}:{ok:true,t:`استُبدل الجوال ✓ — الجديد IMEI ${maskImei(imei)} حتى ${nw.end_date}`});
   };
   // قرار المالك على التالفة/المفقودة: نص القرار إلزامي، ولا تحميل على البايكر من هنا (القرار يُنفَّذ بإجرائه المعتاد)
@@ -147,17 +151,17 @@ export default function Custody({opId,owner,onGo}){
     const note=(prompt(`قرار المالك على «${r.name}» (${condAr(r.last_check_condition)}${r.last_check_imei_ok===false?" · IMEI غير مطابق":""}) — اكتب القرار:`,"")||"").trim();
     if(!note)return;
     const{data:{user}}=await supabase.auth.getUser();
-    const{data,error}=await supabase.from("custody_assets").update({decision_status:"decided",decision_note:note,decided_by:user?.id||null,decided_at:new Date().toISOString()}).eq("id",r.id).select().single();
+    const{data,error}=await supabase.from("custody_assets").update({decision_status:"decided",decision_note:note,decided_by:user?.id||null,decided_at:new Date().toISOString()}).eq("id",r.id).select(CA_COLS).single();
     if(error||!data){setMsg({ok:false,t:"تعذّر حفظ القرار: "+errText(error)});return;}
-    setRows(p=>p.map(x=>x.id===r.id?data:x));setMsg({ok:true,t:`سُجّل القرار على «${r.name}»`});
+    setRows(p=>p.map(x=>x.id===r.id?{...x,...data,decision_note:note,decided_by:user?.id||null}:x));setMsg({ok:true,t:`سُجّل القرار على «${r.name}»`});
   };
   // «ناقصة» سُلّمت خارج طلب إمداد: تصبح نشطة ويبدأ عدّادها اليوم
   const activate=async(r)=>{
     if(!confirm(`تأكيد تسليم «${r.name}» لـ ${r.biker_name||"—"}؟ يبدأ العدّاد اليوم بعمر ${r.life_months} شهر.`))return;
     const t=today();
-    const{data,error}=await supabase.from("custody_assets").update({status:"active",start_date:t,end_date:addMonths(t,Number(r.life_months||12)),notes:(r.notes?r.notes+" · ":"")+`سُلّمت ${t}`}).eq("id",r.id).select().single();
+    const{data,error}=await supabase.from("custody_assets").update({status:"active",start_date:t,end_date:addMonths(t,Number(r.life_months||12)),notes:(r.notes?r.notes+" · ":"")+`سُلّمت ${t}`}).eq("id",r.id).select(CA_COLS).single();
     if(error||!data){setMsg({ok:false,t:"تعذّر التحديث: "+errText(error)});return;}
-    setRows(p=>p.map(x=>x.id===r.id?data:x));setMsg({ok:true,t:`«${r.name}» نشطة من اليوم حتى ${data.end_date}`});
+    setRows(p=>p.map(x=>x.id===r.id?{...x,...data}:x));setMsg({ok:true,t:`«${r.name}» نشطة من اليوم حتى ${data.end_date}`});
   };
   // النافذة تُفتح داخل النقرة (لا يحجبها المتصفح)، ثم يُوضع الرابط الموقّع
   const openPhoto=async u=>{const w=window.open("","_blank");const s=await signedUrl(u).catch(()=>null);if(w){w.opener=null;w.location.href=s||u;}};

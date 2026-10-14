@@ -346,7 +346,7 @@ function CustodyCheck({emp,assets,loading,err,oldRound,lines,setLine,setAll,onUp
         {(dur||ph)&&!lost&&<div className="fr-cc-ex">
           {dur&&<label className={"fr-ph"+(l.photo?" has":"")}>{l.photo?<img src={l.photo} onClick={e=>{e.preventDefault();onView(l.photo);}}/>:uploading===key+"-0"?<span className="fr-ph-up">…</span>:<><Icon n="camera" s={16}/><span>صورة إلزامية</span></>}
             <input type="file" accept="image/*" capture="environment" hidden onChange={e=>onUpload(key,0,e.target.files&&e.target.files[0])}/></label>}
-          {ph&&<div className="fr-cc-imei"><span>IMEI الجوال (اطلب <b dir="ltr">*#06#</b>)</span>
+          {ph&&<div className="fr-cc-imei"><span>أدخل IMEI 1 (من <b dir="ltr">*#06#</b>)</span>
             <div><input dir="ltr" inputMode="numeric" value={l.imei||""} onChange={e=>setLine(a.id,{imei:e.target.value})} placeholder={l.imeiPrev!=null?"المطابقة المحفوظة — أدخل رقماً لإعادة الفحص":"15 رقماً"}/><b className={m==null?"":m?"ok":"bad"}>{m==null?"":m?"✅ مطابق":"❌ غير مطابق"}</b></div></div>}
         </div>}
       </div>);})}

@@ -22,6 +22,7 @@ ok('الحالات الثلاث بالعربي',CONDS.map(c=>c.v+':'+c.ar).join(
 ok('المعمّرة: الدراجة والجوال والصندوق والخوذة فقط',[bike,phone,box,helm].every(isDurable)&&![chest,towel,soap].some(isDurable));
 const C=checkable(all,E);
 ok('القابلة للجرد: النشطة والمستحقة لنفس البايكر (لا المُستبدلة ولا الناقصة ولا بايكر آخر)، والمعمّرة أولاً',C.length===7&&C.slice(0,4).every(isDurable)&&!C.some(a=>['o','m','z'].includes(a.id)));
+ok('IMEI بـ17 خانة (IMEI/SV) ⇒ تُقارن أول 15 خانة فقط',imeiMatch(IMEI+'01',IMEI)===true&&imeiMatch('35693803564380901',IMEI)===false);
 ok('IMEI: فارغ ⇒ null، مطابق بمسافات وأرقام بنغالية ⇒ true، مختلف ⇒ false',imeiMatch('',IMEI)===null&&imeiMatch('4901 5420 3237 518',IMEI)===true&&imeiMatch('৪৯০১৫৪২০৩২৩৭৫১৮',IMEI)===true&&imeiMatch('356938035643809',IMEI)===false);
 
 ok('بلا حالة ⇒ «اختر حالة»',/اختر حالة «الصدرية/.test(lineError({},chest)));

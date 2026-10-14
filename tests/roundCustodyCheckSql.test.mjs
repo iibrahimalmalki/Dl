@@ -11,7 +11,7 @@ const err=sql=>{try{ps(sql);return null;}catch(e){return String(e.stderr||e.mess
 const as=(uid,sql)=>ps(`begin; set local role authenticated; select set_config('test.uid','${uid}',true); ${sql}; commit;`).split('\n').pop();
 const asErr=(uid,sql)=>err(`begin; set local role authenticated; select set_config('test.uid','${uid}',true); ${sql}; commit;`);
 
-const OWNER='00000000-0000-0000-0000-00000000000a',SUP='00000000-0000-0000-0000-00000000005b',VIEW='00000000-0000-0000-0000-0000000000ee',STORE='00000000-0000-0000-0000-0000000000cc';
+const BIKER='00000000-0000-0000-0000-000000001648',OWNER='00000000-0000-0000-0000-00000000000a',SUP='00000000-0000-0000-0000-00000000005b',VIEW='00000000-0000-0000-0000-0000000000ee',STORE='00000000-0000-0000-0000-0000000000cc';
 const E_MIDUL='10000000-0000-0000-0000-000000001648',E_RAKIB='10000000-0000-0000-0000-000000001700';
 const BIKE='20000000-0000-0000-0000-000000000001',PHONE='20000000-0000-0000-0000-000000000002',BOX='20000000-0000-0000-0000-000000000003',
   TOWEL='20000000-0000-0000-0000-000000000004',SOAP='20000000-0000-0000-0000-000000000005',CHEST='20000000-0000-0000-0000-000000000006',
@@ -26,23 +26,26 @@ ps(`do $$ begin create role anon; exception when others then null; end $$;
 do $$ begin create role authenticated; exception when others then null; end $$;
 create schema auth; create function auth.uid() returns uuid language sql stable as $f$ select nullif(current_setting('test.uid',true),'')::uuid $f$;
 grant usage on schema auth to authenticated, anon;
-create table public.app_users (id uuid primary key, is_owner boolean not null default false, active boolean not null default true);
+create table public.app_users (id uuid primary key, is_owner boolean not null default false, active boolean not null default true, biker_employee_id text);
 create table public.user_permissions (user_id uuid, module text, can_view boolean, can_edit boolean);
 create table public.employees (id uuid primary key, full_name text not null, employee_id text);
 create function public.is_owner() returns boolean language sql stable security definer set search_path to 'public' as $f$ select exists(select 1 from public.app_users where id = auth.uid() and is_owner and active) $f$;
 create function public.has_perm(p_module text, p_need_edit boolean default false) returns boolean language sql stable security definer set search_path to 'public' as $f$
   select public.is_owner() or exists(select 1 from public.user_permissions up join public.app_users au on au.id = up.user_id where up.user_id = auth.uid() and au.active and up.module = p_module and (up.can_view or up.can_edit) and (not p_need_edit or up.can_edit)) $f$;
+create function public.my_employee_uuid() returns uuid language sql stable security definer set search_path to 'public' as $f$
+  select e.id from public.employees e join public.app_users a on btrim(a.biker_employee_id) = e.employee_id where a.id = auth.uid() and a.active limit 1 $f$;
 create table public.field_rounds (id uuid primary key, employee_id uuid, sweater_id text, round_date date, results jsonb default '{}');
 create table public.custody_assets (id uuid primary key default gen_random_uuid(), operator_id uuid, employee_id uuid, biker_name text, sweater_id text, item_type text not null default 'other', category text, name text, name_en text,
   start_date date not null default current_date, life_months numeric not null default 12, end_date date, lead_days int default 60, cost numeric, status text not null default 'active', source text default 'manual',
-  round_id uuid references public.field_rounds(id) on delete set null, reorder_request_id uuid, notes text, created_at timestamptz default now(), serial_no text, specs jsonb not null default '{}');
+  round_id uuid references public.field_rounds(id) on delete set null, reorder_request_id uuid, notes text, created_at timestamptz default now(), created_by uuid, serial_no text, specs jsonb not null default '{}');
 alter table public.custody_assets enable row level security;
 create policy ca_sel on public.custody_assets for select using (has_perm('supply') or has_perm('field_rounds'));
+create policy ca_biker_sel on public.custody_assets for select to authenticated using (employee_id = my_employee_uuid());
 create policy ca_wr on public.custody_assets for all using (has_perm('supply', true) or has_perm('field_rounds', true)) with check (has_perm('supply', true) or has_perm('field_rounds', true));
 create table public.supply_requests (id uuid primary key default gen_random_uuid(), ref text unique, round_id uuid references public.field_rounds(id) on delete set null, sweater_id text,
   items jsonb not null default '[]', status text not null default 'open', created_at timestamptz default now(), completed_at timestamptz, completion_note text);
 grant select, insert, update, delete on all tables in schema public to authenticated;
-insert into app_users values ('${OWNER}',true,true),('${SUP}',false,true),('${VIEW}',false,true),('${STORE}',false,true);
+insert into app_users values ('${OWNER}',true,true,null),('${SUP}',false,true,null),('${VIEW}',false,true,null),('${STORE}',false,true,null),('${BIKER}',false,true,'1648');
 insert into user_permissions values ('${SUP}','field_rounds',true,true),('${VIEW}','field_rounds',true,false),('${STORE}','supply',true,true);
 insert into employees values ('${E_MIDUL}','Midul Hassan','1648'),('${E_RAKIB}','Mohamad Rakib','1700');
 insert into field_rounds values ('${R1}','${E_MIDUL}','1648','2026-10-03'),('${R0}','${E_MIDUL}','1648','2026-09-30'),('${RX}',null,'9999','2026-10-03');
@@ -88,6 +91,7 @@ const r1=JSON.parse(chk(SUP,R1,okLines));
 ok('جرد سليم: 4 أسطر، 4 قطع محدّثة، لا شيء بانتظار القرار',r1.lines===4&&r1.updated===4&&r1.pending===0);
 ok('على القطعة: تاريخ الجولة والحالة ورقم الجولة، وround_id الأصلي (جولة الإنشاء) كما هو',ps(`select last_check_at||'|'||last_check_condition||'|'||(last_check_round_id='${R1}')||'|'||(round_id='${R0}')||'|'||(last_check_photo=$$${PH('b.jpg')}$$)||'|'||status from custody_assets where id='${BIKE}'`)==='2026-10-03|ok|true|true|true|active');
 ok('الجوال: IMEI مطابق رغم المسافات ⇒ ✅، وعلى الجولة آخر 4 أرقام فقط',ps(`select last_check_imei_ok from custody_assets where id='${PHONE}'`)==='t'&&ps(`select (l->>'imei_ok')||'|'||(l->>'imei_last4')||'|'||(position('${IMEI}' in custody_check::text)>0) from field_rounds, jsonb_array_elements(custody_check) l where id='${R1}' and l->>'asset_id'='${PHONE}'`)==='true|7518|false');
+ok('IMEI بـ17 خانة (IMEI/SV) ⇒ تُقارن أول 15 خانة فقط',(()=>{const r=chkErr(SUP,R1,[{asset_id:PHONE,condition:'ok',photo:PH('p'),imei:IMEI+'01'}]);return r==='';})()&&ps(`select last_check_imei_ok::text from custody_assets where id='${PHONE}'`)==='true');
 ok('القطعة «مستحقة» (due) تُجرد، وحالتها لا تتغيّر',ps(`select status||'|'||last_check_condition from custody_assets where id='${TOWEL}'`)==='due|ok');
 
 // ── تالف/مفقود/IMEI مختلف ⇒ بانتظار قرار المالك ──
@@ -166,4 +170,11 @@ const SH=as(SUP,`insert into custody_assets (employee_id,sweater_id,item_type,na
 const SH2=as(STORE,`insert into custody_assets (employee_id,sweater_id,item_type,name,start_date,life_months,end_date) values ('${E_MIDUL}','1648','safety','حذاء السلامة','2026-10-14',12,'2027-10-14') returning id`);
 ok('إضافة قطعة نشطة ⇒ الناقصة «مُستبدلة» بملاحظة «استُبدلت YYYY-MM-DD» (يقرؤها سجل القطعة)',ps(`select status||'|'||(notes ~ 'كانت ناقصة — استُبدلت \\d{4}-\\d{2}-\\d{2} بقطعة ${SH2}') from custody_assets where id='${SH}'`)==='replaced|true');
 ok('لا تمسّ ناقصة بايكر آخر أو صنفاً آخر',!asErr(SUP,`insert into custody_assets (employee_id,name,status,end_date) values ('${E_RAKIB}','حذاء السلامة','missing',null)`)&&as(STORE,`insert into custody_assets (employee_id,name,end_date) values ('${E_MIDUL}','الكاب','2027-01-01') returning 1`)==='1'&&ps(`select count(*) from custody_assets where status='missing' and employee_id='${E_RAKIB}'`)==='1');
+
+// ── إخفاء القرار عن غير المالك ──
+ok('البايكر يقرأ قطعه من my_custody_assets مع حالة الجرد وملاحظته',as(BIKER,`select count(*)||'|'||count(last_check_note) from my_custody_assets`).startsWith('')&&Number(as(BIKER,`select count(*) from my_custody_assets`))>0&&as(BIKER,`select count(*) from my_custody_assets where employee_id<>'${E_MIDUL}'`)==='0');
+ok('البايكر لا يقرأ decision_note ولا decided_by من الجدول، ولا تحملها الـview',/permission denied/.test(asErr(BIKER,`select decision_note from custody_assets`)||'')&&/permission denied/.test(asErr(BIKER,`select decided_by from custody_assets`)||'')&&/does not exist/.test(asErr(BIKER,`select decision_note from my_custody_assets`)||''));
+ok('غير المالك من الإدارة لا يقرأ الحقلين ولا select * ، ويقرأ بقية الأعمدة',/permission denied/.test(asErr(STORE,`select * from custody_assets`)||'')&&!asErr(STORE,`select id,status,decision_status,decided_at,last_check_note from custody_assets`));
+ok('custody_decisions: المالك يقرأ نص القرار ومن قرّر، وغيره لا شيء',as(OWNER,`select decision_note||'|'||(decided_by='${OWNER}') from custody_decisions(array['${BOX}']::uuid[])`)==='استبدال على الشركة|true'&&as(SUP,`select count(*) from custody_decisions(array['${BOX}']::uuid[])`)==='0');
+ok('التحديث والإدراج بإرجاع أعمدة محدّدة يعملان لغير المالك',!asErr(STORE,`update custody_assets set notes='x' where id='${CHEST}' returning id,status`));
 }finally{ps(`drop database if exists ${db} with (force)`,'postgres');}

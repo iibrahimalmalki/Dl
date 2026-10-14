@@ -7,7 +7,8 @@
 --      الدالة round_custody_check(الجولة، الأسطر) تحفظ الأسطر على الجولة (field_rounds.custody_check) وتحدّث على كل قطعة:
 --        last_check_at (تاريخ الجولة) · last_check_condition · last_check_round_id · last_check_note · last_check_photo · last_check_imei_ok
 --      • الأصول المعمّرة (الدراجة، الجوال، صندوق الخدمة، الخوذة): صورة إلزامية (إلا «مفقودة»).
---      • الجوال: IMEI المُدخل (*#06#) يُطابَق في القاعدة مع serial_no ⇒ last_check_imei_ok (✅/❌). يُحفظ آخر 4 أرقام فقط على الجولة.
+--      • الجوال: IMEI 1 المُدخل (*#06#) يُطابَق في القاعدة مع serial_no على أول 15 خانة (بعض الأجهزة تعرض 17) ⇒ last_check_imei_ok (✅/❌).
+--        يُحفظ آخر 4 أرقام فقط على الجولة.
 --        عند تعديل الجولة نفسها بلا IMEI جديد تبقى نتيجة المطابقة المحفوظة على القطعة (إن كان آخر جرد لها من هذه الجولة).
 --      • الصورة من مخزن field-evidence فقط. تاريخ الجولة في المستقبل ⇒ مرفوض.
 --      • التالفة/المفقودة أو IMEI غير مطابق ⇒ decision_status = 'pending' («بانتظار قرار المالك»). لا تحميل على البايكر،
@@ -26,6 +27,11 @@
 --      البداية = تاريخ التسليم (توقيت الرياض)، النهاية = البداية + العمر، status = active، reorder_request_id = الطلب.
 --      القطعة المسموحة: مربوطة بالطلب نفسه (reorder_request_id — طلبات اعتماد الإقرار و«طلب سويتر»)، أو لنفس بايكر جولة الطلب.
 --      الجوال والدراجة لا يُجدَّدان هنا (الجوال يحتاج IMEI الجهاز الجديد ⇒ «استُبدلت» في صفحة العهد).
+--
+--   5) إخفاء القرار عن غير المالك (قرار المالك 2026-10-14): البايكر يرى حالة الجرد وملاحظته على قطعه، ولا يرى decision_note ولا decided_by.
+--      قراءة الجدول بأعمدة محدّدة (كل الأعمدة عدا الاثنين) لـ authenticated؛ المالك يقرؤهما عبر custody_decisions(المعرّفات).
+--      البوابة تقرأ من my_custody_assets (view بصلاحيات القارئ و RLS نفسها، بلا حقول القرار).
+--      ⚠ عمود يُضاف مستقبلاً إلى custody_assets لا يُقرأ حتى يُضاف إلى grant select في هذا الملف.
 --
 -- الصلاحيات: الجرد = تعديل «الجولات الميدانية» · إغلاق الطلب = تعديل «الإمداد» أو «الجولات» (كسياسة sr_wr) · القرار = المالك.
 -- وقائع 2026-10-14 (قراءة): custody_assets 40 صفاً (1648 و1700، كلها active/round)، لا قيد على status، start_date إلزامي.
@@ -151,7 +157,8 @@ begin
     if a.item_type = 'device' and v_cond <> 'lost' then
       v_imei := regexp_replace(coalesce(l ->> 'imei', ''), '\D', '', 'g');
       if v_imei <> '' then
-        v_ok := v_imei = regexp_replace(coalesce(a.serial_no, ''), '\D', '', 'g'); v_last4 := right(v_imei, 4);
+        -- أول 15 خانة فقط (قرار المالك): بعض الأجهزة تعرض IMEI/SV بـ17 خانة
+        v_ok := left(v_imei, 15) = left(regexp_replace(coalesce(a.serial_no, ''), '\D', '', 'g'), 15); v_last4 := right(left(v_imei, 15), 4);
       else
         -- تعديل الجولة نفسها بلا IMEI جديد ⇒ نتيجة المطابقة المحفوظة على القطعة (محمية بالمشغّل) إن كان آخر جرد لها من هذه الجولة؛
         -- لا تُقرأ النتيجة من custody_check (يكتبه محرّر الجولات مباشرة)
@@ -230,6 +237,30 @@ end $$;
 revoke all on function public.supply_request_complete(uuid, text, uuid[]) from public, anon;
 grant execute on function public.supply_request_complete(uuid, text, uuid[]) to authenticated;
 
+-- ═══ 5) إخفاء حقلي القرار عن غير المالك ═══
+revoke select on public.custody_assets from anon, authenticated;
+grant select (id, operator_id, employee_id, biker_name, sweater_id, item_type, category, name, name_en, start_date, life_months, end_date,
+  lead_days, cost, status, source, round_id, reorder_request_id, notes, created_at, created_by, serial_no, specs,
+  last_check_at, last_check_condition, last_check_round_id, last_check_note, last_check_photo, last_check_imei_ok,
+  decision_status, decided_at) on public.custody_assets to authenticated;
+
+-- المالك فقط: نص القرار ومن قرّر (غير المالك ⇒ لا صفوف)
+create or replace function public.custody_decisions(p_ids uuid[]) returns table (id uuid, decision_note text, decided_by uuid)
+language sql stable security definer set search_path to 'public' as $$
+  select c.id, c.decision_note, c.decided_by from public.custody_assets c where public.is_owner() and c.id = any(p_ids);
+$$;
+revoke all on function public.custody_decisions(uuid[]) from public, anon;
+grant execute on function public.custody_decisions(uuid[]) to authenticated;
+
+-- البوابة: قطع البايكر بلا حقول القرار (security_invoker ⇒ صلاحيات القارئ و RLS الجدول نفسها)
+create or replace view public.my_custody_assets with (security_invoker = true) as
+  select id, employee_id, item_type, category, name, name_en, start_date, end_date, life_months, status, reorder_request_id, source, created_at,
+         serial_no, specs, last_check_at, last_check_condition, last_check_note, last_check_photo, last_check_imei_ok
+    from public.custody_assets
+   where employee_id = public.my_employee_uuid();
+revoke all on public.my_custody_assets from anon;
+grant select on public.my_custody_assets to authenticated;
+
 -- ═══ التحقق ═══
 -- select column_name from information_schema.columns where table_name = 'custody_assets' and column_name like any (array['last_check%','decision%','decided%']);  -- 10
 -- select column_name from information_schema.columns where table_name = 'field_rounds' and column_name = 'custody_check';                                    -- 1
@@ -238,6 +269,9 @@ grant execute on function public.supply_request_complete(uuid, text, uuid[]) to 
 -- select p.proname, p.prosecdef, has_function_privilege('anon', p.oid, 'execute') anon_exec from pg_proc p
 --   where p.proname in ('round_custody_check','supply_request_complete','custody_check_guard','custody_missing_supersede');                                                         -- definer، anon=false للدالتين
 -- select count(*), count(*) filter (where decision_status is not null or last_check_at is not null) from public.custody_assets;                               -- 40 · 0
+-- select has_column_privilege('authenticated','public.custody_assets','decision_note','select'), has_column_privilege('authenticated','public.custody_assets','decided_by','select'),
+--        has_column_privilege('authenticated','public.custody_assets','last_check_note','select');                                                          -- false · false · true
+-- select count(*) from information_schema.views where table_name = 'my_custody_assets';                                                                  -- 1
 
 -- ═══ التراجع ═══
 -- عبر الأداة (بلا حذف):
@@ -245,6 +279,7 @@ grant execute on function public.supply_request_complete(uuid, text, uuid[]) to 
 --   revoke execute on function public.supply_request_complete(uuid, text, uuid[]) from authenticated;
 --   alter table public.custody_assets disable trigger custody_check_guard;
 --   alter table public.custody_assets disable trigger custody_missing_supersede;
+--   grant select on public.custody_assets to authenticated;   -- يعيد قراءة كل الأعمدة (يلغي الإخفاء)
 --   (الأعمدة الجديدة فارغة ولا يقرؤها شيء قبل دمج الواجهة)
 -- من SQL Editor (كامل):
 --   drop function if exists public.round_custody_check(uuid, jsonb);
@@ -257,3 +292,5 @@ grant execute on function public.supply_request_complete(uuid, text, uuid[]) to 
 --     drop column if exists last_check_imei_ok, drop column if exists decision_status, drop column if exists decision_note,
 --     drop column if exists decided_by, drop column if exists decided_at;
 --   alter table public.field_rounds drop column if exists custody_check;
+--   drop view if exists public.my_custody_assets; drop function if exists public.custody_decisions(uuid[]);
+--   grant select on public.custody_assets to authenticated;
