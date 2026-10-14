@@ -7,6 +7,7 @@ import CustodyDeclarations from"./CustodyDeclarations";
 import{timeline,replacementRow}from"./custodyLifecycle";
 import{extractRows,condAr}from"./custodyRound";
 import{signedUrl}from"./storageUrl";
+import{SR_RET,reorderable,reorderPlan,openLink}from"./custodyReorder";
 import{ACCESSORIES,blankPhone,imeiDigits,imeiError,brandError,simError,phoneSpecs,maskImei,accLabels,isDevice,imeiServerError}from"./custodyPhone";
 const CU_FL={name:"العهدة",status:"الحالة",start_date:"البداية",end_date:"النهاية",biker_name:"البايكر",sweater_id:"رقم البايكر",life_months:"العمر (شهر)",category:"الفئة"};
 const CU_FL_X={last_check_at:"آخر جرد",last_check_condition:"حالة آخر جرد",decision_status:"قرار المالك",decision_note:"نص القرار"};
@@ -15,6 +16,8 @@ const CU_DV={active:"نشطة",due:"مستحقة",replaced:"مُستبدلة",re
 // الكتالوج وخريطة أصناف بوابة البايكر في ملف مستقل (تستعمله البوابة أيضاً)
 import{CATALOG}from"./custodyCatalog";
 export{CATALOG};
+// مفتاح البايكر للفلتر والتحديد: الموظف، وإلا رقم سويتر
+const bikerKey=r=>r.employee_id||(r.sweater_id?"s:"+r.sweater_id:"");
 const MODE_OF=t=>t==="motorcycle"?"buy":["cleaning","sponge","towel","consumable"].includes(t)?"reorder":"replace";
 const addMonths=(iso,m)=>{const d=new Date(iso);d.setMonth(d.getMonth()+Math.round(m));return d.toISOString().slice(0,10);};
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
@@ -35,6 +38,8 @@ export default function Custody({opId,owner,onGo}){
   const[decls,setDecls]=useState([]);const[tlOpen,setTlOpen]=useState(null);const[rev,setRev]=useState(0);
   const[f,setF]=useState({sweater_id:"",catKey:"moto",name:"",start_date:today(),life_months:36,lead_days:90,cost:"",ph:blankPhone()});
   const[repl,setRepl]=useState(null); // استبدال جوال: {id, ...بيانات الجهاز البديل}
+  // «طلب سويتر» لعدة قطع: تحديد قطع بايكر واحد ⇒ طلب واحد · reqs: حالة/رقم الطلبات المربوطة بالقطع · bk: فلتر البايكر
+  const[sel,setSel]=useState([]);const[reqs,setReqs]=useState({});const[bk,setBk]=useState("");const[busy,setBusy]=useState(false);
 
   useEffect(()=>{(async()=>{
     setLoading(true);
@@ -47,7 +52,10 @@ export default function Custody({opId,owner,onGo}){
     // المالك: نص القرار ومن قرّر للقطع التي عليها قرار (غيره لا يقرؤهما)
     let list=ca.data||[];const dec=list.filter(r=>r.decision_status).map(r=>r.id);
     if(owner&&dec.length){const{data:d}=await supabase.rpc("custody_decisions",{p_ids:dec});const m=Object.fromEntries((d||[]).map(x=>[x.id,x]));list=list.map(r=>m[r.id]?{...r,decision_note:m[r.id].decision_note,decided_by:m[r.id].decided_by}:r);}
-    setEmps(e||[]);setRows(list);setDecls(ba.data||[]);setLoading(false);
+    // الطلبات المربوطة بالقطع (reorder_request_id): المفتوح منها يمنع طلباً مكرّراً للقطعة نفسها
+    const rq=[...new Set(list.map(r=>r.reorder_request_id).filter(Boolean))];let rm={};
+    if(rq.length){const{data:sr}=await supabase.from("supply_requests").select(SR_RET).in("id",rq);(sr||[]).forEach(x=>{rm[x.id]=x;});}
+    setEmps(e||[]);setRows(list);setDecls(ba.data||[]);setReqs(rm);setSel([]);setLoading(false);
   })();},[opId,rev,owner]);
 
   const empBySid=useMemo(()=>{const m={};emps.forEach(x=>{if(x.employee_id)m[String(x.employee_id).trim()]=x;});return m;},[emps]);
@@ -56,12 +64,18 @@ export default function Custody({opId,owner,onGo}){
   const pendingLive=r=>r.decision_status==="pending"&&r.status!=="replaced"&&r.status!=="returned";
   const dep=r=>{if(r.status==="missing")return{age:0,rem:null,used:0,end:null,due:false};const life=(r.life_months||12)*30;const age=Math.max(0,daysBetween(r.start_date,today()));const end=r.end_date||addMonths(r.start_date,r.life_months||12);const rem=daysBetween(today(),end);const used=Math.min(100,Math.max(0,Math.round(age/life*100)));const due=r.status!=="replaced"&&r.status!=="returned"&&rem<=(r.lead_days||60);return{age,rem,used,end,due};};
   const shown=useMemo(()=>{
-    let a=rows;if(tab==="due")a=rows.filter(r=>dep(r).due&&r.status!=="replaced"&&r.status!=="returned");
-    else if(tab==="active")a=rows.filter(r=>r.status==="active"||r.status==="due");
-    else if(tab==="pending")a=rows.filter(pendingLive);
-    else if(tab==="reorder")a=rows.filter(r=>MODE_OF(r.item_type)==="reorder");
+    let a=bk?rows.filter(r=>bikerKey(r)===bk):rows;if(tab==="due")a=a.filter(r=>dep(r).due&&r.status!=="replaced"&&r.status!=="returned");
+    else if(tab==="active")a=a.filter(r=>r.status==="active"||r.status==="due");
+    else if(tab==="pending")a=a.filter(pendingLive);
+    else if(tab==="reorder")a=a.filter(r=>MODE_OF(r.item_type)==="reorder");
     return a;
-  },[rows,tab]);
+  },[rows,tab,bk]);
+  const bikers=useMemo(()=>{const m=new Map();rows.forEach(r=>{const k=bikerKey(r);if(k&&!m.has(k))m.set(k,`${r.biker_name||"—"} · #${r.sweater_id||"—"}`);});return[...m].sort((a,b)=>a[1].localeCompare(b[1],"ar"));},[rows]);
+  // الحالة لكل طلب مربوط (للمنع من التكرار) · القطعة قابلة للتحديد: مستحقة/منتهية/ناقصة وغير مربوطة بطلب مفتوح
+  const reqStatus=useMemo(()=>Object.fromEntries(Object.values(reqs).map(x=>[x.id,x.status])),[reqs]);
+  const canPick=r=>reorderable(r,reqStatus)&&(r.status==="due"||r.status==="missing"||dep(r).due);
+  const selRows=rows.filter(r=>sel.includes(r.id));
+  const toggle=r=>setSel(p=>p.includes(r.id)?p.filter(x=>x!==r.id):[...p,r.id]);
   const kpis=useMemo(()=>{const due=rows.filter(r=>dep(r).due&&r.status!=="replaced"&&r.status!=="returned");return{
     total:rows.length,due:due.length,
     buy:due.filter(r=>MODE_OF(r.item_type)==="buy").length,
@@ -107,17 +121,25 @@ export default function Custody({opId,owner,onGo}){
     const{data}=await q;setRounds(data||[]);
   };
 
-  const reorder=async(r)=>{ // مستهلك → طلب سويتر + إعادة ضبط دورة الإهلاك
-    const p=n=>String(n).padStart(2,"0");const d=new Date();
-    const ref=`DW-${r.sweater_id||"x"}-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-C${Math.floor(1000+Math.random()*9000)}`;
-    const item={n:null,ar:r.name,en:r.name_en||"",type:r.item_type,category:r.category||"مستهلكات",category_en:"",status:"reorder",status_ar:"إعادة طلب (استهلاك دورة العُهدة)",status_en:"Reorder (consumable cycle)",note:`عُهدة بدأت ${r.start_date} — انتهت دورتها`,parts_ar:"",parts_en:""};
-    const{data:sr,error}=await supabase.from("supply_requests").insert({operator_id:r.operator_id||((opId&&opId!=="all")?opId:null),ref,round_id:r.round_id||null,biker_name:r.biker_name,sweater_id:r.sweater_id,requesting_dept:"التشغيل — دلو ورغوة",items:[item]}).select(CA_COLS).single();
-    if(error){setMsg({ok:false,t:"خطأ في إنشاء الطلب: "+error.message});return;}
-    // لا تجديد عند الطلب (قرار المالك 2026-10-14): القطعة «مستحقة» ومربوطة بالطلب، وتتجدّد دورتها عند التسليم فقط (supply_request_complete)
-    const{data:up,error:e2}=await supabase.from("custody_assets").update({status:"due",reorder_request_id:sr.id}).eq("id",r.id).select(CA_COLS).single();
-    if(up)setRows(pr=>pr.map(x=>x.id===r.id?{...x,...up}:x));
-    setMsg(e2?{ok:false,t:`أُنشئ طلب سويتر ${ref} لكن تعذّر ربطه بالعُهدة: `+errText(e2)}:{ok:true,t:`أُنشئ طلب سويتر ${ref} — العُهدة «مستحقة» وتتجدّد دورتها عند تسليم الطلب في «طلبات الإمداد»`});
+  // «طلب سويتر»: طلب إمداد واحد لقطعة أو أكثر لبايكر واحد، وكل قطعة تُربط به (src/custodyReorder.js)
+  // لا تجديد عند الطلب (قرار المالك 2026-10-14): القطعة «مستحقة» (الناقصة تبقى بلا عدّاد) وتتجدّد دورتها عند التسليم فقط (supply_request_complete)
+  const requestSweater=async(list)=>{
+    const plan=reorderPlan(list,{opId,reqs:reqStatus});
+    if(plan.error){setMsg({ok:false,t:plan.error});return;}
+    if(list.length>1&&!confirm(`طلب سويتر واحد لـ ${list[0].biker_name||list[0].sweater_id} يضمّ ${list.length} قطع:\n• ${list.map(a=>a.name).join("\n• ")}\n\nتصبح «مستحقة» مربوطة بالطلب، وتتجدّد دورتها عند تسليمه. متابعة؟`))return;
+    setBusy(true);
+    const{data:sr,error}=await supabase.from("supply_requests").insert(plan.row).select(SR_RET).single();
+    if(error){setBusy(false);setMsg({ok:false,t:"خطأ في إنشاء الطلب: "+error.message});return;}
+    setReqs(p=>({...p,[sr.id]:sr}));
+    const ups=[];let e2=null;
+    if(plan.link.length){const{data,error}=await supabase.from("custody_assets").update({status:"due",reorder_request_id:sr.id}).in("id",plan.link).select(CA_COLS);if(error)e2=error;else ups.push(...(data||[]));}
+    if(!e2&&plan.keepMissing.length){const{data,error}=await supabase.from("custody_assets").update({reorder_request_id:sr.id}).in("id",plan.keepMissing).select(CA_COLS);if(error)e2=error;else ups.push(...(data||[]));}
+    const um=Object.fromEntries(ups.map(x=>[x.id,x]));
+    setRows(pr=>pr.map(x=>um[x.id]?{...x,...um[x.id]}:x));setSel([]);setBusy(false);
+    setMsg(e2||ups.length!==list.length?{ok:false,t:`أُنشئ طلب سويتر ${sr.ref||plan.ref} لكن تعذّر ربط ${list.length-ups.length} من ${list.length} قطع به: `+errText(e2)}
+      :{ok:true,t:`أُنشئ طلب سويتر ${sr.ref||plan.ref} (${list.length} ${list.length===1?"قطعة":"قطع"}) — «مستحقة» وتتجدّد دورتها عند تسليم الطلب في «طلبات الإمداد»`});
   };
+  const reorder=r=>requestSweater([r]);
   const planReplace=async(r)=>{ // أصل معمّر/دراجة → وسم للتخطيط
     const{data}=await supabase.from("custody_assets").update({status:"due",notes:(r.notes?r.notes+" · ":"")+`خُطّط للاستبدال ${today()}`}).eq("id",r.id).select(CA_COLS).single();
     if(data)setRows(p=>p.map(x=>x.id===r.id?{...x,...data}:x));
@@ -211,13 +233,21 @@ export default function Custody({opId,owner,onGo}){
 
     {kpis.pending>0&&<button className="cu-pend" onClick={()=>setTab("pending")}><Icon n="alert" s={14}/> {kpis.pending} قطعة تالفة/مفقودة من الجولات — بانتظار قرار المالك</button>}
     <div className="cu-tabs">{[["all","الكل"],["due","قارب الانتهاء"],["reorder","المستهلكات"],["active","النشطة"],["pending",`بانتظار القرار${kpis.pending?` (${kpis.pending})`:""}`]].map(([k,l])=><button key={k} className={"cu-tab"+(tab===k?" on":"")} onClick={()=>setTab(k)}>{l}</button>)}</div>
+    <div className="cu-filt">
+      <select aria-label="البايكر" value={bk} onChange={e=>{setBk(e.target.value);setSel([]);}}><option value="">كل البايكرز</option>{bikers.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
+      {bk&&(()=>{const can=shown.filter(canPick);return can.length>0&&<button className="cu-b reorder" onClick={()=>setSel(can.map(r=>r.id))}><Icon n="check" s={13}/> حدّد كل ما يحتاج طلباً ({can.length})</button>;})()}
+    </div>
+    {sel.length>0&&<div className="cu-selbar" role="status">
+      <span><Icon n="refresh" s={14}/> {sel.length} {sel.length===1?"قطعة محدّدة":"قطع محدّدة"} لـ <b>{selRows[0]?.biker_name||selRows[0]?.sweater_id||"—"}</b></span>
+      <div className="cu-selbar-a"><button className="cu-b reorder" disabled={busy} onClick={()=>requestSweater(selRows)}><Icon n="send" s={13}/> طلب سويتر واحد للمحدّد</button><button className="cu-b" onClick={()=>setSel([])}>إلغاء التحديد</button></div>
+    </div>}
 
     {shown.length===0?<div className="cu-empty"><div className="cu-empty-ic"><Icon n="bucket" s={30}/></div><h3>لا عُهد</h3><p>أضِف عُهدة يدوياً أو استخرجها من جولة ميدانية — ويبدأ احتساب الإهلاك وتخطيط الاستبدال/إعادة الطلب.</p></div>:
     shown.map(r=>{const d=dep(r);const mode=MODE_OF(r.item_type);const miss=r.status==="missing";const col=r.status==="replaced"||miss?"var(--mut-2)":d.due?"var(--bad)":d.used>=70?"var(--warn)":"var(--ok)";
       return(
       <div className={"cu-card"+(d.due?" due":"")} key={r.id} style={{borderInlineStartColor:col}}>
         <div className="cu-top">
-          <div><div className="cu-name">{r.name}<span className="cu-cat">{r.category}</span>{r.status==="replaced"&&<span className="cu-badge rep">مُستبدلة</span>}{miss&&<span className="cu-badge rep">ناقصة — لا عدّاد</span>}{d.due&&r.status!=="replaced"&&<span className="cu-badge due">قارب الانتهاء</span>}{r.decision_status==="pending"&&<span className="cu-badge due">بانتظار قرار المالك</span>}</div>
+          <div><div className="cu-name">{r.name}<span className="cu-cat">{r.category}</span>{r.status==="replaced"&&<span className="cu-badge rep">مُستبدلة</span>}{miss&&<span className="cu-badge rep">ناقصة — لا عدّاد</span>}{d.due&&r.status!=="replaced"&&<span className="cu-badge due">قارب الانتهاء</span>}{r.decision_status==="pending"&&<span className="cu-badge due">بانتظار قرار المالك</span>}{openLink(r,reqStatus)&&<span className="cu-badge req">مطلوبة · {reqs[r.reorder_request_id]?.ref||"طلب مفتوح"}</span>}</div>
             <div className="cu-sub">{r.biker_name||"—"} · #{r.sweater_id||"—"} · {r.name_en||""}</div></div>
           <div className="cu-rem" style={{color:col}}>{r.status==="replaced"||miss?"—":d.rem>=0?`${d.rem} يوم`:`متأخر ${Math.abs(d.rem)} يوم`}</div>
         </div>
@@ -233,7 +263,8 @@ export default function Custody({opId,owner,onGo}){
         {r.decision_status==="decided"&&r.decision_note&&<div className="cu-notes">⚖️ قرار المالك{r.decided_at?` (${String(r.decided_at).slice(0,10)})`:""}: {r.decision_note}</div>}
         {r.notes&&<div className="cu-notes">{r.notes}</div>}
         <div className="cu-actions">
-          {r.status!=="replaced"&&d.due&&mode==="reorder"&&<button className="cu-b reorder" onClick={()=>reorder(r)}><Icon n="refresh" s={13}/> طلب سويتر (إعادة)</button>}
+          {canPick(r)&&<label className={"cu-pick"+(sel.includes(r.id)?" on":"")} title={sel.length&&selRows[0]&&bikerKey(selRows[0])!==bikerKey(r)?"الطلب الواحد لبايكر واحد":""}><input type="checkbox" checked={sel.includes(r.id)} disabled={!!(sel.length&&selRows[0]&&bikerKey(selRows[0])!==bikerKey(r))} onChange={()=>toggle(r)}/> للطلب</label>}
+          {r.status!=="replaced"&&d.due&&mode==="reorder"&&!openLink(r,reqStatus)&&<button className="cu-b reorder" onClick={()=>reorder(r)}><Icon n="refresh" s={13}/> طلب سويتر (إعادة)</button>}
           {r.status!=="replaced"&&d.due&&mode==="buy"&&<button className="cu-b buy" onClick={()=>planReplace(r)}><Icon n="bike" s={13}/> خطّط لشراء دراجة</button>}
           {r.status!=="replaced"&&d.due&&mode==="replace"&&<button className="cu-b plan" onClick={()=>planReplace(r)}><Icon n="alert" s={13}/> خطّط للاستبدال</button>}
           {miss&&<button className="cu-b done" onClick={()=>activate(r)}><Icon n="check" s={13}/> سُلّمت (يبدأ العدّاد)</button>}
@@ -311,6 +342,14 @@ const CSS=`
 .cu-dates{font-size:11px;color:var(--mut);margin-top:8px}.cu-dates b{color:var(--ink)}
 .cu-bar-t{height:7px;background:var(--track);border-radius:5px;overflow:hidden;margin-top:7px}.cu-bar-t div{height:100%;border-radius:5px}
 .cu-used{font-size:10.5px;color:var(--mut-2);margin-top:4px}
+.cu-filt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.cu-filt select{min-width:0;max-width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit;font-size:12.5px}
+.cu-selbar{position:sticky;top:8px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--ok) 40%,transparent);background:var(--ok-bg);color:var(--ok-ink);font-size:12.5px;font-weight:700;box-shadow:var(--shadow)}
+.cu-selbar>span{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cu-selbar-a{display:flex;gap:6px;flex-wrap:wrap}
+.cu-pick{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:5px 9px;border-radius:9px;border:1px dashed var(--line);cursor:pointer;color:var(--mut)}
+.cu-pick.on{border-style:solid;border-color:color-mix(in srgb,var(--ok) 45%,transparent);background:var(--ok-bg);color:var(--ok-ink)}
+.cu-badge.req{background:var(--ok-bg);color:var(--ok-ink)}
 .cu-pend{display:flex;align-items:center;gap:7px;width:100%;margin-bottom:12px;padding:10px 12px;border-radius:11px;border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);background:var(--warn-bg);color:var(--warn-ink);font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;text-align:start}
 .cu-chk{margin-top:8px;font-size:11.5px;font-weight:600;color:var(--ok-ink);background:var(--ok-bg);border-radius:8px;padding:6px 10px}
 .cu-chk.damaged,.cu-chk.lost{color:var(--warn-ink);background:var(--warn-bg)}.cu-chk a{color:inherit;font-weight:800}
