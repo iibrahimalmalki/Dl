@@ -123,6 +123,12 @@ do $$ declare
   v_note_est constant text := 'تاريخ تقديري = أول شهر عمل (قرار المالك 2026-10-14)';
   v_old  date;                      -- تاريخ أول جولة المسجّل حالياً (يُقرأ ويُتحقق منه)
   v_today date := (now() at time zone 'Asia/Riyadh')::date;
+  -- عمر الكتالوج ومهلته بالاسم (src/custodyCatalog.js) — قوائم داخل الكتلة بلا جدول مؤقت (أداة MCP ترفض truncate)
+  v_n text[] := array['الدراجة النارية','الزي الرسمي','الخوذة','الصدرية (واقي الصدر)','واقي اليدين والأرجل','حذاء السلامة',
+    'المكنسة','مسدس الماء','موتور الماء','كشّاف الرأس','صندوق الخدمة','الفرش (إطارات/مكيّف/أرضية/صغيرة)','ملمّع الدَّشبورد',
+    'ملمّع الإطارات','مزيل البقع','اللمسة الأخيرة','منظّف الزجاج','صابون/شامبو','إسفنجات (بودي/إطارات)','مناشف ميكروفايبر (4 ألوان)'];
+  v_l int[] := array[36,12,24,24,24,12,18,12,18,12,24,6,1,1,1,1,1,1,2,2];
+  v_d int[] := array[90,45,60,60,60,45,45,30,45,30,45,14,7,7,7,7,7,7,7,7];
   v_emp uuid; n_live int; n_old int; n_new int; n_bad int; n_upd int;
 begin
   if to_regclass('public.my_custody_assets') is null then
@@ -135,19 +141,10 @@ begin
   select id into v_emp from public.employees where employee_id = v_code;
   if v_emp is null then raise exception '%: الموظف غير موجود — تراجع', v_code; end if;
 
-  create temporary table if not exists _cat (name text primary key, life int, lead int);
-  truncate _cat;
-  insert into _cat values
-    ('الدراجة النارية',36,90), ('الزي الرسمي',12,45), ('الخوذة',24,60), ('الصدرية (واقي الصدر)',24,60),
-    ('واقي اليدين والأرجل',24,60), ('حذاء السلامة',12,45), ('المكنسة',18,45), ('مسدس الماء',12,30),
-    ('موتور الماء',18,45), ('كشّاف الرأس',12,30), ('صندوق الخدمة',24,45), ('الفرش (إطارات/مكيّف/أرضية/صغيرة)',6,14),
-    ('ملمّع الدَّشبورد',1,7), ('ملمّع الإطارات',1,7), ('مزيل البقع',1,7), ('اللمسة الأخيرة',1,7), ('منظّف الزجاج',1,7),
-    ('صابون/شامبو',1,7), ('إسفنجات (بودي/إطارات)',2,7), ('مناشف ميكروفايبر (4 ألوان)',2,7);
-
   select count(*), count(*) filter (where a.start_date = v_old), count(*) filter (where a.start_date = v_date),
          count(*) filter (where c.name is null)
     into n_live, n_old, n_new, n_bad
-    from public.custody_assets a left join _cat c on c.name = a.name
+    from public.custody_assets a left join unnest(v_n, v_l, v_d) as c(name, life, lead) on c.name = a.name
    where a.employee_id = v_emp and a.status in ('active','due');
   if n_live = 20 and n_new = 20 then raise notice '%: مطبَّق سابقاً (20 قطعة بتاريخ %) — لا تغيير', v_code, v_date; return; end if;
   if n_live <> 20 or n_old <> 20 or n_bad <> 0 then
@@ -160,7 +157,7 @@ begin
          end_date = (date_trunc('month', v_date) + make_interval(months => c.life))::date + (extract(day from v_date)::int - 1),
          notes = concat_ws(' · ', nullif(a.notes, ''),
                            'صُحّح التاريخ ' || v_today || ' إلى أول شهر عمل (كان ' || v_old || ' — أول جولة)', v_note_est)
-    from _cat c
+    from unnest(v_n, v_l, v_d) as c(name, life, lead)
    where c.name = a.name and a.employee_id = v_emp and a.status in ('active','due') and a.start_date = v_old;
   get diagnostics n_upd = row_count;
   if n_upd <> 20 then raise exception '%: صُحّح % (المتوقع 20) — تراجع', v_code, n_upd; end if;

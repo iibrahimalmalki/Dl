@@ -25,7 +25,7 @@ fs.writeFileSync(`${tmp}/entry.js`,`export * from '${path.resolve('src/custodyLi
 let L=null;try{execSync(`npx esbuild ${tmp}/entry.js --bundle --format=esm --platform=node --outfile=${tmp}/t.mjs --log-level=error`,{stdio:'pipe'});L=await import(`${tmp}/t.mjs`);}catch{}
 const addMonths=(iso,m)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()+Math.round(Number(m)||0));return d.toISOString().slice(0,10);};
 
-ok('الملف بلا drop ولا delete خارج التعليقات (أداة MCP)',!/\bdrop\b|\bdelete\b/i.test(F.split('\n').filter(l=>!l.trim().startsWith('--')).join('\n')));
+ok('الملف بلا drop ولا delete ولا truncate ولا جدول مؤقت خارج التعليقات (أداة MCP)',!/\bdrop\b|\bdelete\b|\btruncate\b|\btemporary\b/i.test(F.split('\n').filter(l=>!l.trim().startsWith('--')).join('\n')));
 ok('الرأس: حالة التطبيق مذكورة',/الحالة: \*\*(لم يُطبَّق|طُبِّق)/.test(F));
 
 ps(`create table public.employees (id uuid primary key default gen_random_uuid(), operator_id uuid, full_name text, employee_id text, name_en text);
@@ -41,7 +41,9 @@ const sqlCat=[...B1.matchAll(/\('([^']+)','([^']+)','([a-z]+)','([^']+)',(\d+),(
 if(L){const kit=L.CATALOG.filter(c=>c.key!=='phone'&&c.key!=='watertank');// القائمة القياسية (KIT_KEYS في #89)
   ok('البند 1: الأصناف الـ20 مطابقة للكتالوج (الاسم/الإنجليزي/النوع/الفئة/العمر/المهلة)',sqlCat.length===20&&kit.length===20&&kit.every(c=>sqlCat.some(s=>s.name===c.name&&s.en===c.en&&s.type===c.type&&s.category===c.category&&s.life===c.life&&s.lead===c.lead)));
   const lifeOf=n=>(kit.find(c=>c.name===n)||{}).life,leadOf=n=>(kit.find(c=>c.name===n)||{}).lead;
-  const b2cat=[...B2.matchAll(/\('([^']+)',(\d+),(\d+)\)/g)].map(m=>[m[1],+m[2],+m[3]]);
+  const arr=k=>{const m=B2.match(new RegExp(k+" (?:text|int)\\[\\] := array\\[([^\\]]*)\\]"));return m?m[1].split(',').map(x=>x.trim().replace(/^'|'$/g,'')):[];};
+  const bn=arr('v_n'),bl=arr('v_l').map(Number),bd=arr('v_d').map(Number);
+  const b2cat=bn.map((n,i)=>[n,bl[i],bd[i]]);
   ok('البند 2: جدول العمر/المهلة مطابق للكتالوج',b2cat.length===20&&b2cat.every(([n,l,d])=>lifeOf(n)===l&&leadOf(n)===d));
   const p0cat=[...P0.matchAll(/\('([a-z]+)','([^']+)',(\d+),(\d+),(true|false)\)/g)].map(m=>[m[2],+m[3],+m[4]]);
   ok('المعاينة: جدول العمر/المهلة مطابق للكتالوج',p0cat.length===20&&p0cat.every(([n,l,d])=>lifeOf(n)===l&&leadOf(n)===d));
