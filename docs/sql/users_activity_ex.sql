@@ -11,8 +11,9 @@
 --         لا جلسة (خرج أو حُذفت جلساته) ⇒ null ⇒ الواجهة: «لا جلسة نشطة».
 --         وقائع 2026-10-14: not_after فارغ في كل الجلسات (لا انتهاء مضبوط)، فـ«نشطة» = موجودة.
 --     • portal_last_at / portal_last_kind — للبايكر فقط (app_users.biker_employee_id غير فارغ): أحدث ما سجّله بنفسه في البوابة:
---         bike_handovers.created_at (استلام/تسليم دراجة) · biker_assets.created_at (إقرار عهدة)
+--         bike_handovers.created_at (استلام دراجة direction='receive'، وغيره تسليم) · biker_assets.created_at (إقرار عهدة؛ kind='update' تحديث حالة)
 --         · fuel_requests.requested_at (طلب وقود) · support_tickets.created_at (دعم).
+--       portal_last_kind: bike_receive · bike_return · custody · custody_update · fuel · support (الواجهة تترجمها — src/usersLib.js PORTAL_KIND).
 --       المطابقة بحساب البايكر نفسه (created_by / user_id = app_users.id) لا بالاسم ولا برقم البايكر — فما أدخله المشرف
 --       نيابة عنه لا يُحسب نشاطاً له في البوابة (وقائع 2026-10-14: 3 من 9 استلامات أدخلها حساب إداري).
 --   الصلاحية: المالك فقط (غيره ⇒ 42501 «owner only»)، security definer لقراءة auth.*، وبلا تنفيذ لـ anon.
@@ -33,8 +34,9 @@ begin
       from auth.sessions se group by se.user_id),
   p as (
     select x.uid, x.at, x.kind, row_number() over (partition by x.uid order by x.at desc) as rn
-      from (select h.created_by as uid, h.created_at as at, 'bike_handover'::text as kind from public.bike_handovers h
-            union all select b.created_by, b.created_at, 'custody' from public.biker_assets b
+      from (select h.created_by as uid, h.created_at as at,
+                   case when h.direction = 'receive' then 'bike_receive' else 'bike_return' end::text as kind from public.bike_handovers h
+            union all select b.created_by, b.created_at, case when b.kind = 'update' then 'custody_update' else 'custody' end from public.biker_assets b
             union all select f.created_by, f.requested_at, 'fuel' from public.fuel_requests f
             union all select t.user_id, t.created_at, 'support' from public.support_tickets t) x
      where x.uid is not null and x.at is not null)

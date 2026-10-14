@@ -34,10 +34,11 @@ ok('قبل 30 دقيقة',U.lastSeen('2026-10-09T11:30:00Z',now).t==='آخر د�
 ok('قبل 5 ساعات',U.lastSeen('2026-10-09T07:00:00Z',now).t==='آخر دخول قبل 5 ساعة');
 ok('أمس',U.lastSeen('2026-10-08T09:00:00Z',now).t==='آخر دخول أمس');
 // آخر نشاط (auth.sessions) وآخر تسجيل في البوابة
-ok('آخر نشاط: غير متاح ⇒ null، ولا جلسة ⇒ «لا جلسة نشطة»',U.lastActive(undefined,now)===null&&U.lastActive(null,now).t==='لا جلسة نشطة'&&U.lastActive(null,now).tone==='warn');
+ok('آخر نشاط: غير متاح ⇒ null، ولا جلسة ⇒ «لا جلسة نشطة» بلا نبرة تنبيه',U.lastActive(undefined,now)===null&&U.lastActive(null,now).t==='لا جلسة نشطة'&&U.lastActive(null,now).tone==='');
 ok('آخر نشاط: الآن / قبل 30 دقيقة / أمس / قبل 9 يوم (تنبيه)',U.lastActive('2026-10-09T11:59:30Z',now).t==='آخر نشاط الآن'&&U.lastActive('2026-10-09T11:30:00Z',now).t==='آخر نشاط قبل 30 دقيقة'&&U.lastActive('2026-10-08T09:00:00Z',now).t==='آخر نشاط أمس'&&U.lastActive('2026-09-30T12:00:00Z',now).tone==='warn');
 ok('البوابة: النوع والوقت (طلب وقود قبل 5 ساعة)',U.portalLast('2026-10-09T07:00:00Z','fuel',now).t==='آخر تسجيل في البوابة: طلب وقود قبل 5 ساعة');
-ok('البوابة: الأنواع الأربعة بالعربية',['bike_handover','custody','fuel','support'].map(k=>U.PORTAL_KIND[k]).join('|')==='استلام دراجة|إقرار عهدة|طلب وقود|دعم');
+ok('البوابة: الأنواع بالعربية (استلام/تسليم دراجة، إقرار/تحديث عهدة، وقود، دعم)',['bike_receive','bike_return','custody','custody_update','fuel','support'].map(k=>U.PORTAL_KIND[k]).join('|')==='استلام دراجة|تسليم دراجة|إقرار عهدة|تحديث حالة عهدة|طلب وقود|دعم');
+ok('آخر دخول بعد إعادة البناء على since: الآن ⇒ «دخل الآن»، وقبل 9 يوم تنبيه',U.lastSeen('2026-10-09T11:59:30Z',now).t==='دخل الآن'&&U.lastSeen('2026-09-30T12:00:00Z',now).t==='آخر دخول قبل 9 يوم'&&U.lastSeen('2026-09-30T12:00:00Z',now).tone==='warn');
 ok('البوابة: لا شيء بعد ⇒ تنبيه، وغير متاح ⇒ null',U.portalLast(null,null,now).t==='آخر تسجيل في البوابة: لا شيء بعد'&&U.portalLast(null,null,now).tone==='warn'&&U.portalLast(undefined,undefined,now)===null);
 ok('أكثر من أسبوع ⇒ تنبيه',U.lastSeen('2026-09-20T09:00:00Z',now).tone==='warn');
 

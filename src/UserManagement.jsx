@@ -65,8 +65,9 @@ export default function UserManagement(){
   const loadUsers=async()=>{setLoading(true);
     const[u,p,x]=await Promise.all([supabase.from("app_users").select("id,email,display_name,is_owner,active,biker_employee_id,mobile,position").order("created_at"),
       supabase.from("user_permissions").select("user_id,can_edit"),supabase.rpc("admin_users_activity_ex")]);
-    // users_activity_ex.sql: آخر دخول + آخر نشاط + آخر تسجيل في البوابة؛ قبل تطبيقها ⇒ admin_users_activity (آخر دخول فقط)
-    const a=x.error?await supabase.rpc("admin_users_activity"):x;
+    // users_activity_ex.sql: آخر دخول + آخر نشاط + آخر تسجيل في البوابة؛ قبل تطبيقها (الدالة غير موجودة) ⇒ admin_users_activity (آخر دخول فقط)
+    const missing=x.error&&(x.error.code==="PGRST202"||x.error.code==="42883");
+    const a=missing?await supabase.rpc("admin_users_activity"):x;
     setUsers(u.data||[]);setPsum(permSummary(p.data||[]));
     setAct(a.error?null:Object.fromEntries((a.data||[]).map(r=>[r.user_id,r.last_sign_in_at||null])));
     setExt(x.error?null:Object.fromEntries((x.data||[]).map(r=>[r.user_id,{act:r.last_active_at||null,p:r.portal_last_at||null,k:r.portal_last_kind||null}])));
@@ -232,7 +233,7 @@ export default function UserManagement(){
 
       <div className="um-list">{(()=>{const list=filterUsers(users,filt,srch,act);return list.length?list.map(u=>{
         const ls=lastSeen(act?act[u.id]:undefined),ph=phoneOf(u),sm=psum[u.id],ex=ext&&ext[u.id];
-        const la=ex?lastActive(ex.act):null,pl=ex&&u.biker_employee_id?portalLast(ex.p,ex.k):null;
+        const la=ex?lastActive(ex.act):null,pl=ex&&String(u.biker_employee_id||"").trim()?portalLast(ex.p,ex.k):null;
         return(<div className="um-u" key={u.id}>
         <div className="um-u-top">
           <div className="um-av">{(u.display_name||u.email||"?").trim().charAt(0).toUpperCase()}</div>

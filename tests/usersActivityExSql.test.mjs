@@ -25,8 +25,8 @@ create table auth.users (id uuid primary key, last_sign_in_at timestamptz);
 create table auth.sessions (id uuid primary key default gen_random_uuid(), user_id uuid, created_at timestamptz, updated_at timestamptz, refreshed_at timestamp, not_after timestamptz);
 create table public.app_users (id uuid primary key, is_owner boolean not null default false, active boolean not null default true, biker_employee_id text);
 create function public.is_owner() returns boolean language sql stable security definer set search_path to 'public' as $f$ select exists(select 1 from public.app_users where id = auth.uid() and is_owner and active) $f$;
-create table public.bike_handovers (id uuid primary key default gen_random_uuid(), biker_employee_id text, created_by uuid, created_at timestamptz);
-create table public.biker_assets (id uuid primary key default gen_random_uuid(), biker_employee_id text, created_by uuid, created_at timestamptz);
+create table public.bike_handovers (id uuid primary key default gen_random_uuid(), biker_employee_id text, direction text, created_by uuid, created_at timestamptz);
+create table public.biker_assets (id uuid primary key default gen_random_uuid(), biker_employee_id text, kind text, created_by uuid, created_at timestamptz);
 create table public.fuel_requests (id uuid primary key default gen_random_uuid(), biker_employee_id text, created_by uuid, requested_at timestamptz);
 create table public.support_tickets (id uuid primary key default gen_random_uuid(), user_id uuid, biker_employee_id text, created_at timestamptz);
 grant select on all tables in schema public to authenticated;
@@ -38,9 +38,9 @@ insert into auth.sessions (user_id,created_at,updated_at,refreshed_at) values
  ('${SUP}','2026-10-12 09:00+00','2026-10-12 09:00+00',null),('${B1}','2026-10-01 00:00+00','2026-10-01 00:00+00','2026-10-13 18:30');
 -- البوابة: ميدول طلب وقود 13/10 (الأحدث) واستلام 09/10 · المشرف أدخل استلاماً لرقيب 14/10 (لا يُحسب لرقيب) · رقيب دعم 08/10 · عريف إقرار عهدة 03/10
 insert into public.fuel_requests (biker_employee_id,created_by,requested_at) values ('1648','${B1}','2026-10-13 18:22+00');
-insert into public.bike_handovers (biker_employee_id,created_by,created_at) values ('1648','${B1}','2026-10-09 22:17+00'),('1700','${SUP}','2026-10-14 07:00+00');
+insert into public.bike_handovers (biker_employee_id,direction,created_by,created_at) values ('1648','receive','${B1}','2026-10-09 22:17+00'),('1700','receive','${SUP}','2026-10-14 07:00+00');
 insert into public.support_tickets (user_id,biker_employee_id,created_at) values ('${B2}','1700','2026-10-08 20:38+00');
-insert into public.biker_assets (biker_employee_id,created_by,created_at) values ('1624','${B3}','2026-10-03 16:23+00');`);
+insert into public.biker_assets (biker_employee_id,kind,created_by,created_at) values ('1624','baseline','${B3}','2026-10-03 16:23+00');`);
 ps(F);ps(F);
 ok('آمن لإعادة التشغيل',true);
 
@@ -56,7 +56,13 @@ ok('ما أدخله المشرف نيابة عن البايكر لا يُحسب 
 ok('إقرار العهدة يُحسب (عريف، ورقمه بمسافات يبقى بايكراً)',T(rows[B3].p)==='2026-10-03T16:23:00.000Z'&&rows[B3].k==='custody');
 ok('بايكر بلا نشاط ⇒ null',rows[NEW].p===null&&rows[NEW].k===null);
 ok('غير البايكر (المشرف/المالك) ⇒ لا سطر بوابة حتى لو أدخل سجلات',rows[SUP].p===null&&rows[OWNER].p===null);
+// نوع آخر تسجيل: تسليم الدراجة وتحديث حالة العهدة يُميَّزان عن الاستلام والإقرار
+ps(`insert into public.bike_handovers (biker_employee_id,direction,created_by,created_at) values ('1648','return','${B1}','2026-10-14 06:00+00');
+insert into public.biker_assets (biker_employee_id,kind,created_by,created_at) values ('1624','update','${B3}','2026-10-04 09:00+00');`);
+const r2=JSON.parse(as(OWNER,`select json_object_agg(user_id, json_build_object('p',portal_last_at,'k',portal_last_kind)) from admin_users_activity_ex()`));
+ok('تسليم الدراجة ⇒ bike_return، والاستلام ⇒ bike_receive',r2[B1].k==='bike_return'&&rows[B1].k==='fuel'&&JSON.parse(as(OWNER,`select json_agg(portal_last_kind) from admin_users_activity_ex() where user_id='${B1}'`))[0]==='bike_return');
+ok('تحديث حالة العهدة ⇒ custody_update، والإقرار الأول ⇒ custody',r2[B3].k==='custody_update'&&rows[B3].k==='custody');
 ok('غير المالك ⇒ «owner only»',(asErr(SUP,`select count(*) from admin_users_activity_ex()`)||'').includes('owner only')&&(asErr(B1,`select count(*) from admin_users_activity_ex()`)||'').includes('owner only'));
 ok('anon بلا تنفيذ، و authenticated بتنفيذ، و security definer',ps(`select has_function_privilege('anon','public.admin_users_activity_ex()','execute')`)==='f'&&ps(`select has_function_privilege('authenticated','public.admin_users_activity_ex()','execute')`)==='t'&&ps(`select prosecdef from pg_proc where proname='admin_users_activity_ex'`)==='t');
-ok('قراءة فقط: لا تغيير في الجداول بعد الاستدعاء',ps(`select (select count(*) from auth.sessions)||','||(select count(*) from public.bike_handovers)`)==='4,2');
+ok('قراءة فقط: لا تغيير في الجداول بعد الاستدعاء',ps(`select (select count(*) from auth.sessions)||','||(select count(*) from public.bike_handovers)`)==='4,3');
 }finally{ps(`drop database if exists ${db} with (force)`,'postgres');}
