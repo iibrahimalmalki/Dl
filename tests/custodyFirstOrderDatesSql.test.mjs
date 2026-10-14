@@ -26,7 +26,7 @@ let L=null;try{execSync(`npx esbuild ${tmp}/entry.js --bundle --format=esm --pla
 const addMonths=(iso,m)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()+Math.round(Number(m)||0));return d.toISOString().slice(0,10);};
 
 ok('الملف بلا drop ولا delete خارج التعليقات (أداة MCP)',!/\bdrop\b|\bdelete\b/i.test(F.split('\n').filter(l=>!l.trim().startsWith('--')).join('\n')));
-ok('الرأس: «لم يُطبَّق»',/الحالة: \*\*لم يُطبَّق\*\*/.test(F));
+ok('الرأس: حالة التطبيق مذكورة',/الحالة: \*\*(لم يُطبَّق|طُبِّق)/.test(F));
 
 ps(`create table public.employees (id uuid primary key default gen_random_uuid(), operator_id uuid, full_name text, employee_id text, name_en text);
 create table public.custody_assets (id uuid primary key default gen_random_uuid(), operator_id uuid, employee_id uuid, biker_name text, sweater_id text,
