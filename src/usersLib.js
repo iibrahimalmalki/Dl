@@ -39,16 +39,41 @@ export function permText(s) {
   return [s.edit && `تعديل ${s.edit}`, s.view && `عرض ${s.view}`].filter(Boolean).join(" · ") + " وحدات";
 }
 
+// «منذ متى» بصيغة الصفحة: الآن / قبل N دقيقة / ساعة / أمس / قبل N يوم ← {ago, days}
+function since(ts, now) {
+  const min = Math.max(0, Math.floor((now - new Date(ts).getTime()) / 60000));
+  if (min < 60) return { ago: min < 2 ? "الآن" : `قبل ${min} دقيقة`, days: 0 };
+  const h = Math.floor(min / 60);
+  if (h < 24) return { ago: `قبل ${h} ساعة`, days: 0 };
+  const d = Math.floor(h / 24);
+  return { ago: d === 1 ? "أمس" : `قبل ${d} يوم`, days: d };
+}
+
 // آخر دخول ← {t, tone}. ts غير معروف (undefined) = البيانات غير متاحة بعد
 export function lastSeen(ts, now = Date.now()) {
   if (ts === undefined) return null;
   if (!ts) return { t: "لم يدخل بعد", tone: "warn" };
-  const min = Math.max(0, Math.floor((now - new Date(ts).getTime()) / 60000));
-  if (min < 60) return { t: min < 2 ? "دخل الآن" : `آخر دخول قبل ${min} دقيقة`, tone: "ok" };
-  const h = Math.floor(min / 60);
-  if (h < 24) return { t: `آخر دخول قبل ${h} ساعة`, tone: "ok" };
-  const d = Math.floor(h / 24);
-  return { t: d === 1 ? "آخر دخول أمس" : `آخر دخول قبل ${d} يوم`, tone: d > 7 ? "warn" : "" };
+  const s = since(ts, now);
+  if (s.ago === "الآن") return { t: "دخل الآن", tone: "ok" };
+  return { t: `آخر دخول ${s.ago}`, tone: s.days === 0 ? "ok" : s.days > 7 ? "warn" : "" };
+}
+
+// آخر نشاط (أحدث تجديد لجلسة في auth.sessions — admin_users_activity_ex) ← {t, tone}. undefined = غير متاح بعد
+export function lastActive(ts, now = Date.now()) {
+  if (ts === undefined) return null;
+  if (!ts) return { t: "لا جلسة نشطة", tone: "" }; // خرج أو لم يدخل بعد — ليس تنبيهاً بذاته («لم يدخل بعد» ينبّه في سطر الدخول)
+  const s = since(ts, now);
+  return { t: `آخر نشاط ${s.ago}`, tone: s.days > 7 ? "warn" : s.days === 0 ? "ok" : "" };
+}
+
+// آخر تسجيل للبايكر في البوابة (أحدث ما سجّله بنفسه) ← {t, tone}. undefined = غير متاح بعد
+export const PORTAL_KIND = { bike_receive: "استلام دراجة", bike_return: "تسليم دراجة", custody: "إقرار عهدة", custody_update: "تحديث حالة عهدة", fuel: "طلب وقود", support: "دعم",
+  fuel_fill: "تعبئة وقود", oil: "تغيير زيت", daily: "استلام يومي" };
+export function portalLast(ts, kind, now = Date.now()) {
+  if (ts === undefined) return null;
+  if (!ts) return { t: "آخر تسجيل في البوابة: لا شيء بعد", tone: "warn" };
+  const s = since(ts, now);
+  return { t: `آخر تسجيل في البوابة: ${PORTAL_KIND[kind] || "نشاط"} ${s.ago}`, tone: s.days > 7 ? "warn" : "" };
 }
 
 export const FILTERS = [
