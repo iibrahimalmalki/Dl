@@ -16,7 +16,7 @@ const OWNER='00000000-0000-0000-0000-00000000000a',SUP='00000000-0000-0000-0000-
 ps(`create database ${db}`,'postgres');
 try{
 ok('الملف بلا drop ولا delete ولا truncate خارج التعليقات (أداة MCP)',!/\bdrop\b|\bdelete\b|\btruncate\b/i.test(F.split('\n').filter(l=>!l.trim().startsWith('--')).join('\n')));
-ok('الرأس: «لم يُطبَّق»',/الحالة: \*\*لم يُطبَّق\*\*/.test(F));
+ok('الرأس: حالة «لم يُطبَّق» أو «طُبِّق YYYY-MM-DD»',/الحالة: \*\*(لم يُطبَّق|طُبِّق \d{4}-\d{2}-\d{2})\*\*/.test(F));
 ps(`do $$ begin create role anon; exception when others then null; end $$;
 do $$ begin create role authenticated; exception when others then null; end $$;
 create schema auth; create function auth.uid() returns uuid language sql stable as $f$ select nullif(current_setting('test.uid',true),'')::uuid $f$;
