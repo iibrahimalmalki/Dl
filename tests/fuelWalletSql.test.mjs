@@ -79,13 +79,14 @@ insert into fuel_logs (id,vehicle_id,plate,biker_employee_id,biker_name,fill_at,
 // ── القسم A (SQL Editor) ثم B ──
 const W=fs.readFileSync('docs/sql/fuel_wallet.sql','utf8');
 const iA=W.indexOf('═══ A)'),iB=W.indexOf('═══ B)');
-const A=W.slice(iA,iB).split('\n').filter(l=>/^-- (begin;|alter |  |commit;)/.test(l)).map(l=>l.slice(3)).join('\n');
+const A=fs.readFileSync('docs/sql/fuel_wallet_A.sql','utf8');
 const iC=W.indexOf('═══ C)');
 const B=W.slice(W.indexOf('\n',iB)+1,W.lastIndexOf('-- ═══',iC-10));
 const C=W.slice(W.indexOf('\n',iC)+1,W.indexOf('-- ═══ تحقق بالقراءة بعد B'));
-ok('القسم A يحوي drop (لذلك SQL Editor) ويُستخرج كاملاً',/drop constraint/.test(A)&&/fleet_alert_settings_key_check/.test(A)&&/commit;/.test(A));
+ok('fuel_wallet_A.sql: أوامر حقيقية لا تعليقات (begin … commit)، فيه drop (لذلك SQL Editor)، والملف الرئيسي يشير إليه',/^begin;$/m.test(A)&&/^commit;$/m.test(A)&&/^alter table public\.fuel_requests drop constraint/m.test(A)&&!/^-- (begin|alter)/m.test(A)&&W.slice(iA,iB).includes('fuel_wallet_A.sql'));
 ok('القسمان B و C بلا drop ولا delete ولا truncate (عبر الأداة)، و B بلا تعديل بيانات',!/\b(drop|delete|truncate)\b/i.test(B+C)&&!/^update /m.test(B)&&/update public\.fuel_requests/.test(C));
-const eA=err(A),eA2=err(A);ok('القسم A يُطبَّق مرتين بلا خطأ'+(eA||eA2?' — '+String(eA||eA2).slice(0,300):''),!eA&&!eA2);
+const eA=err(A),eA2=err(A);ok('fuel_wallet_A.sql يُطبَّق مرتين بلا خطأ'+(eA||eA2?' — '+String(eA||eA2).slice(0,300):''),!eA&&!eA2);
+ok('استعلام تحقق A يعطي YES | YES | true | true',ps(A.slice(A.indexOf('═══ التحقق')).split('\n').slice(1).join('\n'))==='YES|YES|t|t');
 const eB=err(B);ok('القسم B يُطبَّق بلا خطأ'+(eB?' — '+eB.slice(0,400):''),!eB);if(eA||eB)process.exit(1);
 ok('بعد B وحده: لا تعديل بيانات (amount_actual فارغ للمحوَّل)',ps(`select count(*) from fuel_requests where amount_actual is not null`)==='0');
 const eC=err(C);ok('القسم C يُطبَّق (6 صفوف بالضبط)'+(eC?' — '+eC.slice(0,300):''),!eC);

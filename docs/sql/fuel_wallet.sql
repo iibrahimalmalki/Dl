@@ -14,7 +14,7 @@
 --   • _fleet_notify_admins/_fleet_notify_biker في الإنتاج أحدث من fleet_requests.sql (بادئة «🧪 تجريبي» من test_sandbox.sql) ⇒ لا تُعاد كتابتهما هنا.
 --
 -- ترتيب التطبيق (كل قسم في معاملة مستقلة):
---   القسم A — من SQL Editor (فيه drop constraint / drop not null وأداة MCP تتعطل عليها).
+--   القسم A — من SQL Editor: docs/sql/fuel_wallet_A.sql كما هو (فيه drop constraint / drop not null وأداة MCP تتعطل عليها).
 --   القسم B — عبر الأداة: الأعمدة والإعدادات والدوال والعرض والصلاحيات (بلا تعديل بيانات).
 --   القسم C — عبر الأداة، معاملة مستقلة: amount_actual/fee للمحوَّل سابقاً (6 صفوف بالضبط، وإلا تراجع).
 --   ثم docs/sql/fuel_fix_2026_10.sql (تصحيح عريف) عبر الأداة، ثم دمج PR الواجهة.
@@ -44,19 +44,8 @@
 -- ════════════════════════════════════════════════════════════════════════
 -- ═══ A) من SQL Editor (معاملة واحدة) ═══
 -- ════════════════════════════════════════════════════════════════════════
--- begin;
--- alter table public.fuel_requests drop constraint if exists fuel_requests_status_check;
--- alter table public.fuel_requests add constraint fuel_requests_status_check
---   check (status in ('requested', 'transferred', 'closed', 'rejected', 'cancelled'));
--- alter table public.fuel_requests alter column odometer drop not null, alter column odometer_photo_url drop not null;
--- alter table public.fleet_alert_settings drop constraint if exists fleet_alert_settings_key_check;
--- alter table public.fleet_alert_settings add constraint fleet_alert_settings_key_check
---   check (key in ('fuel_low_pct', 'fuel_min_km_per_50', 'fill_gap_km', 'fill_gap_hours', 'receipt_grace_days',
---                  'odo_max_km_per_day', 'oil_interval_km', 'oil_exec_days', 'fuel_price_91',
---                  'fuel_topup_amount', 'fuel_topup_threshold', 'fuel_fill_tolerance', 'fuel_price_min', 'fuel_price_max', 'fuel_wallet_start'));
--- commit;
--- تحقق A: select pg_get_constraintdef(oid) from pg_constraint where conname in ('fuel_requests_status_check','fleet_alert_settings_key_check');
---         select column_name, is_nullable from information_schema.columns where table_name='fuel_requests' and column_name in ('odometer','odometer_photo_url');  -- YES, YES
+-- في ملف مستقل جاهز للصق كما هو: docs/sql/fuel_wallet_A.sql (begin … commit + استعلام تحقق: YES | YES | true | true).
+--   حالتا rejected/cancelled، والمفاتيح الستة، والعدّاد وصورته اختياريان في الطلب.
 
 -- ════════════════════════════════════════════════════════════════════════
 -- ═══ B) عبر الأداة (معاملة واحدة؛ آمن لإعادة التشغيل؛ بلا كلمات الحذف) ═══
