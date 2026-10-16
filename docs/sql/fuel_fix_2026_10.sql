@@ -23,7 +23,8 @@ end $$;
 
 -- ═══ البند 2: الطلبان المكرران (20:09 و 20:10) ⇒ ملغيان كغير محوَّلين (صفّان بالضبط) ═══
 do $$ declare n int; begin
-  update public.fuel_requests set status = 'cancelled', transferred_at = null, transferred_by = null, transfer_ref = null,
+  -- transfer_ref (نص البنك) يبقى دليلاً على التكرار؛ يُفرَّغ التحويل نفسه فقط
+  update public.fuel_requests set status = 'cancelled', transferred_at = null, transferred_by = null,
          bank_txn = null, amount_actual = null, fee = 0,
          reject_reason = 'تكرار لطلب 13/10 00:09 — نفس تحويل البنك، لم يُحوَّل له مال (قرار المالك 2026-10-15)'
    where id in ('4044c7f7-939f-4682-a6a6-dc6f309fc622', '4523405b-489a-4a1a-97e6-12c0fdb41e35')
@@ -57,6 +58,10 @@ end $$;
 -- البند 3: update public.fuel_requests set status='closed', closed_at='2026-10-15 16:50:16.307602+00' where id='5f1f85eb-a38d-4b50-8176-5d84d3562dd2';
 --          update public.fuel_logs set request_id=null where id='cc3c783e-0d02-48f0-b597-68cf23b839de';
 --          update public.fuel_logs set request_id='4044c7f7-939f-4682-a6a6-dc6f309fc622' where id='0c26ed61-1cc9-45e3-b1bd-6f3381baa311';
--- البند 2: القيم السابقة محفوظة في audit_log (audit_capture على fuel_requests) — تُعاد منه.
+-- البند 2 (القيم المقروءة من الإنتاج 2026-10-15؛ transferred_by يُعاد من audit_log إن لزم):
+--   update public.fuel_requests set status='closed', reject_reason=null, amount_actual=50, fee=0.58, transferred_at='2026-10-14 22:32:47.55625+00'
+--    where id='4044c7f7-939f-4682-a6a6-dc6f309fc622';
+--   update public.fuel_requests set status='closed', reject_reason=null, amount_actual=50, fee=0.58, transferred_at='2026-10-14 22:32:27.496155+00'
+--    where id='4523405b-489a-4a1a-97e6-12c0fdb41e35';
 -- البند 1: update public.fuel_requests set status='requested', closed_at=null, reject_reason=null where id='01ce2212-ed5d-47dd-ab23-836a73ac9f31';
 --          (يتطلب ألا يوجد طلب «مطلوب» آخر لعريف — فهرس الطلب المفتوح الواحد)

@@ -15,22 +15,27 @@
 --
 -- ترتيب التطبيق (كل قسم في معاملة مستقلة):
 --   القسم A — من SQL Editor (فيه drop constraint / drop not null وأداة MCP تتعطل عليها).
---   القسم B — عبر الأداة: الأعمدة والإعدادات والدوال والعرض والصلاحيات + تعبئة amount_actual/fee للمحوَّل سابقاً.
+--   القسم B — عبر الأداة: الأعمدة والإعدادات والدوال والعرض والصلاحيات (بلا تعديل بيانات).
+--   القسم C — عبر الأداة، معاملة مستقلة: amount_actual/fee للمحوَّل سابقاً (6 صفوف بالضبط، وإلا تراجع).
 --   ثم docs/sql/fuel_fix_2026_10.sql (تصحيح عريف) عبر الأداة، ثم دمج PR الواجهة.
---   بين B ودمج الواجهة: زر «اطلب وقوداً» في البوابة القديمة يُرجع USE_WALLET (لا يُنشئ طلباً)، والتحويل من اللوحة القديمة يُرجع USE_NEW_TRANSFER.
---   ⇒ يُطبَّق B ثم الإصلاح ثم يُدمج PR الواجهة مباشرة.
+--   بين B ودمج الواجهة (نافذة قصيرة): «اطلب وقوداً» والتحويل في الواجهة القديمة يرفضان (permission denied — التنفيذ مسحوب)،
+--   وتعبئة بلا لترات ترفض (LITERS_REQUIRED). ⇒ يُطبَّق B ثم C ثم الإصلاح ثم يُدمج PR الواجهة مباشرة.
 --
 -- قرارات تفصيلية (للمراجعة):
 --   1) fuel_wallet_start محفوظ رقماً YYYYMMDD (20261012) لأن value رقمي؛ يُقرأ تاريخاً بتوقيت الرياض.
---   2) الرصيد: الدفعات بحالة transferred/closed و amount_actual غير فارغ وطُلبت منذ البداية − التعبئات غير legacy وغير المرفوضة منذ البداية.
+--   2) الرصيد: الدفعات بحالة transferred/closed و amount_actual غير فارغ وحُوِّلت منذ البداية (transferred_at) − التعبئات غير legacy وغير المرفوضة منذ البداية.
 --      التعبئة المسجّلة تُخصم فوراً (لا تنتظر الاعتماد)؛ المرفوضة لا تُخصم.
---   3) _fuel_maybe_topup تُستدعى بعد: كل تعبئة، كل اعتماد/رفض تعبئة، وكل تحويل. لا تُستدعى بعد «رفض طلب الدفعة» (وإلا أُعيد إنشاؤه فوراً)؛
+--   3) _fuel_maybe_topup تُستدعى بعد: كل تعبئة، رفض تعبئة (يغيّر الرصيد)، وكل تحويل. لا تُستدعى بعد اعتماد تعبئة (لا يغيّر الرصيد)
+--      ولا بعد «رفض طلب الدفعة» (وإلا أُعيد إنشاء المرفوض فوراً)؛
 --      بعد الرفض: الدفعة المستعجلة، أو التعبئة التالية.
 --   4) request_urgent_topup: يُقبل فقط بلا طلب مفتوح **وبرصيد أقل من العتبة** (الشرط الثاني إضافة للمراجعة: الزر يظهر بهذا الشرط فقط،
 --      والقاعدة تفرضه حتى لا يُطلب مال عبر الواجهة البرمجية برصيد كافٍ).
 --   5) الطلب التلقائي يأخذ عدّاد وصورة آخر تعبئة غير مرفوضة (إن وُجدت)، و created_by فارغ (ليس فعل البايكر — لا يُحسب «نشاط بوابة»).
 --   6) الكتابة المباشرة في fuel_logs تُسحب من المسجّل (insert/update) — كل الكتابة عبر add_fuel_fill و review_fuel_fill.
 --   7) request_fuel القديمة تبقى بالاسم (لا حذف عبر الأداة) لكنها ترفض بـ USE_WALLET ويُسحب تنفيذها؛ وكذلك transfer_fuel_request(uuid,text,timestamptz).
+--   8b) المبالغ في الإشعارات عبر _fuel_sar (50 ⇒ «50»، 7.5 ⇒ «7.5») — to_char بـ '#' يقرّب للعدد الصحيح.
+--   8c) transfer_fuel_request: المبلغ الافتراضي = مبلغ الطلب نفسه (لا 50 ثابتة)، والرسوم الافتراضية 0.58 كما قرّر المالك.
+--   8d) حدود إعدادات الرصيد: المبلغ ≤ 1000، العتبة < المبلغ، التسامح ≤ 100، min < max للسعر.
 --   8) transfer_fuel_request صار بنسختين (القديمة مغلقة): الاستدعاء بالأسماء (p_bank_txn) — كما تفعل PostgREST — لا بالموضع (غامض بين النسختين).
 --   9) لا وقود في vendor_expenses اليوم (قراءة 2026-10-16: صفر صفوف بعنوان/فئة وقود) ⇒ لا ازدواج في تقرير المصروفات.
 --  10) المصروفات: العرض fuel_expenses_monthly (security_invoker ⇒ يرى كلٌّ ما تسمح به سياسات الجدولين: الإدارة الكل، البايكر صفوفه).
@@ -83,16 +88,16 @@ insert into public.fleet_alert_settings (key, value, note) values
   ('fuel_wallet_start',    20261012, 'رصيد الوقود: بداية الحساب (YYYYMMDD بتوقيت الرياض)')
 on conflict do nothing;
 
--- B.3 الدفعات المحوَّلة قبل الرصيد: المبلغ الفعلي = المبلغ المطلوب، والرسوم من نص البنك إن وُجدت (وإلا 0)
-update public.fuel_requests
-   set amount_actual = amount,
-       fee = coalesce(nullif(substring(transfer_ref from 'رسوم[^:]*:[[:space:]]*([0-9]+(\.[0-9]+)?)[[:space:]]*SAR'), '')::numeric, 0)
- where status in ('transferred', 'closed') and transferred_at is not null and amount_actual is null;
-
 -- B.4 دوال داخلية
 create or replace function public._fuel_setting(p_key text)
 returns numeric language sql stable security definer set search_path = public as $$
-  select value from public.fleet_alert_settings where key = p_key and vehicle_id is null;
+  select public._fleet_setting(p_key, null);
+$$;
+
+-- مبلغ للعرض في الإشعارات: 50 ⇒ «50»، 7.5 ⇒ «7.5»، 2.326 ⇒ «2.33»
+create or replace function public._fuel_sar(p numeric)
+returns text language sql immutable set search_path = public as $$
+  select case when p is null then '—' else rtrim(rtrim(to_char(round(p, 2), 'FM9999999990.00'), '0'), '.') end;
 $$;
 
 create or replace function public._fuel_start()
@@ -105,7 +110,7 @@ create or replace function public.fuel_balance(p_biker text)
 returns numeric language sql stable security definer set search_path = public as $$
   select coalesce((select sum(r.amount_actual) from public.fuel_requests r
                     where r.biker_employee_id = p_biker and r.status in ('transferred', 'closed') and r.amount_actual is not null
-                      and r.requested_at >= public._fuel_start()), 0)
+                      and r.transferred_at >= public._fuel_start()), 0)
        - coalesce((select sum(l.amount) from public.fuel_logs l
                     where l.biker_employee_id = p_biker and not l.legacy and l.status is distinct from 'rejected'
                       and l.amount is not null and l.fill_at >= public._fuel_start()), 0);
@@ -137,7 +142,7 @@ begin
   values (f.operator_id, f.vehicle_id, f.plate, p_biker, coalesce(v_name, f.biker_name), f.odometer, f.odometer_photo_url, v_amt, 'auto', null)
   returning id into v_id;
   perform public._fleet_notify_admins('دفعة وقود تلقائية — ' || coalesce(f.plate, '—'),
-    coalesce(v_name, f.biker_name, p_biker) || ' · ' || to_char(v_amt, 'FM999990.##') || ' ﷼ · الرصيد ' || to_char(v_bal, 'FM999990.##') || ' ﷼',
+    coalesce(v_name, f.biker_name, p_biker) || ' · ' || public._fuel_sar(v_amt) || ' ﷼ · الرصيد ' || public._fuel_sar(v_bal) || ' ﷼',
     v_id::text, 'fuel-auto-' || v_id);
   return v_id;
 end $$;
@@ -163,19 +168,21 @@ begin
   return query
   with b as (
     select btrim(au.biker_employee_id) as bid from public.app_users au where au.active and nullif(btrim(au.biker_employee_id), '') is not null
-    union select r.biker_employee_id from public.fuel_requests r where r.requested_at >= public._fuel_start()
+    union select r.biker_employee_id from public.fuel_requests r where coalesce(r.transferred_at, r.requested_at) >= public._fuel_start()
     union select l.biker_employee_id from public.fuel_logs l where not l.legacy and l.biker_employee_id is not null and l.fill_at >= public._fuel_start()
   )
   select b.bid,
          (select e.full_name from public.employees e where e.employee_id = b.bid limit 1),
-         coalesce((select sum(r.amount_actual) from public.fuel_requests r where r.biker_employee_id = b.bid and r.status in ('transferred', 'closed')
-                     and r.amount_actual is not null and r.requested_at >= public._fuel_start()), 0),
-         coalesce((select sum(l.amount) from public.fuel_logs l where l.biker_employee_id = b.bid and not l.legacy and l.status is distinct from 'rejected'
-                     and l.amount is not null and l.fill_at >= public._fuel_start()), 0),
-         public.fuel_balance(b.bid),
+         t.tr, t.sp, t.tr - t.sp,
          (select count(*)::int from public.fuel_logs l where l.biker_employee_id = b.bid and not l.legacy and l.status = 'submitted' and l.fill_at >= public._fuel_start()),
          o.id, o.source, o.requested_at
     from b
+    -- نفس معادلة fuel_balance (المحوَّل − المصروف)، مرة واحدة لكل بايكر
+    cross join lateral (select
+         coalesce((select sum(r.amount_actual) from public.fuel_requests r where r.biker_employee_id = b.bid and r.status in ('transferred', 'closed')
+                     and r.amount_actual is not null and r.transferred_at >= public._fuel_start()), 0) as tr,
+         coalesce((select sum(l.amount) from public.fuel_logs l where l.biker_employee_id = b.bid and not l.legacy and l.status is distinct from 'rejected'
+                     and l.amount is not null and l.fill_at >= public._fuel_start()), 0) as sp) t
     left join lateral (select r.id, r.source, r.requested_at from public.fuel_requests r where r.biker_employee_id = b.bid and r.status = 'requested' limit 1) o on true
    where b.bid is not null;
 end $$;
@@ -202,7 +209,7 @@ begin
   values (v.operator_id, v.id, v.plate, v_bid, v_name, f.odometer, f.odometer_photo_url, v_amt, 'urgent', btrim(p_reason), auth.uid())
   returning id into v_id;
   perform public._fleet_notify_admins('⚠️ دفعة وقود مستعجلة — ' || coalesce(v.plate, '—'),
-    coalesce(v_name, v_bid) || ' · الرصيد ' || to_char(v_bal, 'FM999990.##') || ' ﷼ · ' || btrim(p_reason), v_id::text, 'fuel-urgent-' || v_id);
+    coalesce(v_name, v_bid) || ' · الرصيد ' || public._fuel_sar(v_bal) || ' ﷼ · ' || btrim(p_reason), v_id::text, 'fuel-urgent-' || v_id);
   return v_id;
 end $$;
 
@@ -237,7 +244,7 @@ begin
   v_price := p_amount / p_liters;
   -- FIFO: أقدم دفعة محوَّلة لم تُغطَّ بتعبئات غير مرفوضة
   select r.id into v_req from public.fuel_requests r
-   where r.biker_employee_id = v_bid and r.status in ('transferred', 'closed') and r.amount_actual is not null and r.requested_at >= public._fuel_start()
+   where r.biker_employee_id = v_bid and r.status in ('transferred', 'closed') and r.amount_actual is not null and r.transferred_at >= public._fuel_start()
      and coalesce((select sum(l.amount) from public.fuel_logs l where l.request_id = r.id and l.status is distinct from 'rejected'), 0) < r.amount_actual
    order by r.transferred_at, r.requested_at limit 1;
   select full_name into v_name from public.employees where id = public.my_employee_uuid();
@@ -267,33 +274,34 @@ begin
    where id = p_id;
   if p_ok then
     perform public._fleet_notify_biker(r.biker_employee_id, 'اعتُمدت تعبئتك · আপনার রিফুয়েল অনুমোদিত',
-      to_char(r.amount, 'FM999990.##') || ' ﷼', p_id::text, 'fuel-fill-ok-' || p_id);
+      public._fuel_sar(r.amount) || ' ﷼', p_id::text, 'fuel-fill-ok-' || p_id);
   else
     perform public._fleet_notify_biker(r.biker_employee_id, 'رُفضت تعبئتك · আপনার রিফুয়েল প্রত্যাখ্যাত',
-      to_char(r.amount, 'FM999990.##') || ' ﷼ — ' || btrim(p_reason) || ' · المبلغ عاد لرصيدك · টাকা আপনার ব্যালেন্সে ফেরত', p_id::text, 'fuel-fill-no-' || p_id);
+      public._fuel_sar(r.amount) || ' ﷼ — ' || btrim(p_reason) || ' · المبلغ عاد لرصيدك · টাকা আপনার ব্যালেন্সে ফেরত', p_id::text, 'fuel-fill-no-' || p_id);
   end if;
-  perform public._fuel_maybe_topup(r.biker_employee_id);
+  if not p_ok then perform public._fuel_maybe_topup(r.biker_employee_id); end if;   -- الاعتماد لا يغيّر الرصيد
   return true;
 end $$;
 
 -- B.10 الإدارة: تحويل الدفعة (رقم العملية فريد، المبلغ الفعلي، الرسوم) ⇒ «حُوِّل»
-create or replace function public.transfer_fuel_request(p_id uuid, p_bank_txn text, p_amount_actual numeric default 50, p_fee numeric default 0.58)
+create or replace function public.transfer_fuel_request(p_id uuid, p_bank_txn text, p_amount_actual numeric default null, p_fee numeric default 0.58)
 returns boolean language plpgsql security definer set search_path = public as $$
 declare r public.fuel_requests;
 begin
   if not public.has_perm('fleet_alerts', true) then raise exception 'FORBIDDEN'; end if;
   if coalesce(btrim(p_bank_txn), '') = '' or length(p_bank_txn) > 200 then raise exception 'TXN_REQUIRED'; end if;
-  if p_amount_actual is null or p_amount_actual <= 0 or p_amount_actual > 1000 then raise exception 'BAD_AMOUNT'; end if;
   if p_fee is null or p_fee < 0 or p_fee > 50 then raise exception 'BAD_FEE'; end if;
   select * into r from public.fuel_requests where id = p_id for update;
   if not found then raise exception 'NOT_FOUND'; end if;
   if r.status <> 'requested' then raise exception 'NOT_REQUESTED'; end if;
+  p_amount_actual := coalesce(p_amount_actual, r.amount);   -- الافتراضي: مبلغ الطلب نفسه (50 عادةً)
+  if p_amount_actual <= 0 or p_amount_actual > 1000 then raise exception 'BAD_AMOUNT'; end if;
   if exists (select 1 from public.fuel_requests where bank_txn = btrim(p_bank_txn) and id <> p_id) then raise exception 'DUPLICATE_TXN'; end if;
   update public.fuel_requests set status = 'transferred', bank_txn = btrim(p_bank_txn), transfer_ref = btrim(p_bank_txn),
          amount_actual = p_amount_actual, fee = p_fee, transferred_at = now(), transferred_by = auth.uid()
    where id = p_id;
   perform public._fleet_notify_biker(r.biker_employee_id, 'حُوِّلت دفعة الوقود · জ্বালানির টাকা পাঠানো হয়েছে',
-    to_char(p_amount_actual, 'FM999990.##') || ' ﷼ أُضيفت لرصيدك — سجّل كل تعبئة بفاتورتها · ব্যালেন্সে যোগ হয়েছে — প্রতিটি রিফুয়েলের রসিদ দিন',
+    public._fuel_sar(p_amount_actual) || ' ﷼ أُضيفت لرصيدك — سجّل كل تعبئة بفاتورتها · ব্যালেন্সে যোগ হয়েছে — প্রতিটি রিফুয়েলের রসিদ দিন',
     p_id::text, 'fuel-tr-' || p_id);
   perform public._fuel_maybe_topup(r.biker_employee_id);
   return true;
@@ -342,6 +350,12 @@ begin
     exception when others then raise exception 'BAD_VALUE';
     end;
   end if;
+  -- حدود إعدادات الرصيد وتناسقها
+  if (p_key = 'fuel_topup_amount' and (p_value > 1000 or p_value <= coalesce(public._fuel_setting('fuel_topup_threshold'), 10)))
+     or (p_key = 'fuel_topup_threshold' and p_value >= coalesce(public._fuel_setting('fuel_topup_amount'), 50))
+     or (p_key = 'fuel_fill_tolerance' and p_value > 100)
+     or (p_key = 'fuel_price_min' and p_value >= coalesce(public._fuel_setting('fuel_price_max'), 2.6))
+     or (p_key = 'fuel_price_max' and p_value <= coalesce(public._fuel_setting('fuel_price_min'), 2.0)) then raise exception 'BAD_VALUE'; end if;
   insert into public.fleet_alert_settings (key, vehicle_id, value, updated_by) values (p_key, p_vehicle_id, p_value, auth.uid())
   on conflict (key, coalesce(vehicle_id, '00000000-0000-0000-0000-000000000000'::uuid))
   do update set value = excluded.value, updated_by = excluded.updated_by, updated_at = now();
@@ -359,23 +373,38 @@ create or replace view public.fuel_expenses_monthly with (security_invoker = tru
    group by 1;
 
 -- B.15 الصلاحيات
-revoke insert, update on public.fuel_logs from authenticated;          -- كل الكتابة عبر add_fuel_fill و review_fuel_fill
+revoke all on public.fuel_logs from authenticated;                    -- كل الكتابة عبر add_fuel_fill و review_fuel_fill (ولا إزالة: تُرجع المال للرصيد)
+grant select on public.fuel_logs to authenticated;
 revoke all on public.fuel_expenses_monthly from anon;
 grant select on public.fuel_expenses_monthly to authenticated;
-revoke all on function public._fuel_setting(text), public._fuel_start(), public.fuel_balance(text), public._fuel_maybe_topup(text) from public, anon, authenticated;
+revoke all on function public._fuel_setting(text), public._fuel_sar(numeric), public._fuel_start(), public.fuel_balance(text), public._fuel_maybe_topup(text) from public, anon, authenticated;
 revoke all on function public.my_fuel_balance(), public.fuel_balances(), public.request_urgent_topup(text),
   public.review_fuel_fill(uuid, boolean, text), public.transfer_fuel_request(uuid, text, numeric, numeric), public.reject_fuel_request(uuid, text) from public, anon;
 grant execute on function public.my_fuel_balance(), public.fuel_balances(), public.request_urgent_topup(text),
   public.review_fuel_fill(uuid, boolean, text), public.transfer_fuel_request(uuid, text, numeric, numeric), public.reject_fuel_request(uuid, text) to authenticated;
 revoke execute on function public.request_fuel(numeric, text, numeric), public.transfer_fuel_request(uuid, text, timestamptz) from public, anon, authenticated;
 
--- ═══ تحقق بالقراءة بعد B ═══
+-- ════════════════════════════════════════════════════════════════════════
+-- ═══ C) عبر الأداة — معاملة مستقلة: الدفعات المحوَّلة قبل الرصيد ═══
+-- ════════════════════════════════════════════════════════════════════════
+-- المبلغ الفعلي = المبلغ المطلوب، والرسوم من نص البنك إن وُجدت (وإلا 0). وقائع 2026-10-15: 6 صفوف بالضبط
+-- (TEST01، عريف ×3، ميدول، رقيب)؛ إعادة التشغيل ⇒ 0 صفوف (مقبول). أي عدد آخر ⇒ تراجع.
+do $$ declare n int; begin
+  update public.fuel_requests
+     set amount_actual = amount,
+         fee = coalesce(nullif(substring(transfer_ref from 'رسوم[^:]*:[[:space:]]*([0-9]+(\.[0-9]+)?)[[:space:]]*SAR'), '')::numeric, 0)
+   where status in ('transferred', 'closed') and transferred_at is not null and amount_actual is null;
+  get diagnostics n = row_count;
+  if n not in (0, 6) then raise exception 'القسم C: المتوقع 6 صفوف (أو 0 عند الإعادة)، تأثّر %', n; end if;
+end $$;
+
+-- ═══ تحقق بالقراءة بعد B و C ═══
 -- select key, value from fleet_alert_settings where key like 'fuel\_%' escape '\' and vehicle_id is null order by key;  -- 6 جديدة + fuel_low_pct/min_km/price_91
 -- select proname, prosecdef from pg_proc where proname in ('fuel_balance','_fuel_maybe_topup','my_fuel_balance','fuel_balances','request_urgent_topup',
 --   'add_fuel_fill','review_fuel_fill','transfer_fuel_request','reject_fuel_request','_fuel_setting','_fuel_start');   -- كلها t (transfer_fuel_request مرتان)
 -- select has_function_privilege('authenticated','public.fuel_balance(text)','execute'), has_function_privilege('authenticated','public.request_fuel(numeric,text,numeric)','execute'),
 --        has_function_privilege('authenticated','public.my_fuel_balance()','execute'), has_function_privilege('anon','public.my_fuel_balance()','execute'),
---        has_table_privilege('authenticated','public.fuel_logs','insert');   -- f, f, t, f, f
+--        has_table_privilege('authenticated','public.fuel_logs','insert'), has_table_privilege('authenticated','public.fuel_logs','delete');   -- f, f, t, f, f, f
 -- select status, source, amount, amount_actual, fee, biker_employee_id from fuel_requests order by requested_at;  -- المحوَّل: amount_actual=50، fee=0.58 (TEST01: fee 0)
 -- (قبل fuel_fix_2026_10.sql) select biker_employee_id, public.fuel_balance(biker_employee_id) from (values ('1624'),('1648'),('1700')) t(biker_employee_id);
 --   ⇒ عريف 115 (ثلاث دفعات مكررة − 35) — يصحّحه ملف الإصلاح إلى 15؛ ميدول 50؛ رقيب 50.
@@ -384,6 +413,7 @@ revoke execute on function public.request_fuel(numeric, text, numeric), public.t
 -- عبر الأداة (يغلق الباب فوراً، بلا حذف):
 --   revoke execute on function public.my_fuel_balance(), public.fuel_balances(), public.request_urgent_topup(text), public.review_fuel_fill(uuid,boolean,text),
 --     public.transfer_fuel_request(uuid,text,numeric,numeric), public.reject_fuel_request(uuid,text) from authenticated;
+--   grant update, delete on public.fuel_logs to authenticated;   -- كما كانت قبل B.15
 --   grant insert (id, operator_id, vehicle_id, plate, biker_employee_id, biker_name, fuel_type, fill_at, odometer, liters, amount,
 --     odometer_photo_url, receipt_photo_url, notes, status, reviewed_by, reviewed_at, created_by, created_at) on public.fuel_logs to authenticated;
 --   ثم أعد request_fuel / add_fuel_fill / transfer_fuel_request(uuid,text,timestamptz) / set_fleet_alert_setting من docs/sql/fleet_requests.sql وامنح تنفيذها.

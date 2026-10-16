@@ -80,18 +80,24 @@ insert into fuel_logs (id,vehicle_id,plate,biker_employee_id,biker_name,fill_at,
 const W=fs.readFileSync('docs/sql/fuel_wallet.sql','utf8');
 const iA=W.indexOf('═══ A)'),iB=W.indexOf('═══ B)');
 const A=W.slice(iA,iB).split('\n').filter(l=>/^-- (begin;|alter |  |commit;)/.test(l)).map(l=>l.slice(3)).join('\n');
-const B=W.slice(W.indexOf('\n',iB)+1,W.indexOf('-- ═══ تحقق بالقراءة بعد B'));
+const iC=W.indexOf('═══ C)');
+const B=W.slice(W.indexOf('\n',iB)+1,W.lastIndexOf('-- ═══',iC-10));
+const C=W.slice(W.indexOf('\n',iC)+1,W.indexOf('-- ═══ تحقق بالقراءة بعد B'));
 ok('القسم A يحوي drop (لذلك SQL Editor) ويُستخرج كاملاً',/drop constraint/.test(A)&&/fleet_alert_settings_key_check/.test(A)&&/commit;/.test(A));
-ok('القسم B بلا drop ولا delete ولا truncate (يُطبَّق عبر الأداة)',!/\b(drop|delete|truncate)\b/i.test(B));
+ok('القسمان B و C بلا drop ولا delete ولا truncate (عبر الأداة)، و B بلا تعديل بيانات',!/\b(drop|delete|truncate)\b/i.test(B+C)&&!/^update /m.test(B)&&/update public\.fuel_requests/.test(C));
 const eA=err(A),eA2=err(A);ok('القسم A يُطبَّق مرتين بلا خطأ'+(eA||eA2?' — '+String(eA||eA2).slice(0,300):''),!eA&&!eA2);
 const eB=err(B);ok('القسم B يُطبَّق بلا خطأ'+(eB?' — '+eB.slice(0,400):''),!eB);if(eA||eB)process.exit(1);
+ok('بعد B وحده: لا تعديل بيانات (amount_actual فارغ للمحوَّل)',ps(`select count(*) from fuel_requests where amount_actual is not null`)==='0');
+const eC=err(C);ok('القسم C يُطبَّق (6 صفوف بالضبط)'+(eC?' — '+eC.slice(0,300):''),!eC);
+ok('إعادة C ⇒ 0 صفوف مقبولة',!err(C));
+ok('حارس C: عدد غير متوقع ⇒ تراجع',(()=>{ps(`update fuel_requests set amount_actual=null where id='${R.mid}'`);const e=err(C);ps(`update fuel_requests set amount_actual=50 where id='${R.mid}'`);return /المتوقع 6 صفوف/.test(e||'');})());
 
 // ── التعبئة التلقائية للمحوَّل سابقاً ──
 ok('المحوَّل سابقاً: amount_actual = 50 والرسوم 0.58 من نص البنك، و TEST01 بنص «-» ⇒ رسوم 0',
   ps(`select string_agg(coalesce(amount_actual::text,'∅')||'/'||fee, ',' order by requested_at) from fuel_requests where status in ('transferred','closed')`)==='50/0,50/0.58,50/0.58,50/0.58,50/0.58,50/0.58'
   &&ps(`select amount_actual is null from fuel_requests where id='${R.big}'`)==='t');
 ok('قبل الإصلاح: عريف 115 (ثلاث دفعات مكررة − 35)، ميدول 50، رقيب 50',ps(`select string_agg(b||'='||fuel_balance(b), ',' order by b) from (values ('1624'),('1648'),('1700')) t(b)`)==='1624=115,1648=50,1700=50');
-const eB2=err(B);ok('القسم B آمن لإعادة التشغيل (لا يكرر التعبئة ولا الإعدادات)'+(eB2?' — '+eB2.slice(0,200):''),!eB2&&ps(`select count(*) from fleet_alert_settings where key='fuel_topup_amount'`)==='1');
+const eB2=err(B);ok('القسم B آمن لإعادة التشغيل (لا يكرر الإعدادات)'+(eB2?' — '+eB2.slice(0,200):''),!eB2&&ps(`select count(*) from fleet_alert_settings where key='fuel_topup_amount'`)==='1');
 ok('الإعدادات الستة بقيم المالك',ps(`select string_agg(key||'='||value, ',' order by key) from fleet_alert_settings where key in ('fuel_topup_amount','fuel_topup_threshold','fuel_fill_tolerance','fuel_price_min','fuel_price_max','fuel_wallet_start')`)
   ==='fuel_fill_tolerance=10,fuel_price_max=2.6,fuel_price_min=2.0,fuel_topup_amount=50,fuel_topup_threshold=10,fuel_wallet_start=20261012');
 
@@ -101,6 +107,7 @@ const steps=X.split(/^-- ═══ البند \d/m).slice(1).map(s=>s.slice(s.in
 ok('ملف الإصلاح: ثلاثة بنود، بلا drop/delete/truncate',steps.length===3&&!/\b(drop|delete|truncate)\b/i.test(steps.join('\n')));
 steps.forEach((s,i)=>{const e=err(s);ok(`البند ${i+1} يُطبَّق (العدد المتوقع بالضبط)`+(e?' — '+e.slice(0,200):''),!e);});
 ok('إعادة البند 1 تتراجع (العدد صفر ≠ 1) — الحارس يعمل',/المتوقع صف واحد/.test(err(steps[0])||''));
+ok('المكرران يحتفظان بنص البنك (transfer_ref) دليلاً',ps(`select count(*) from fuel_requests where id in ('${R.dup1}','${R.dup2}') and transfer_ref like 'التاريخ:%' and transferred_at is null`)==='2');
 ok('بعد الإصلاح: الأرصدة عريف 15، ميدول 50، رقيب 50',ps(`select string_agg(b||'='||fuel_balance(b), ',' order by b) from (values ('1624'),('1648'),('1700')) t(b)`)==='1624=15,1648=50,1700=50');
 ok('طلبات عريف: 00:09 محوَّل 50/0.58 والثلاثة ملغاة بسبب، والمكرران بلا تحويل',ps(`select string_agg(status||':'||coalesce(amount_actual::text,'∅')||':'||(transferred_at is not null)::text, ',' order by requested_at) from fuel_requests where biker_employee_id='1624'`)
   ==='transferred:50:true,cancelled:∅:false,cancelled:∅:false,cancelled:∅:false'&&ps(`select count(*) from fuel_requests where biker_employee_id='1624' and status='cancelled' and reject_reason is not null`)==='3');
@@ -113,7 +120,9 @@ ok('الدوال الداخلية مغلقة أمام المسجّل، والع�
   (has_function_privilege('authenticated','public.my_fuel_balance()','execute')),(has_function_privilege('anon','public.my_fuel_balance()','execute')),
   (has_function_privilege('authenticated','public.request_fuel(numeric,text,numeric)','execute')),(has_function_privilege('authenticated','public.transfer_fuel_request(uuid,text,timestamp with time zone)','execute')),
   (has_function_privilege('authenticated','public.transfer_fuel_request(uuid,text,numeric,numeric)','execute'))) t(x)`)==='false,false,true,false,false,false,true');
-ok('الكتابة المباشرة في fuel_logs مسحوبة: البايكر لا يُدرج تعبئة يتجاوز بها الدالة',/permission denied/.test(asErr(ARIF,`insert into fuel_logs (biker_employee_id,odometer,amount) values ('1624',99999,500)`)||''));
+ok('الكتابة المباشرة في fuel_logs مسحوبة: لا إدراج ولا تعديل ولا إزالة حتى للمالك',/permission denied/.test(asErr(ARIF,`insert into fuel_logs (biker_employee_id,odometer,amount) values ('1624',99999,500)`)||'')
+  &&/permission denied/.test(asErr(OWNER,`delete from fuel_logs where id='${F.f20}'`)||'')&&/permission denied/.test(asErr(OWNER,`update fuel_logs set amount=1 where id='${F.f20}'`)||''));
+ok('_fuel_sar: 50 ⇒ 50، 7.5 ⇒ 7.5، 49.42 ⇒ 49.42، -9.5 ⇒ -9.5، 0.58 ⇒ 0.58',ps(`select string_agg(_fuel_sar(x),',') from unnest(array[50,7.5,49.42,-9.5,0.58]::numeric[]) x`)==='50,7.5,49.42,-9.5,0.58');
 ok('request_fuel القديمة ترفض بـ USE_WALLET حتى لو نُفّذت',/USE_WALLET/.test(err(`select request_fuel(1,'u')`)||''));
 
 // ── رصيد البايكر ──
@@ -158,6 +167,7 @@ as(FA_EDIT,`select transfer_fuel_request(p_id=>'${auto}', p_bank_txn=>'TXN-1001'
 ok('حُوِّل بالقيم الافتراضية 50 و 0.58، ورقم العملية في bank_txn و transfer_ref، وإشعار عربي+بنغالي للبايكر',
   ps(`select status||'|'||amount_actual||'|'||fee||'|'||bank_txn||'|'||transfer_ref from fuel_requests where id='${auto}'`)==='transferred|50|0.58|TXN-1001|TXN-1001'
   &&ps(`select count(*) from notif_log where dedupe='fuel-tr-${auto}-${MIDUL}' and title like '%জ্বালানির%'`)==='1');
+ok('إشعار التحويل بالمبلغ الدقيق (50 لا تقريب)',ps(`select body from notif_log where dedupe='fuel-tr-${auto}-${MIDUL}'`).startsWith('50 ﷼'));
 ok('بعد التحويل رصيد ميدول 40 ⇒ لا طلب تلقائي',ps(`select fuel_balance('1648')`)==='40'&&ps(`select count(*) from fuel_requests where biker_employee_id='1648' and status='requested'`)==='0');
 ok('تحويل مرتين ⇒ NOT_REQUESTED، والقديمة (p_ref) ⇒ مغلقة',code(asErr(OWNER,`select transfer_fuel_request(p_id=>'${auto}', p_bank_txn=>'TXN-2')`))==='NOT_REQUESTED'
   &&/permission denied/.test(asErr(OWNER,`select transfer_fuel_request(p_id=>'${auto}', p_ref=>'X')`)||''));
@@ -182,19 +192,29 @@ ok('عريف 15 − 10 = 5 ⇒ طلب تلقائي',!!ar);
 as(OWNER,`select reject_fuel_request('${ar}','تُدمج مع دفعة الأسبوع')`);
 ok('رفض الطلب بسبب ⇒ rejected ولا يُعاد إنشاؤه تلقائياً، وإشعار للبايكر',ps(`select status||'|'||reject_reason from fuel_requests where id='${ar}'`)==='rejected|تُدمج مع دفعة الأسبوع'
   &&ps(`select count(*) from fuel_requests where biker_employee_id='1624' and status='requested'`)==='0'&&ps(`select count(*) from notif_log where dedupe='fuel-rej-${ar}-${ARIF}'`)==='1');
+const pend=ps(`select id from fuel_logs where biker_employee_id='1624' and status='submitted' order by fill_at limit 1`);
+as(FA_EDIT,`select review_fuel_fill('${pend}',true)`);
+ok('اعتماد تعبئة بعد رفض الطلب لا يعيد إنشاءه (الاعتماد لا يغيّر الرصيد)',ps(`select count(*) from fuel_requests where biker_employee_id='1624' and status='requested'`)==='0');
 const ur=as(ARIF,`select request_urgent_topup('نفد الوقود في الطريق')`);
 ok('بعد الرفض: المستعجلة تُقبل (urgent، بسببه، created_by = البايكر) وتنبّه الإدارة',ps(`select source||'|'||reason||'|'||(created_by='${ARIF}')::text||'|'||amount from fuel_requests where id='${ur}'`)==='urgent|نفد الوقود في الطريق|true|50'
   &&ps(`select count(*) from notif_log where dedupe like 'fuel-urgent-${ur}%'`)==='2');
+ps(`update fuel_requests set amount=60 where id='${ur}'`);as(OWNER,`select transfer_fuel_request(p_id=>'${ur}', p_bank_txn=>'TXN-60')`);
+ok('التحويل بلا مبلغ ⇒ مبلغ الطلب نفسه (60 لا 50)',ps(`select amount_actual||'|'||fee from fuel_requests where id='${ur}'`)==='60|0.58');
+ps(`insert into fuel_requests (vehicle_id,biker_employee_id,amount,status) values ('${V.a}','1624',50,'requested')`);
 ok('طلب مفتوح واحد لكل بايكر على مستوى القاعدة (فهرس فريد)',/duplicate key|unique/.test(err(`insert into fuel_requests (vehicle_id,biker_employee_id,amount,status) values ('${V.a}','1624',50,'requested')`)||''));
 
 // ── الحدود ──
+ok('حدود إعدادات الرصيد: العتبة ≥ المبلغ ⇒ BAD_VALUE، المبلغ > 1000 ⇒ BAD_VALUE، التسامح > 100، min ≥ max',
+  code(asErr(FA_EDIT,`select set_fleet_alert_setting('fuel_topup_threshold',50)`))==='BAD_VALUE'&&code(asErr(FA_EDIT,`select set_fleet_alert_setting('fuel_topup_amount',1500)`))==='BAD_VALUE'
+  &&code(asErr(FA_EDIT,`select set_fleet_alert_setting('fuel_fill_tolerance',101)`))==='BAD_VALUE'&&code(asErr(FA_EDIT,`select set_fleet_alert_setting('fuel_price_min',2.6)`))==='BAD_VALUE'
+  &&code(asErr(FA_EDIT,`select set_fleet_alert_setting('fuel_price_max',2.0)`))==='BAD_VALUE');
 ok('ضبط: المفاتيح الجديدة مقبولة، وتاريخ بداية غير صالح ⇒ BAD_VALUE، وإعداد الرصيد لدراجة ⇒ BAD_KEY',
   as(FA_EDIT,`select set_fleet_alert_setting('fuel_topup_threshold',12)`)==='t'&&code(asErr(FA_EDIT,`select set_fleet_alert_setting('fuel_wallet_start',20261332)`))==='BAD_VALUE'
   &&code(asErr(FA_EDIT,`select set_fleet_alert_setting('fuel_topup_amount',60,'${V.a}')`))==='BAD_KEY'&&as(FA_EDIT,`select set_fleet_alert_setting('fuel_topup_threshold',10)`)==='t');
 
 // ── المصروفات الشهرية ──
 ok('fuel_expenses_monthly: الفواتير المعتمدة فقط «وقود»، والرسوم «رسوم بنكية» بشهر التحويل، والدفعات ليست مصروفاً',
-  as(FA_VIEW,`select string_agg(period||'|'||category||'|'||amount||'|'||n, ',' order by category) from fuel_expenses_monthly`)===`2026-10|رسوم بنكية|${(0.58*4).toFixed(2)}|4,2026-10|وقود|25|1`
+  as(FA_VIEW,`select string_agg(period||'|'||category||'|'||amount||'|'||n, ',' order by category) from fuel_expenses_monthly`)===`2026-10|رسوم بنكية|2.90|5,2026-10|وقود|45|2`
   ||(()=>{console.log('  ',as(FA_VIEW,`select string_agg(period||'|'||category||'|'||amount||'|'||n, ',' order by category) from fuel_expenses_monthly`));return false;})());
 ok('البايكر يرى مصروفاته فقط عبر العرض (security_invoker)',as(RAKIB,`select coalesce(sum(amount),0) from fuel_expenses_monthly where category='وقود'`)==='0');
 }finally{ps(`drop database if exists ${db}`,'postgres');}
