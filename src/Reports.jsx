@@ -3,6 +3,7 @@ import{supabase}from"./supabase";
 import Icon from"./Icon";
 import{payoutForBiker,SSP_CONTRACT}from"./sweaterContract";
 import{settledNet}from"./settlementStatus";
+import{fuelExpenseCats}from"./fuelWallet";
 
 const money=n=>Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0})+" ﷼";
 const int=n=>Number(n||0).toLocaleString("en-US");
@@ -179,15 +180,18 @@ function PayrollReport({period}){
 function ExpensesReport({period}){
   const[d,setD]=useState(null);const[scope,setScope]=useState("all");
   useEffect(()=>{(async()=>{
-    const[ve,vn]=await Promise.all([q("vendor_expenses","exp_date,amount,title,vendor_id"),q("vendors","id,name,category")]);
-    setD({ve,vn});
+    // الوقود من fuel_expenses_monthly (docs/sql/fuel_wallet.sql): الفواتير المعتمدة «وقود» ورسوم التحويل «رسوم بنكية» — الدفعات ليست مصروفاً
+    const[ve,vn,fu]=await Promise.all([q("vendor_expenses","exp_date,amount,title,vendor_id"),q("vendors","id,name,category"),q("fuel_expenses_monthly","period,category,amount,n")]);
+    setD({ve,vn,fu});
   })();},[]);
   const s=useMemo(()=>{if(!d)return null;const vmap=Object.fromEntries(d.vn.map(v=>[v.id,v]));
     const rows=d.ve.filter(e=>scope==="all"||String(e.exp_date||"").slice(0,7)===period);
     const byCat={};rows.forEach(e=>{const c=(vmap[e.vendor_id]?.category)||"أخرى";byCat[c]=(byCat[c]||0)+Number(e.amount||0);});
+    fuelExpenseCats(d.fu,scope,period).forEach(c=>{byCat[c.label]=(byCat[c.label]||0)+c.val;});
+    const fuelRows=(d.fu||[]).filter(r=>scope==="all"||r.period===period).map(r=>({date:r.period+"-01",vendor:"—",cat:r.category,title:(r.category==="وقود"?"فواتير وقود معتمدة":"رسوم تحويل دفعات الوقود")+` (${r.n})`,amount:Number(r.amount||0)}));
     const cats=Object.entries(byCat).map(([label,val])=>({label,val})).sort((a,b)=>b.val-a.val);
     const total=cats.reduce((a,c)=>a+c.val,0);
-    const list=rows.map(e=>({date:e.exp_date,vendor:vmap[e.vendor_id]?.name||"—",cat:vmap[e.vendor_id]?.category||"أخرى",title:e.title,amount:Number(e.amount||0)})).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    const list=[...rows.map(e=>({date:e.exp_date,vendor:vmap[e.vendor_id]?.name||"—",cat:vmap[e.vendor_id]?.category||"أخرى",title:e.title,amount:Number(e.amount||0)})),...fuelRows].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     return{cats,total,list};
   },[d,scope,period]);
   if(!s)return<div className="g-skel" style={{height:200}}/>;

@@ -9,6 +9,8 @@ export const FUEL_STATUS = {
   requested: { ar: "مطلوب", bn: "অনুরোধ করা হয়েছে", tone: "warn" },
   transferred: { ar: "حُوِّل", bn: "টাকা পাঠানো হয়েছে", tone: "ok" },
   closed: { ar: "مُغلق", bn: "বন্ধ", tone: "info" },
+  rejected: { ar: "مرفوض", bn: "প্রত্যাখ্যাত", tone: "bad" },
+  cancelled: { ar: "ملغى", bn: "বাতিল", tone: "info" },
 };
 export const OIL_STATUS = {
   requested: { ar: "مطلوب", bn: "অনুরোধ করা হয়েছে", tone: "warn" },
@@ -50,6 +52,12 @@ export const SETTINGS = [
   { k: "oil_interval_km", ar: "استحقاق تغيير الزيت منذ آخر تغيير معتمد", unit: "كم" },
   { k: "oil_exec_days", ar: "مهلة تنفيذ طلب الزيت", unit: "يوم" },
   { k: "fuel_price_91", ar: "سعر لتر بنزين 91", unit: "﷼" },
+  { k: "fuel_topup_amount", ar: "رصيد الوقود: مبلغ الدفعة التلقائية", unit: "﷼" },
+  { k: "fuel_topup_threshold", ar: "رصيد الوقود: دفعة تلقائية تحت", unit: "﷼" },
+  { k: "fuel_fill_tolerance", ar: "رصيد الوقود: أقصى تجاوز للرصيد في تعبئة", unit: "﷼" },
+  { k: "fuel_price_min", ar: "سعر اللتر: تحذير تحت", unit: "﷼" },
+  { k: "fuel_price_max", ar: "سعر اللتر: تحذير فوق", unit: "﷼" },
+  { k: "fuel_wallet_start", ar: "رصيد الوقود: بداية الحساب", unit: "YYYYMMDD" },
 ];
 // قيمة حدّ صالحة: موجبة، والنسبة أقل من 100 (كما تفرضه set_fleet_alert_setting)
 export const settingError = (k, v) => {
@@ -154,7 +162,7 @@ export function splitRequests(rows) {
   return {
     pending: r.filter(x => x.status === "requested").sort((a, b) => t(a.requested_at) - t(b.requested_at)),
     transferred: r.filter(x => x.status === "transferred").sort((a, b) => t(b.transferred_at) - t(a.transferred_at)),
-    closed: r.filter(x => x.status === "closed").sort((a, b) => t(b.requested_at) - t(a.requested_at)),
+    closed: r.filter(x => ["closed", "rejected", "cancelled"].includes(x.status)).sort((a, b) => t(b.requested_at) - t(a.requested_at)),
   };
 }
 // طلبات الزيت المفتوحة للإدارة: بانتظار الإرسال، ثم بانتظار التنفيذ، ثم بانتظار الاعتماد

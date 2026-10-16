@@ -53,7 +53,7 @@ ok('أسماء كل أنواع التنبيه الثمانية',['high_consumpti
 ok('لا يوجد في التنبيهات المجمّعة أي حقل درّاج',!JSON.stringify(G).includes('biker'));
 
 // الحدود
-ok('الحدود التسعة بأسماء ووحدات',F.SETTINGS.length===9&&F.SETTINGS.every(s=>s.ar&&s.unit));
+ok('الحدود التسعة + إعدادات الرصيد الستة بأسماء ووحدات',F.SETTINGS.length===15&&F.SETTINGS.every(s=>s.ar&&s.unit)&&F.SETTINGS.some(s=>s.k==='fuel_wallet_start'));
 ok('settingError: موجبة، والنسبة < 100',F.settingError('fill_gap_km','0')&&F.settingError('fuel_low_pct','100')&&F.settingError('fuel_low_pct','25')===null&&F.settingError('oil_interval_km','٢٠٠٠')===null);
 
 // تكلفة الكيلو الشهرية
