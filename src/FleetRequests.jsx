@@ -5,7 +5,7 @@ import{useToast}from"./ui";
 import TestBadge from"./TestBadge";
 import{markTest,realBy}from"./testSandbox";
 import{FUEL_STATUS,OIL_STATUS,statusOf,CHANNELS,channelAr,alertAr,ALERT_KINDS,SETTINGS,settingError,parseNum,adminRpcError,splitRequests,splitOil,since,alertsByVehicle,monthlyCostPerKm,riyadhMonth}from"./fleetRequests";
-import{pendingFills,pricePerLiter,SOURCE_AR,transferFormError,walletAdminError,fillStatus,sar}from"./fuelWallet";
+import{pendingFills,pricePerLiter,SOURCE_AR,transferFormError,fillStatus,sar}from"./fuelWallet";
 
 // «الأسطول ← الطلبات والتنبيهات»: رصيد الوقود (دفعات بانتظار التحويل، تعبئات بانتظار الاعتماد، رصيد كل بايكر) + الزيت + fleet_alerts() + الحدود.
 // الصلاحية: وحدة fleet_alerts (عرض = القراءة، تعديل = التحويل/الرفض ومراجعة التعبئات والإرسال لسويتر والاعتماد وضبط الحدود) — المالك دائماً.
@@ -28,21 +28,23 @@ export default function FleetRequests({owner,tv}){
   async function load(){
     setErr(null);
     const from=new Date(Date.now()-120*864e5).toISOString();
-    const[fr,mr,al,st,fl,bl]=await Promise.all([
+    const[fr,mr,al,st,fl,bl,pf]=await Promise.all([
       supabase.from("fuel_requests").select("*").gte("requested_at",from).order("requested_at",{ascending:false}),
       supabase.from("maintenance_requests").select("*").order("requested_at",{ascending:false}).limit(200),
       supabase.rpc("fleet_alerts"),
       supabase.from("fleet_alert_settings").select("key,vehicle_id,value,updated_at"),
       supabase.from("fuel_logs").select("id,vehicle_id,plate,biker_employee_id,biker_name,odometer,amount,liters,fill_at,request_id,legacy,status,price_warn,reject_reason,receipt_photo_url,odometer_photo_url").eq("legacy",false).gte("fill_at",from).order("fill_at",{ascending:false}),
       supabase.rpc("fuel_balances"),
+      // بانتظار الاعتماد: كل submitted بلا حدّ زمني (لا تُفقد تعبئة قديمة لم تُراجَع)
+      supabase.from("fuel_logs").select("id,vehicle_id,plate,biker_employee_id,biker_name,odometer,amount,liters,fill_at,request_id,legacy,status,price_warn,reject_reason,receipt_photo_url,odometer_photo_url").eq("legacy",false).eq("status","submitted").order("fill_at",{ascending:true}).limit(300),
     ]);
-    const e=[fr,mr,al,st,fl,bl].find(x=>x.error);if(e)setErr(adminRpcError(e.error));
-    setD({fr:fr.data||[],mr:mr.data||[],al:al.data||[],st:st.data||[],fl:fl.data||[],bl:bl.data||[]});
+    const e=[fr,mr,al,st,fl,bl,pf].find(x=>x.error);if(e)setErr(adminRpcError(e.error));
+    setD({fr:fr.data||[],mr:mr.data||[],al:al.data||[],st:st.data||[],fl:fl.data||[],bl:bl.data||[],pf:pf.data||[]});
   }
   useEffect(()=>{if(perm&&perm.view)load();},[perm]);
 
   const R=useMemo(()=>d?splitRequests(d.fr):null,[d]);
-  const PF=useMemo(()=>d?pendingFills(d.fl):[],[d]);
+  const PF=useMemo(()=>d?pendingFills(d.pf):[],[d]);
   // بايكر تجريبي: من له طلب أو تعبئة على دراجة تجريبية
   const testBikers=useMemo(()=>new Set(d&&tv?[...d.fr,...d.fl].filter(x=>tv.has(x.vehicle_id)).map(x=>x.biker_employee_id):[]),[d,tv]);
   const BL=useMemo(()=>d?[...d.bl].sort((a,b)=>Number(testBikers.has(a.biker_employee_id))-Number(testBikers.has(b.biker_employee_id))||Number(a.balance)-Number(b.balance)):[],[d,testBikers]);
@@ -58,7 +60,7 @@ export default function FleetRequests({owner,tv}){
   async function call(key,fn,args,ok){
     setBusy(key);let error;
     try{({error}=await supabase.rpc(fn,args));}catch(e){error=e;}finally{setBusy(null);}
-    if(error){toast.bad(walletAdminError(error)||adminRpcError(error),undefined,6000);return false;}
+    if(error){toast.bad(adminRpcError(error),undefined,6000);return false;}
     toast.ok(ok);load();return true;
   }
   // التحويل بالأسماء (p_bank_txn): للدالة نسختان والقديمة مغلقة

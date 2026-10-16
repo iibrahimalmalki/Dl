@@ -2,8 +2,6 @@
 // القاعدة: docs/sql/fleet_requests.sql (طُبِّق 2026-10-12). الدوال تُستدعى من FuelOil.jsx (البوابة) و FleetRequests.jsx (الإدارة).
 // مبدأ البوابة: لا منع ولا رسائل تحليلية للدرّاج — الرفض فقط لنقص حقل إلزامي، ولا يُعرض له أي رقم استهلاك أو مقارنة.
 
-export const DEFAULT_FUEL_AMOUNT = 50;
-
 // حالات طلب الوقود والزيت (عربي + بنغالي للبوابة)
 export const FUEL_STATUS = {
   requested: { ar: "مطلوب", bn: "অনুরোধ করা হয়েছে", tone: "warn" },
@@ -94,23 +92,9 @@ const NEED = {
   receipt: { ar: "التقط صورة الفاتورة.", bn: "রসিদের ছবি তুলুন।" },
   proof: { ar: "التقط صورة الفاتورة أو ملصق الزيت.", bn: "রসিদ বা তেলের স্টিকারের ছবি তুলুন।" },
   tech: { ar: "اكتب اسم مسؤول الصيانة في سويتر.", bn: "সুইটারের মেইনটেন্যান্স দায়িত্বশীলের নাম লিখুন।" },
-  liters: { ar: "اللترات رقم موجب أو اتركها فارغة.", bn: "লিটার ধনাত্মক সংখ্যা দিন বা খালি রাখুন।" },
+  liters: { ar: "أدخل اللترات (رقم موجب).", bn: "লিটার লিখুন (ধনাত্মক সংখ্যা)।" },
 };
 const need = field => ({ field, ...NEED[field] });
-export function fuelRequestError({ odometer, odoPhoto, amount }) {
-  if (parseNum(odometer) == null) return need("odometer");
-  if (!(parseNum(amount) > 0)) return need("amount");
-  if (!odoPhoto) return need("odoPhoto");
-  return null;
-}
-export function fillError({ odometer, amount, liters, odoPhoto, receipt }) {
-  if (parseNum(odometer) == null) return need("odometer");
-  if (!(parseNum(amount) > 0)) return need("amount");
-  if (liters !== "" && liters != null && parseNum(liters) == null) return need("liters");
-  if (!odoPhoto) return need("odoPhoto");
-  if (!receipt) return need("receipt");
-  return null;
-}
 export function oilRequestError({ odometer, odoPhoto }) {
   if (parseNum(odometer) == null) return need("odometer");
   if (!odoPhoto) return need("odoPhoto");
@@ -134,7 +118,7 @@ const RPC_BIKER = {
   ALREADY_DONE: { ar: "سبق تأكيد هذا الطلب.", bn: "এই অনুরোধ আগেই নিশ্চিত করা হয়েছে।" },
   NOT_FOUND: { ar: "الطلب غير موجود.", bn: "অনুরোধ পাওয়া যায়নি।", action: "whatsapp" },
 };
-const errCode = err => { const m = String((err && (err.message || err.details)) || err || ""); const x = m.match(/\b([A-Z][A-Z_]{3,})\b/); return x ? x[1] : null; };
+export const errCode = err => { const m = String((err && (err.message || err.details)) || err || ""); const x = m.match(/\b([A-Z][A-Z_]{3,})\b/); return x ? x[1] : null; };
 // للبوابة: شكل ErrorNote ({key, code, ar, bn, action}) أو null ⇒ يُستعمل humanError للأخطاء العامة (شبكة، جلسة…)
 export function bikerRpcError(err) {
   const c = errCode(err), t = c && RPC_BIKER[c];
@@ -151,6 +135,15 @@ const RPC_ADMIN = {
   BAD_KEY: "حدّ غير معروف.",
   BAD_VALUE: "قيمة غير صالحة (موجبة، والنسبة أقل من 100).",
   NOTE_TOO_LONG: "الملاحظة طويلة جداً.",
+  // رصيد الوقود (docs/sql/fuel_wallet.sql)
+  TXN_REQUIRED: "أدخل رقم العملية البنكية.",
+  DUPLICATE_TXN: "رقم العملية مستعمل لدفعة أخرى.",
+  BAD_AMOUNT: "المبلغ غير صالح.",
+  BAD_FEE: "الرسوم غير صالحة.",
+  REASON_REQUIRED: "اكتب سبب الرفض.",
+  REASON_TOO_LONG: "السبب طويل جداً.",
+  ALREADY_REVIEWED: "رُوجعت هذه التعبئة من قبل — حدّث الصفحة.",
+  DECISION_REQUIRED: "اختر اعتماد أو رفض.",
 };
 export const adminRpcError = err => { const c = errCode(err); return (c && RPC_ADMIN[c]) || ("خطأ: " + String((err && err.message) || err || "")); };
 
@@ -190,7 +183,7 @@ export function alertsByVehicle(alerts) {
     .sort((a, b) => b.items.filter(i => i.severity === "warn").length - a.items.filter(i => i.severity === "warn").length || String(a.plate).localeCompare(String(b.plate)));
 }
 // تكلفة الكيلو لكل دراجة في شهر (YYYY-MM): مجموع التحويلات ÷ (أعلى − أدنى قراءة عدّاد في الشهر). عرض لا تنبيه.
-// requests: fuel_requests (transferred_at, amount, odometer, requested_at, vehicle_id, plate)؛ fills: fuel_logs غير legacy (fill_at, odometer)
+// requests: fuel_requests (transferred_at, amount_actual|amount, odometer, requested_at, vehicle_id, plate)؛ fills: fuel_logs غير legacy وغير مرفوضة (fill_at, odometer)
 export const riyadhMonth = (v = new Date()) => { const d = new Date(v); return isNaN(d) ? "" : d.toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" }).slice(0, 7); };
 export function monthlyCostPerKm(month, requests, fills) {
   const inMonth = iso => !!iso && riyadhMonth(iso) === month;
@@ -199,10 +192,10 @@ export function monthlyCostPerKm(month, requests, fills) {
   const read = (r, odo) => { const n = Number(odo); if (odo == null || odo === "" || !isFinite(n)) return; r.min = r.min == null ? n : Math.min(r.min, n); r.max = r.max == null ? n : Math.max(r.max, n); };
   (requests || []).forEach(q => {
     if (!q.vehicle_id) return;
-    if (inMonth(q.transferred_at)) row(q.vehicle_id, q.plate).amount += Number(q.amount) || 0;
+    if (inMonth(q.transferred_at)) row(q.vehicle_id, q.plate).amount += Number(q.amount_actual ?? q.amount) || 0;   // المبلغ الفعلي المحوَّل إن وُجد
     if (inMonth(q.requested_at)) read(row(q.vehicle_id, q.plate), q.odometer);
   });
-  (fills || []).forEach(f => { if (f.vehicle_id && !f.legacy && inMonth(f.fill_at)) read(row(f.vehicle_id, f.plate), f.odometer); });
+  (fills || []).forEach(f => { if (f.vehicle_id && !f.legacy && f.status !== "rejected" && inMonth(f.fill_at)) read(row(f.vehicle_id, f.plate), f.odometer); });
   return [...m.values()].map(r => {
     const km = r.min != null && r.max != null ? r.max - r.min : 0;
     return { vehicle_id: r.vehicle_id, plate: r.plate, amount: Math.round(r.amount * 100) / 100, km, perKm: km > 0 && r.amount > 0 ? Math.round(r.amount / km * 1000) / 1000 : null };

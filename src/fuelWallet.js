@@ -1,7 +1,7 @@
 // «رصيد وقود متجدد» — منطق نقي بلا DOM ولا Supabase.
 // القاعدة: docs/sql/fuel_wallet.sql. البايكر لا يطلب وقوداً: يستلم دفعة، يسجّل تعبئاته، وتحت العتبة تُنشأ دفعة تلقائية للإدارة.
 // يُستدعى من FuelOil.jsx (البوابة) و FleetRequests.jsx (الإدارة) و Reports.jsx (المصروفات).
-import { parseNum } from "./fleetRequests.js";
+import { parseNum, errCode } from "./fleetRequests.js";
 
 export const DEFAULT_WALLET = { threshold: 10, topup: 50, tolerance: 10 };
 const n = v => (v == null || v === "" ? null : Number(v));
@@ -64,28 +64,12 @@ const WALLET_BIKER = {
   REASON_TOO_LONG: { ar: "السبب طويل جداً.", bn: "কারণ খুব লম্বা।" },
   USE_WALLET: { ar: "طلب الوقود صار تلقائياً — حدّث الصفحة.", bn: "জ্বালানির অনুরোধ এখন স্বয়ংক্রিয় — পেজ রিফ্রেশ করুন।" },
 };
-const errCode = err => { const m = String((err && (err.message || err.details)) || err || ""); const x = m.match(/\b([A-Z][A-Z_]{3,})\b/); return x ? x[1] : null; };
 export function walletRpcError(err) {
   const c = errCode(err), x = c && WALLET_BIKER[c];
   return x ? { key: "rpc", code: "E-" + c, ar: x.ar, bn: x.bn } : null;
 }
 
 // ── الإدارة ──
-const WALLET_ADMIN = {
-  TXN_REQUIRED: "أدخل رقم العملية البنكية.",
-  DUPLICATE_TXN: "رقم العملية مستعمل لدفعة أخرى.",
-  BAD_AMOUNT: "المبلغ غير صالح.",
-  BAD_FEE: "الرسوم غير صالحة.",
-  REASON_REQUIRED: "اكتب سبب الرفض.",
-  REASON_TOO_LONG: "السبب طويل جداً.",
-  ALREADY_REVIEWED: "رُوجعت هذه التعبئة من قبل — حدّث الصفحة.",
-  DECISION_REQUIRED: "اختر اعتماد أو رفض.",
-  NOT_REQUESTED: "حالة الطلب تغيّرت — حدّث الصفحة.",
-  FORBIDDEN: "لا تملك صلاحية تعديل «تنبيهات الأسطول».",
-  NOT_FOUND: "غير موجود.",
-};
-export const walletAdminError = err => { const c = errCode(err); return c && WALLET_ADMIN[c] ? WALLET_ADMIN[c] : null; };
-
 // سعر اللتر (للعرض) — null بلا لترات
 export const pricePerLiter = f => { const a = n(f && f.amount), l = n(f && f.liters); return a > 0 && l > 0 ? Math.round(a / l * 100) / 100 : null; };
 // الدفعات: بانتظار التحويل (الأقدم أولاً) والتعبئات بانتظار الاعتماد (الأقدم أولاً)
@@ -101,10 +85,15 @@ export function transferFormError({ txn, amount, fee }) {
   return null;
 }
 
-// ── المصروفات: صفوف fuel_expenses_monthly (period, category, amount) ⇒ مجموع الفئة للنطاق ──
+// ── المصروفات: صفوف fuel_expenses_monthly (period, category, amount, n) ⇒ مجموع كل فئة + صفوف التفصيل للنطاق ──
 // scope: "all" أو "month" مع period = YYYY-MM
-export function fuelExpenseCats(rows, scope, period) {
+const FUEL_TITLE = { "وقود": "فواتير وقود معتمدة", "رسوم بنكية": "رسوم تحويل دفعات الوقود" };
+export function fuelExpenses(rows, scope, period) {
+  const inScope = (rows || []).filter(r => (scope === "all" || r.period === period) && Number(r.amount));
   const by = {};
-  (rows || []).forEach(r => { if (scope !== "all" && r.period !== period) return; const v = Number(r.amount) || 0; if (v) by[r.category] = (by[r.category] || 0) + v; });
-  return Object.entries(by).map(([label, val]) => ({ label, val: Math.round(val * 100) / 100 }));
+  inScope.forEach(r => { by[r.category] = (by[r.category] || 0) + Number(r.amount); });
+  return {
+    cats: Object.entries(by).map(([label, val]) => ({ label, val: Math.round(val * 100) / 100 })),
+    rows: inScope.map(r => ({ date: r.period + "-01", vendor: "—", cat: r.category, title: (FUEL_TITLE[r.category] || r.category) + ` (${r.n})`, amount: Number(r.amount) })),
+  };
 }

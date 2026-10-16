@@ -47,15 +47,16 @@ export default function FuelOil({ me, myBike, kit }) {
   async function load() {
     setLoadErr(null);
     try {
-    const [a, b, c, w] = await Promise.all([
+    // الرصيد منفصل: فشله لا يوقف قوائم الوقود والزيت (البطاقة تبقى «جارٍ التحميل» برسالة إعادة المحاولة)
+    supabase.rpc("my_fuel_balance").then(({ data, error }) => { if (error) setLoadErr(humanError(error)); else setWallet(walletOf(data)); }, e => setLoadErr(humanError(e)));
+    const [a, b, c] = await Promise.all([
       supabase.from("fuel_requests").select("id,plate,amount,amount_actual,status,source,requested_at,transferred_at,rejected_at,reject_reason").eq("biker_employee_id", bid).order("requested_at", { ascending: false }).limit(8),
       supabase.from("fuel_logs").select("id,plate,odometer,amount,liters,fill_at,status,reject_reason").eq("biker_employee_id", bid).eq("legacy", false).order("fill_at", { ascending: false }).limit(8),
       supabase.from("maintenance_requests").select("id,plate,status,odometer,requested_at,sent_at,done_at,approved_at").eq("biker_employee_id", bid).order("requested_at", { ascending: false }).limit(6),
-      supabase.rpc("my_fuel_balance"),
     ]);
-    const bad = [a, b, c, w].find(x => x.error);
+    const bad = [a, b, c].find(x => x.error);
     if (bad) throw bad.error;
-    setReqs(a.data || []); setFills(b.data || []); setOils(c.data || []); setWallet(walletOf(w.data));
+    setReqs(a.data || []); setFills(b.data || []); setOils(c.data || []);
     } catch (e) { setLoadErr(humanError(e)); }
   }
   useEffect(() => { load(); }, [bid]);
@@ -100,7 +101,7 @@ function Wallet({ me, wallet, reqs, onSaved }) {
       </>}
     </div>
     {next && <div className={"fw-next " + next.tone}><b>{next.ar}</b><span className="bn">{next.bn}</span>{next.kind === "sent" && <small>{day(next.req.requested_at)}</small>}{next.kind === "transferred" && next.req.transferred_at && <small>{day(next.req.transferred_at)}</small>}</div>}
-    {wallet && !next && low && <div className="fw-next warn"><b>رصيدك منخفض — سجّل تعبئتك ليُرسل طلب الدفعة.</b><span className="bn">ব্যালেন্স কম — রিফুয়েল রেকর্ড করুন, অনুরোধ পাঠানো হবে।</span></div>}
+    {wallet && low && !(next && next.kind === "sent") && <div className="fw-next warn"><b>رصيدك منخفض — سجّل تعبئتك ليُرسل طلب الدفعة.</b><span className="bn">ব্যালেন্স কম — রিফুয়েল রেকর্ড করুন, অনুরোধ পাঠানো হবে।</span></div>}
     {urgent && !open && <Btn kind="secondary" block big style={{ marginTop: 10 }} onClick={() => setOpen(true)} bn="জরুরি টাকা">⚠️ دفعة مستعجلة</Btn>}
     {urgent && open && <>
       <label className="bp-lbl" htmlFor="fw_reason">سبب الدفعة المستعجلة <span className="bp-req">*</span> <span className="bn">/ জরুরি টাকার কারণ</span></label>
@@ -193,7 +194,7 @@ function MyFuel({ reqs, fills }) {
     <div className="bp-list">
       {fills === null ? <Skel rows={2} card={false} /> : fills.length === 0 ? <div className="g-empty" style={{ padding: "14px 10px" }}><b>لا يوجد بعد · <span className="bn">এখনও নেই</span></b></div> :
         fills.map(r => <div className="bp-item" key={r.id}>
-          <div className="t">{r.amount ? sar(r.amount) + "﷼" : "—"}{r.liters ? " · " + sar(r.liters) + " L" : ""} · العدّاد · <span className="bn" style={{ display: "inline" }}>ওডোমিটার</span> {r.odometer ?? "—"}<Badge st={fillStatus(r.status)} /></div>
+          <div className="t">{r.amount ? sar(r.amount) + "﷼" : "—"}{r.liters ? <> · {sar(r.liters)} لتر <span className="bn" style={{ display: "inline" }}>লিটার</span></> : ""} · العدّاد · <span className="bn" style={{ display: "inline" }}>ওডোমিটার</span> {r.odometer ?? "—"}<Badge st={fillStatus(r.status)} /></div>
           <div className="m">{day(r.fill_at)}{r.status === "rejected" && r.reject_reason && <> · {r.reject_reason}</>}</div>
         </div>)}
     </div>

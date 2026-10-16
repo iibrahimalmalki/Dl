@@ -35,7 +35,7 @@ ok('الترتيب: العدّاد ثم المبلغ ثم اللترات ثم ا
 ok('أخطاء البوابة: OVER_BALANCE و DUPLICATE_FILL و ODOMETER_NOT_INCREASING و USE_WALLET بلغتين',
   ['OVER_BALANCE','DUPLICATE_FILL','ODOMETER_NOT_INCREASING','USE_WALLET','OPEN_REQUEST','BALANCE_OK'].every(c=>{const e=W.walletRpcError({message:c});return e&&e.code==='E-'+c&&e.ar&&e.bn;}));
 ok('خطأ غير معروف ⇒ null (يتولاه humanError)',W.walletRpcError({message:'network down'})===null);
-ok('أخطاء الإدارة: DUPLICATE_TXN و ALREADY_REVIEWED بالعربي، وغيرها null',/مستعمل/.test(W.walletAdminError({message:'DUPLICATE_TXN'}))&&/رُوجعت/.test(W.walletAdminError({message:'ALREADY_REVIEWED'}))&&W.walletAdminError({message:'x'})===null);
+
 
 ok('حالة التعبئة بلغتين، وغير المعروفة ⇒ بانتظار المراجعة',W.fillStatus('rejected').bn==='প্রত্যাখ্যাত'&&W.fillStatus('approved').ar==='معتمدة'&&W.fillStatus(undefined).ar==='بانتظار المراجعة');
 ok('سعر اللتر: 25/11 = 2.27، وبلا لترات ⇒ null',W.pricePerLiter({amount:25,liters:11})===2.27&&W.pricePerLiter({amount:25,liters:null})===null);
@@ -45,9 +45,9 @@ ok('دفعات بانتظار التحويل: requested فقط، الأقدم أ
 ok('نموذج التحويل: رقم العملية إلزامي، ومبلغ ورسوم صالحة',W.transferFormError({txn:' ',amount:'50',fee:'0.58'})&&W.transferFormError({txn:'T',amount:'0',fee:'0.58'})&&W.transferFormError({txn:'T',amount:'50',fee:''})&&W.transferFormError({txn:'T',amount:'50',fee:'0.58'})===null&&W.transferFormError({txn:'T',amount:'50',fee:'0'})===null);
 
 const ex=[{period:'2026-10',category:'وقود',amount:'25',n:1},{period:'2026-10',category:'رسوم بنكية',amount:'2.32',n:4},{period:'2026-09',category:'وقود',amount:'40',n:2}];
-ok('المصروفات: الشهر فقط',JSON.stringify(W.fuelExpenseCats(ex,'month','2026-10'))===JSON.stringify([{label:'وقود',val:25},{label:'رسوم بنكية',val:2.32}]));
-ok('المصروفات: الكل يجمع الأشهر',W.fuelExpenseCats(ex,'all','2026-10').find(c=>c.label==='وقود').val===65);
-ok('المصروفات: لا صفوف ⇒ []',W.fuelExpenseCats([],'all')+''==='');
+ok('المصروفات: الشهر فقط',JSON.stringify(W.fuelExpenses(ex,'month','2026-10').cats)===JSON.stringify([{label:'وقود',val:25},{label:'رسوم بنكية',val:2.32}]));
+ok('المصروفات: الكل يجمع الأشهر، وصف تفصيل لكل شهر/فئة بعنوانه',(x=>x.cats.find(c=>c.label==='وقود').val===65&&x.rows.length===3&&x.rows[0].title==='فواتير وقود معتمدة (1)'&&x.rows[1].title==='رسوم تحويل دفعات الوقود (4)'&&x.rows[0].date==='2026-10-01')(W.fuelExpenses(ex,'all','2026-10')));
+ok('المصروفات: لا صفوف ⇒ فارغ',W.fuelExpenses([],'all').cats.length===0&&W.fuelExpenses(null,'all').rows.length===0);
 
 // الصفحات: لا «اطلب وقوداً» ولا request_fuel، والتحويل بالأسماء
 const fo=fs.readFileSync('src/FuelOil.jsx','utf8'),fq=fs.readFileSync('src/FleetRequests.jsx','utf8');
