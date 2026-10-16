@@ -8,19 +8,12 @@ try{
 execSync(`npx esbuild src/fleetRequests.js --bundle --format=esm --platform=node --outfile=${tmp}/t.mjs --log-level=error`,{stdio:'inherit'});
 const F=await import(`${tmp}/t.mjs`);
 
-ok('المبلغ الافتراضي 50﷼',F.DEFAULT_FUEL_AMOUNT===50);
 ok('intInput للعدّاد: فاصل الآلاف يُحذف (14,230 ⇒ 14230 لا 14.23)، وأرقام عربية/فارسية/بنغالية',F.intInput('14,230')==='14230'&&F.intInput('١٤٬٢٣٠')==='14230'&&F.intInput('۱۲')==='12'&&F.intInput('৫০km')==='50'&&F.intInput(null)==='');
 ok('decInput للمبالغ: نقطة عشرية واحدة، والفاصلة العربية نقطة',F.decInput('8٫5')==='8.5'&&F.decInput('5.0.1')==='5.01'&&F.decInput('50.')==='50.'&&F.parseNum('50.')===50);
 ok('riyadhMonth: منتصف الليل بتوقيت الرياض يبدأ الشهر الجديد',F.riyadhMonth('2026-10-31T23:00:00Z')==='2026-11'&&F.riyadhMonth('2026-10-31T20:00:00Z')==='2026-10');
 ok('parseNum: أرقام عربية وبنغالية وفاصلة عربية، والنص غير الرقمي ⇒ null',F.parseNum('١٤٢٣٠')===14230&&F.parseNum('১২')===12&&F.parseNum('8٫5')===8.5&&F.parseNum(' 50 ')===50&&F.parseNum('12a')===null&&F.parseNum('')===null&&F.parseNum(null)===null);
 
 // النماذج: الرفض لنقص حقل إلزامي فقط، بلا حدود ولا مقارنات
-ok('طلب الوقود: العدّاد ثم المبلغ ثم الصورة',F.fuelRequestError({odometer:'',amount:50,odoPhoto:1}).field==='odometer'&&F.fuelRequestError({odometer:'5',amount:'0',odoPhoto:1}).field==='amount'
-  &&F.fuelRequestError({odometer:'5',amount:50,odoPhoto:null}).field==='odoPhoto'&&F.fuelRequestError({odometer:'5',amount:50,odoPhoto:1})===null);
-ok('لا منع: عدّاد 0 أو أقل من السابق يُقبل في النموذج (لا مقارنة في البوابة)',F.fuelRequestError({odometer:'0',amount:50,odoPhoto:1})===null);
-ok('كل رسالة نقص بالعربي والبنغالي',['odometer','amount','odoPhoto'].every(f=>{const e=F.fuelRequestError({odometer:f==='odometer'?'':'1',amount:f==='amount'?'':'5',odoPhoto:f==='odoPhoto'?null:1});return e&&e.ar&&e.bn;}));
-ok('التعبئة: الفاتورة إلزامية، واللترات اختيارية لكن رقم إن وُجدت',F.fillError({odometer:'5',amount:'20',liters:'',odoPhoto:1,receipt:null}).field==='receipt'
-  &&F.fillError({odometer:'5',amount:'20',liters:'x',odoPhoto:1,receipt:1}).field==='liters'&&F.fillError({odometer:'5',amount:'20',liters:'',odoPhoto:1,receipt:1})===null);
 ok('طلب الزيت: عدّاد + صورة',F.oilRequestError({odometer:'',odoPhoto:1}).field==='odometer'&&F.oilRequestError({odometer:'9',odoPhoto:1})===null);
 ok('تأكيد الزيت: صورة العدّاد ثم الفاتورة/الملصق ثم اسم مسؤول سويتر',F.oilConfirmError({odometer:'9',odoPhoto:1,proof:null,tech:'x'}).field==='proof'
   &&F.oilConfirmError({odometer:'9',odoPhoto:1,proof:1,tech:'  '}).field==='tech'&&F.oilConfirmError({odometer:'9',odoPhoto:1,proof:1,tech:'Rashed'})===null);
@@ -53,7 +46,7 @@ ok('أسماء كل أنواع التنبيه الثمانية',['high_consumpti
 ok('لا يوجد في التنبيهات المجمّعة أي حقل درّاج',!JSON.stringify(G).includes('biker'));
 
 // الحدود
-ok('الحدود التسعة بأسماء ووحدات',F.SETTINGS.length===9&&F.SETTINGS.every(s=>s.ar&&s.unit));
+ok('الحدود التسعة + إعدادات الرصيد الستة بأسماء ووحدات',F.SETTINGS.length===15&&F.SETTINGS.every(s=>s.ar&&s.unit)&&F.SETTINGS.some(s=>s.k==='fuel_wallet_start'));
 ok('settingError: موجبة، والنسبة < 100',F.settingError('fill_gap_km','0')&&F.settingError('fuel_low_pct','100')&&F.settingError('fuel_low_pct','25')===null&&F.settingError('oil_interval_km','٢٠٠٠')===null);
 
 // تكلفة الكيلو الشهرية
@@ -67,4 +60,10 @@ ok('تكلفة الكيلو: تحويلات أكتوبر 100﷼ ÷ (2000 − 100
 ok('دراجة بلا تحويل ولا مسافة في الشهر لا تظهر',!C.find(r=>r.plate==='B'));
 const C2=F.monthlyCostPerKm('2026-10',[{vehicle_id:'v3',plate:'C',amount:50,odometer:100,requested_at:'2026-10-01',transferred_at:null},{vehicle_id:'v3',plate:'C',amount:50,odometer:400,requested_at:'2026-10-05',transferred_at:null}],[]);
 ok('مسافة بلا تحويل ⇒ تظهر بلا تكلفة للكيلو (لا قسمة على صفر)',C2[0].km===300&&C2[0].perKm===null);
+
+// رصيد الوقود: تكلفة الكيلو بالمبلغ الفعلي المحوَّل، والتعبئة المرفوضة لا تمدّ نطاق العدّاد
+{const C3=F.monthlyCostPerKm('2026-10',[{vehicle_id:'v9',plate:'Z',amount:50,amount_actual:40,odometer:1000,requested_at:'2026-10-02',transferred_at:'2026-10-02'}],
+  [{vehicle_id:'v9',plate:'Z',odometer:1200,fill_at:'2026-10-05',status:'approved'},{vehicle_id:'v9',plate:'Z',odometer:99999,fill_at:'2026-10-06',status:'rejected'}]);
+ok('تكلفة الكيلو: المبلغ الفعلي (40 لا 50) والمرفوضة مستبعدة (200 كم لا 98999)',C3.length===1&&C3[0].amount===40&&C3[0].km===200&&C3[0].perKm===0.2);}
+ok('أخطاء الإدارة لرصيد الوقود في الخريطة نفسها (DUPLICATE_TXN، ALREADY_REVIEWED)، ورسالة الزيت NOT_FOUND كما هي',/مستعمل/.test(F.adminRpcError({message:'DUPLICATE_TXN'}))&&/رُوجعت/.test(F.adminRpcError({message:'ALREADY_REVIEWED'}))&&F.adminRpcError({message:'NOT_FOUND'})==='الطلب غير موجود.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

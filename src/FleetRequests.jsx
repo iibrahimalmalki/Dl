@@ -5,9 +5,11 @@ import{useToast}from"./ui";
 import TestBadge from"./TestBadge";
 import{markTest,realBy}from"./testSandbox";
 import{FUEL_STATUS,OIL_STATUS,statusOf,CHANNELS,channelAr,alertAr,ALERT_KINDS,SETTINGS,settingError,parseNum,adminRpcError,splitRequests,splitOil,since,alertsByVehicle,monthlyCostPerKm,riyadhMonth}from"./fleetRequests";
+import{pendingFills,pricePerLiter,SOURCE_AR,transferFormError,fillStatus,sar}from"./fuelWallet";
 
-// «الأسطول ← الطلبات والتنبيهات»: طلبات الوقود والزيت من البوابة + لوحة fleet_alerts() + الحدود.
-// الصلاحية: وحدة fleet_alerts (عرض = القراءة، تعديل = التحويل والإرسال لسويتر والاعتماد وضبط الحدود) — المالك دائماً.
+// «الأسطول ← الطلبات والتنبيهات»: رصيد الوقود (دفعات بانتظار التحويل، تعبئات بانتظار الاعتماد، رصيد كل بايكر) + الزيت + fleet_alerts() + الحدود.
+// الصلاحية: وحدة fleet_alerts (عرض = القراءة، تعديل = التحويل/الرفض ومراجعة التعبئات والإرسال لسويتر والاعتماد وضبط الحدود) — المالك دائماً.
+// الرصيد والدفعات: docs/sql/fuel_wallet.sql (fuel_balances، transfer_fuel_request بالأسماء، reject_fuel_request، review_fuel_fill).
 // كل كتابة عبر دوال القاعدة (docs/sql/fleet_requests.sql). التنبيهات لكل دراجة لا لكل درّاج، ولا تصل الدرّاج.
 const fmt=iso=>{const d=new Date(iso);if(!iso||isNaN(d))return"—";const p=n=>String(n).padStart(2,"0");return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
 const Badge=({st})=><span className={"g-badge "+st.tone}><i/>{st.ar}</span>;
@@ -18,7 +20,7 @@ export default function FleetRequests({owner,tv}){
   const toast=useToast();
   const[perm,setPerm]=useState(owner?{view:true,edit:true}:null);
   const[d,setD]=useState(null);const[err,setErr]=useState(null);const[busy,setBusy]=useState(null);
-  const[refs,setRefs]=useState({});const[chans,setChans]=useState({});const[notes,setNotes]=useState({});const[vals,setVals]=useState({});
+  const[refs,setRefs]=useState({});const[amts,setAmts]=useState({});const[fees,setFees]=useState({});const[why,setWhy]=useState({});const[chans,setChans]=useState({});const[notes,setNotes]=useState({});const[vals,setVals]=useState({});
   const[month,setMonth]=useState(()=>riyadhMonth());
   useEffect(()=>{if(owner)return;(async()=>{const{data:{user}}=await supabase.auth.getUser();
     const{data}=await supabase.from("user_permissions").select("can_view,can_edit").eq("user_id",user&&user.id).eq("module","fleet_alerts").maybeSingle();
@@ -26,19 +28,26 @@ export default function FleetRequests({owner,tv}){
   async function load(){
     setErr(null);
     const from=new Date(Date.now()-120*864e5).toISOString();
-    const[fr,mr,al,st,fl]=await Promise.all([
+    const[fr,mr,al,st,fl,bl,pf]=await Promise.all([
       supabase.from("fuel_requests").select("*").gte("requested_at",from).order("requested_at",{ascending:false}),
       supabase.from("maintenance_requests").select("*").order("requested_at",{ascending:false}).limit(200),
       supabase.rpc("fleet_alerts"),
       supabase.from("fleet_alert_settings").select("key,vehicle_id,value,updated_at"),
-      supabase.from("fuel_logs").select("id,vehicle_id,plate,odometer,amount,fill_at,request_id,legacy,receipt_photo_url,odometer_photo_url").eq("legacy",false).gte("fill_at",from).order("fill_at",{ascending:false}),
+      supabase.from("fuel_logs").select("id,vehicle_id,plate,biker_employee_id,biker_name,odometer,amount,liters,fill_at,request_id,legacy,status,price_warn,reject_reason,receipt_photo_url,odometer_photo_url").eq("legacy",false).gte("fill_at",from).order("fill_at",{ascending:false}),
+      supabase.rpc("fuel_balances"),
+      // بانتظار الاعتماد: كل submitted بلا حدّ زمني (لا تُفقد تعبئة قديمة لم تُراجَع)
+      supabase.from("fuel_logs").select("id,vehicle_id,plate,biker_employee_id,biker_name,odometer,amount,liters,fill_at,request_id,legacy,status,price_warn,reject_reason,receipt_photo_url,odometer_photo_url").eq("legacy",false).eq("status","submitted").order("fill_at",{ascending:true}).limit(300),
     ]);
-    const e=[fr,mr,al,st,fl].find(x=>x.error);if(e)setErr(adminRpcError(e.error));
-    setD({fr:fr.data||[],mr:mr.data||[],al:al.data||[],st:st.data||[],fl:fl.data||[]});
+    const e=[fr,mr,al,st,fl,bl,pf].find(x=>x.error);if(e)setErr(adminRpcError(e.error));
+    setD({fr:fr.data||[],mr:mr.data||[],al:al.data||[],st:st.data||[],fl:fl.data||[],bl:bl.data||[],pf:pf.data||[]});
   }
   useEffect(()=>{if(perm&&perm.view)load();},[perm]);
 
   const R=useMemo(()=>d?splitRequests(d.fr):null,[d]);
+  const PF=useMemo(()=>d?pendingFills(d.pf):[],[d]);
+  // بايكر تجريبي: من له طلب أو تعبئة على دراجة تجريبية
+  const testBikers=useMemo(()=>new Set(d&&tv?[...d.fr,...d.fl].filter(x=>tv.has(x.vehicle_id)).map(x=>x.biker_employee_id):[]),[d,tv]);
+  const BL=useMemo(()=>d?[...d.bl].sort((a,b)=>Number(testBikers.has(a.biker_employee_id))-Number(testBikers.has(b.biker_employee_id))||Number(a.balance)-Number(b.balance)):[],[d,testBikers]);
   const O=useMemo(()=>d?splitOil(d.mr):null,[d]);
   const G=useMemo(()=>d?markTest(alertsByVehicle(d.al),tv):[],[d,tv]);
   const C=useMemo(()=>d?markTest(monthlyCostPerKm(month,d.fr,d.fl),tv):[],[d,month,tv]);
@@ -54,7 +63,14 @@ export default function FleetRequests({owner,tv}){
     if(error){toast.bad(adminRpcError(error),undefined,6000);return false;}
     toast.ok(ok);load();return true;
   }
-  const transfer=r=>{const ref=(refs[r.id]||"").trim();if(!ref){toast.bad("أدخل مرجع التحويل");return;}call("tr"+r.id,"transfer_fuel_request",{p_id:r.id,p_ref:ref},"سُجِّل التحويل — وصل الدرّاجَ إشعارٌ بالحالة");};
+  // التحويل بالأسماء (p_bank_txn): للدالة نسختان والقديمة مغلقة
+  const amtOf=r=>amts[r.id]!==undefined?amts[r.id]:String(r.amount??50),feeOf=r=>fees[r.id]!==undefined?fees[r.id]:"0.58";
+  const transfer=r=>{const f={txn:refs[r.id],amount:amtOf(r),fee:feeOf(r)};const e=transferFormError(f);if(e){toast.bad(e);return;}
+    call("tr"+r.id,"transfer_fuel_request",{p_id:r.id,p_bank_txn:String(f.txn).trim(),p_amount_actual:parseNum(f.amount),p_fee:parseNum(f.fee)},"سُجِّل التحويل — أُضيف لرصيد البايكر ووصله إشعار");};
+  const rejectReq=r=>{const w=(why["r"+r.id]||"").trim();if(!w){toast.bad("اكتب سبب الرفض");return;}call("rj"+r.id,"reject_fuel_request",{p_id:r.id,p_reason:w},"رُفض الطلب — وصل البايكرَ إشعارٌ بالسبب");};
+  const review=(f,okk)=>{const w=(why["f"+f.id]||"").trim();if(!okk&&!w){toast.bad("اكتب سبب الرفض");return;}
+    call("rv"+f.id,"review_fuel_fill",{p_id:f.id,p_ok:okk,p_reason:okk?null:w},okk?"اعتُمدت التعبئة":"رُفضت التعبئة — عاد مبلغها لرصيد البايكر");};
+  const tbB=id=>testBikers.has(id)&&<TestBadge/>;
   const send=r=>{const ch=chans[r.id];if(!ch){toast.bad("اختر قناة الإرسال");return;}call("se"+r.id,"send_oil_to_sweater",{p_id:r.id,p_channel:ch},"سُجِّل الإرسال لسويتر");};
   const approve=r=>call("ap"+r.id,"approve_oil_change",{p_id:r.id,p_note:(notes[r.id]||"").trim()||null},"اعتُمد تغيير الزيت — أُضيف لسجل صيانة الدراجة");
   const saveSet=k=>{const v=vals[k];const e=settingError(k,v);if(e){toast.bad(e);return;}call("st"+k,"set_fleet_alert_setting",{p_key:k,p_value:parseNum(v)},"حُفظ الحدّ").then(ok=>{if(ok)setVals(p=>({...p,[k]:undefined}));});};
@@ -66,22 +82,51 @@ export default function FleetRequests({owner,tv}){
     {err&&<div className="fq-msg err">{err}</div>}
     {!d?<div className="fq-empty">جارٍ التحميل…</div>:<>
     <div className="fq-kpis">
-      <div className={"fq-kpi"+(nr(R.pending)?" hot":"")}><b>{nr(R.pending)}</b><span>وقود بانتظار التحويل</span></div>
+      <div className={"fq-kpi"+(nr(R.pending)?" hot":"")}><b>{nr(R.pending)}</b><span>دفعات بانتظار التحويل</span></div>
+      <div className={"fq-kpi"+(nr(PF)?" hot":"")}><b>{nr(PF)}</b><span>تعبئات بانتظار الاعتماد</span></div>
       <div className="fq-kpi"><b>{nr(O.requested)}</b><span>زيت بانتظار الإرسال</span></div>
       <div className="fq-kpi"><b>{nr(O.done)}</b><span>زيت بانتظار الاعتماد</span></div>
       <div className="fq-kpi"><b>{realBy(d.al,tv).filter(a=>a.severity==="warn").length}</b><span>تحذيرات</span></div>
     </div>
 
-    {/* ١) الطلبات «المطلوبة» غير المحوَّلة: بارزة أعلى الصفحة — الطلب الجديد لا يغلقها */}
+    {/* ١) دفعات الرصيد بانتظار التحويل (تلقائية أو مستعجلة): رقم العملية والمبلغ الفعلي والرسوم، أو رفض بسبب */}
     <section className={"fq-sec"+(nr(R.pending)?" hot":"")}>
-      <h3><Icon n="fuel" s={16}/> طلبات وقود بانتظار التحويل <span className="fq-c">{nr(R.pending)}</span></h3>
-      {R.pending.length===0?<div className="fq-none">لا طلبات معلّقة.</div>:R.pending.map(r=><div className="fq-row" key={r.id}>
-        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} {tb(r)}</b>
-          <span>{r.amount}﷼ · العدّاد {r.odometer} · منذ {since(r.requested_at)} · {fmt(r.requested_at)}</span>
+      <h3><Icon n="fuel" s={16}/> دفعات بانتظار التحويل <span className="fq-c">{nr(R.pending)}</span></h3>
+      {R.pending.length===0?<div className="fq-none">لا دفعات معلّقة.</div>:R.pending.map(r=><div className="fq-row" key={r.id}>
+        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <span className={"g-badge "+(r.source==="urgent"?"warn":"info")}><i/>{SOURCE_AR[r.source]||r.source||"—"}</span> {tb(r)}</b>
+          <span>{sar(r.amount)}﷼ · منذ {since(r.requested_at)} · {fmt(r.requested_at)}{r.odometer!=null?" · العدّاد "+r.odometer:""}</span>
+          {r.reason&&<span>السبب: {r.reason}</span>}
           <Ph u={r.odometer_photo_url} t="صورة العدّاد"/></div>
-        {ed&&<div className="fq-act"><input className="g-input" placeholder="مرجع التحويل" value={refs[r.id]||""} onChange={e=>setRefs(p=>({...p,[r.id]:e.target.value}))} maxLength={200}/>
-          <button className="g-btn primary" disabled={busy==="tr"+r.id} onClick={()=>transfer(r)}><Icon n="check" s={14}/> حُوِّل</button></div>}
+        {ed&&<div className="fq-act fq-tr">
+          <input className="g-input" placeholder="رقم العملية البنكية" value={refs[r.id]||""} onChange={e=>setRefs(p=>({...p,[r.id]:e.target.value}))} maxLength={200}/>
+          <label>المبلغ<input className="g-input fq-n" inputMode="decimal" value={amtOf(r)} onChange={e=>setAmts(p=>({...p,[r.id]:e.target.value}))}/></label>
+          <label>الرسوم<input className="g-input fq-n" inputMode="decimal" value={feeOf(r)} onChange={e=>setFees(p=>({...p,[r.id]:e.target.value}))}/></label>
+          <button className="g-btn primary" disabled={busy==="tr"+r.id} onClick={()=>transfer(r)}><Icon n="check" s={14}/> حوِّل</button>
+          <input className="g-input" placeholder="سبب الرفض" value={why["r"+r.id]||""} onChange={e=>setWhy(p=>({...p,["r"+r.id]:e.target.value}))} maxLength={500}/>
+          <button className="g-btn" disabled={busy==="rj"+r.id} onClick={()=>rejectReq(r)}><Icon n="x" s={14}/> ارفض</button></div>}
       </div>)}
+    </section>
+
+    {/* ١ب) تعبئات بانتظار الاعتماد — السعر خارج النطاق تحذير للمراجع لا رفض */}
+    <section className={"fq-sec"+(nr(PF)?" hot":"")}>
+      <h3><Icon n="doc" s={16}/> تعبئات بانتظار الاعتماد <span className="fq-c">{nr(PF)}</span></h3>
+      {PF.length===0?<div className="fq-none">لا تعبئات بانتظار المراجعة.</div>:PF.map(f=>{const pl=pricePerLiter(f);return<div className="fq-row" key={f.id}>
+        <div className="fq-main"><b>{f.plate||"—"} · {f.biker_name||f.biker_employee_id} {f.price_warn&&<span className="g-badge warn"><i/>⚠️ سعر اللتر خارج النطاق</span>} {tb(f)}</b>
+          <span>{sar(f.amount)}﷼ · {f.liters!=null?sar(f.liters)+" لتر":"— لتر"} · {pl!=null?pl+" ﷼/لتر":"—"} · العدّاد {f.odometer??"—"} · {fmt(f.fill_at)}</span>
+          <span className="fq-phs"><Ph u={f.receipt_photo_url} t="الفاتورة"/><Ph u={f.odometer_photo_url} t="العدّاد"/></span></div>
+        {ed&&<div className="fq-act">
+          <button className="g-btn primary" disabled={busy==="rv"+f.id} onClick={()=>review(f,true)}><Icon n="check" s={14}/> اعتماد</button>
+          <input className="g-input" placeholder="سبب الرفض" value={why["f"+f.id]||""} onChange={e=>setWhy(p=>({...p,["f"+f.id]:e.target.value}))} maxLength={500}/>
+          <button className="g-btn" disabled={busy==="rv"+f.id} onClick={()=>review(f,false)}><Icon n="x" s={14}/> ارفض</button></div>}
+      </div>;})}
+    </section>
+
+    {/* ١ج) رصيد كل بايكر: المحوَّل − المصروف (غير المرفوض) منذ بداية الرصيد */}
+    <section className="fq-sec">
+      <h3><Icon n="cash" s={16}/> أرصدة الوقود</h3>
+      {BL.length===0?<div className="fq-none">لا أرصدة بعد.</div>:<div className="fq-tw"><table className="fq-t"><thead><tr><th>البايكر</th><th>المحوَّل</th><th>المصروف</th><th>الرصيد</th><th>بانتظار الاعتماد</th><th>دفعة مفتوحة</th></tr></thead>
+        <tbody>{BL.map(b=><tr key={b.biker_employee_id}><td>{b.biker_name||b.biker_employee_id} {tbB(b.biker_employee_id)}</td><td>{sar(b.transferred)}﷼</td><td>{sar(b.spent)}﷼</td>
+          <td><b>{sar(b.balance)}﷼</b></td><td>{b.pending_fills||0}</td><td>{b.open_request_id?`${SOURCE_AR[b.open_source]||""} · منذ ${since(b.open_since)}`:"—"}</td></tr>)}</tbody></table></div>}
     </section>
 
     {/* ٢) الزيت */}
@@ -129,8 +174,8 @@ export default function FleetRequests({owner,tv}){
       <h3><Icon n="doc" s={16}/> آخر الطلبات</h3>
       {[...R.transferred,...R.closed].slice(0,20).map(r=>{const fs=fillsOf(r.id);return<div className="fq-row" key={r.id}>
         <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(FUEL_STATUS,r.status)}/> {tb(r)}</b>
-          <span>{r.amount}﷼ · {r.transfer_ref||"—"} · حُوِّل {fmt(r.transferred_at)} · {fs.length} تعبئة</span>
-          {fs.length>0&&<span className="fq-phs">{fs.map(f=><Ph key={f.id} u={f.receipt_photo_url} t={"فاتورة "+(f.amount||"")+"﷼"}/>)}</span>}</div></div>;})}
+          <span>{sar(r.amount_actual??r.amount)}﷼{Number(r.fee)>0?` (+${sar(r.fee)} رسوم)`:""} · {r.bank_txn||r.transfer_ref||"—"} · {r.transferred_at?"حُوِّل "+fmt(r.transferred_at):r.reject_reason||"—"} · {fs.length} تعبئة</span>
+          {fs.length>0&&<span className="fq-phs">{fs.map(f=><Ph key={f.id} u={f.receipt_photo_url} t={"فاتورة "+(f.amount||"")+"﷼ · "+fillStatus(f.status).ar}/>)}</span>}</div></div>;})}
       {R.transferred.length+R.closed.length===0&&<div className="fq-none">لا طلبات بعد.</div>}
     </section>
 
@@ -151,7 +196,7 @@ const CSS=`
 .fq{display:flex;flex-direction:column;gap:14px;max-width:980px}
 .fq-msg{padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:700}.fq-msg.err{background:var(--bad-bg);color:var(--bad-ink)}
 .fq-empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:40px 16px;color:var(--mut);font-size:13px;text-align:center}.fq-empty b{color:var(--ink);font-size:15px}
-.fq-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.fq-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 .fq-kpi{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:2px;box-shadow:var(--shadow)}
 .fq-kpi b{font-size:21px;font-weight:800}.fq-kpi span{font-size:11.5px;color:var(--mut);font-weight:600}
 .fq-kpi.hot{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}.fq-kpi.hot b{color:var(--warn-ink)}
@@ -167,6 +212,7 @@ const CSS=`
 .fq-phs{display:flex;gap:6px;flex-wrap:wrap}
 .fq-ph{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;color:var(--info-ink);background:var(--info-bg);border-radius:8px;padding:2px 8px;text-decoration:none;width:max-content}
 .fq-act{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.fq-act .g-input{width:190px;min-height:38px}
+.fq-tr label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--mut);font-weight:700}.fq-act .g-input.fq-n{width:72px}
 .fq-veh{border-top:1px solid var(--line);padding:9px 0}.fq-veh:first-of-type{border-top:0}
 .fq-vh{display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px;margin-bottom:6px}
 .fq-al{display:flex;gap:8px;align-items:flex-start;border-radius:10px;padding:7px 10px;margin-bottom:5px;background:var(--info-bg);color:var(--info-ink)}

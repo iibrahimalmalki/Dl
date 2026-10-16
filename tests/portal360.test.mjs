@@ -28,12 +28,20 @@ const SCEN={
   phonepiece:{label:'العهدة — الجوال في «عهدتي الحالية»',biker_assets:[decl('baseline','approved',{reviewed_at:'2026-10-09T12:00:00Z'})],
     custody_assets:[{...asset('20000000-0000-0000-0000-000000000009','الجوال','Mobile Phone','2026-10-14','2028-10-14',24),item_type:'device',category:'أجهزة',serial_no:'490154203237518',specs:{brand_model:'Samsung A15',acc:{charger:true,holder:true,case:false}}}]},
   rejected:{label:'العهدة — مرفوض (السبب ظاهر)',biker_assets:[decl('baseline','rejected',{reject_reason:'أعد التسجيل مع صورة لكل قطعة'})],custody_assets:[]},
-  // الوقود والزيت: طلب «مطلوب» وآخر «حُوِّل» وتعبئة، وطلب زيت «أُرسل لسويتر» ⇒ نموذج تأكيد التنفيذ ظاهر
-  fuel:{label:'الوقود والزيت — طلبات وتعبئة وتأكيد الزيت',tabs:[['fuel','الوقود']],biker_assets:[],custody_assets:[],
-    fuel_requests:[{id:'50000000-0000-0000-0000-000000000001',plate:'5531 BG',amount:50,odometer:14230,status:'requested',requested_at:'2026-10-12T08:00:00Z',transferred_at:null},
-      {id:'50000000-0000-0000-0000-000000000002',plate:'5531 BG',amount:50,odometer:13410,status:'transferred',requested_at:'2026-10-05T08:00:00Z',transferred_at:'2026-10-05T10:00:00Z'}],
-    fuel_logs:[{id:'60000000-0000-0000-0000-000000000001',plate:'5531 BG',odometer:13420,amount:25,fill_at:'2026-10-05T12:00:00Z',request_id:'50000000-0000-0000-0000-000000000002'}],
+  // رصيد الوقود: رصيد 7 ﷼ ودفعة تلقائية «مطلوبة» (لا زر مستعجلة)، ودفعة «حُوِّل»، وتعبئة معتمدة وأخرى مرفوضة بسببها،
+  // وطلب زيت «أُرسل لسويتر» ⇒ نموذج تأكيد التنفيذ ظاهر
+  fuel:{label:'الوقود والزيت — الرصيد ودفعة تلقائية وتعبئات وتأكيد الزيت',tabs:[['fuel','الوقود']],biker_assets:[],custody_assets:[],
+    wallet:[{balance:7,threshold:10,topup_amount:50,tolerance:10}],
+    fuel_requests:[{id:'50000000-0000-0000-0000-000000000001',plate:'5531 BG',amount:50,amount_actual:null,source:'auto',odometer:14230,status:'requested',requested_at:'2026-10-12T08:00:00Z',transferred_at:null},
+      {id:'50000000-0000-0000-0000-000000000002',plate:'5531 BG',amount:50,amount_actual:50,source:'manual',odometer:13410,status:'transferred',requested_at:'2026-10-05T08:00:00Z',transferred_at:'2026-10-05T10:00:00Z'}],
+    fuel_logs:[{id:'60000000-0000-0000-0000-000000000001',plate:'5531 BG',odometer:13420,amount:25,liters:11,status:'approved',fill_at:'2026-10-05T12:00:00Z'},
+      {id:'60000000-0000-0000-0000-000000000002',plate:'5531 BG',odometer:13500,amount:18,liters:6,status:'rejected',reject_reason:'الفاتورة غير واضحة — أعد تصويرها',fill_at:'2026-10-06T12:00:00Z'}],
     maintenance_requests:[{id:'70000000-0000-0000-0000-000000000001',plate:'5531 BG',status:'sent',odometer:14100,requested_at:'2026-10-10T08:00:00Z',sent_at:'2026-10-10T09:00:00Z',done_at:null,approved_at:null}]},
+  // رصيد منخفض بلا طلب مفتوح (آخر طلب رُفض) ⇒ زر «دفعة مستعجلة» ونموذج السبب
+  fuellow:{label:'الوقود — رصيد منخفض ودفعة مستعجلة',tabs:[['fuel','الوقود']],biker_assets:[],custody_assets:[],
+    wallet:[{balance:4.5,threshold:10,topup_amount:50,tolerance:10}],
+    fuel_requests:[{id:'50000000-0000-0000-0000-000000000003',plate:'5531 BG',amount:50,amount_actual:null,source:'auto',status:'rejected',reject_reason:'تُدمج مع دفعة الأسبوع',requested_at:'2026-10-12T08:00:00Z',rejected_at:'2026-10-12T09:00:00Z',transferred_at:null}],
+    fuel_logs:[]},
   // الحساب التجريبي (is_test): سطر «حساب تجريبي» في الرأس وشارة على الدراجة، بلغتين وبلا تجاوز
   // «أدائي» بعد ترحيل يوليو: بطاقة «مسيري المعتمد» (565.40 مدفوعة بتاريخ ومرجع مختصر) + يونيو، بجانب أداء الشهر
   pay:{label:'أدائي — المسير المعتمد',tabs:[['perf','أدائي']],biker_assets:[],custody_assets:[],
@@ -59,6 +67,7 @@ function restReply(url,headers,scen){
     biker_assets:scen.biker_assets,custody_assets:scen.custody_assets,my_custody_assets:scen.custody_assets,
     ops_biker_month:scen.ops_biker_month||[],payroll_lines:scen.payroll_lines||[],
     fuel_requests:scen.fuel_requests||[],fuel_logs:scen.fuel_logs||[],maintenance_requests:scen.maintenance_requests||[],
+    'rpc/my_fuel_balance':scen.wallet||[{balance:50,threshold:10,topup_amount:50,tolerance:10}],
   }[table]||[];
   const body=single?(rows[0]||null):rows;
   if(single&&!rows[0])return{status:406,body:JSON.stringify({code:'PGRST116',message:'0 rows'})};
@@ -143,18 +152,32 @@ try{
       ok('نموذج «تحديث الحالة» مفتوح @360 بلا تجاوز',o.doc<=o.w&&o.bad.length===0&&await page.getByRole('button',{name:'إرسال للاعتماد'}).count()===1);
     }
     if(key==='baseline'){
-      // الوقود بلا بيانات: «اطلب وقوداً» بمبلغ 50 مملوء، و«سجّل تعبئة»، ونموذج «اطلب تغيير الزيت»، ولا خيار «زيت» في التعبئة
+      // الوقود بلا بيانات: بطاقة «رصيدك 50 ﷼» بلغتين، لا «اطلب وقوداً» ولا «دفعة مستعجلة»، و«سجّل تعبئة» باللترات إلزامية، و«اطلب تغيير الزيت»
       await page.locator('.g-bnav-i',{hasText:'الوقود'}).count()?await page.locator('.g-bnav-i',{hasText:'الوقود'}).first().click():(await page.getByRole('button',{name:/المزيد/}).click(),await page.locator('.gs-item',{hasText:'الوقود'}).first().click());
       await page.waitForTimeout(500);
-      ok('الوقود: «اطلب وقوداً» (50 مملوءة) و«سجّل تعبئة» و«اطلب تغيير الزيت»، بلا اختيار «زيت» في التعبئة',
-        await page.getByText('اطلب وقوداً').count()===1&&await page.locator('#fr_amt').inputValue()==='50'&&await page.getByText('سجّل تعبئة').count()===1
+      ok('الوقود: «رصيدك 50 ﷼» بلغتين، بلا «اطلب وقوداً» ولا «دفعة مستعجلة»، و«سجّل تعبئة» واللترات إلزامية، و«اطلب تغيير الزيت»',
+        await page.locator('.fw-num').innerText().then(x=>/50/.test(x))&&await page.locator('.fw-lbl .bn',{hasText:'আপনার ব্যালেন্স'}).count()===1
+        &&await page.getByText('اطلب وقوداً').count()===0&&await page.locator('#fr_amt').count()===0&&await page.getByRole('button',{name:/دفعة مستعجلة/}).count()===0
+        &&await page.getByText('سجّل تعبئة').count()===1&&await page.locator('label[for=ff_lit] .bp-req').count()===1
         &&await page.getByRole('button',{name:'اطلب تغيير الزيت'}).count()===1&&await page.getByRole('radio',{name:/زيت/}).count()===0);
     }
     if(key==='fuel'){
-      ok('الوقود: الحالات ظاهرة بلغتين («مطلوب» و«حُوِّل»)، ونموذج تأكيد الزيت (الإثبات + اسم مسؤول سويتر)',
-        await page.getByText('مطلوب ·',{exact:false}).count()>=1&&await page.getByText('حُوِّل ·',{exact:false}).count()>=1&&await page.locator('#oc_tech').count()===1&&await page.getByRole('button',{name:'أكّد تغيير الزيت'}).count()===1);
+      ok('الوقود: «رصيدك 7 ﷼» منخفض، و«طلب 50 ﷼ أُرسل للإدارة» بلغتين، بلا زر مستعجلة (طلب مفتوح)',
+        await page.locator('.fw-bal.low .fw-num').innerText().then(x=>/7/.test(x))&&await page.getByText('طلب 50 ﷼ أُرسل للإدارة').count()===1
+        &&await page.locator('.fw-next .bn',{hasText:'ম্যানেজমেন্টে পাঠানো'}).count()===1&&await page.getByRole('button',{name:/دفعة مستعجلة/}).count()===0);
+      ok('الوقود: الحالات ظاهرة بلغتين («مطلوب» و«حُوِّل» و«معتمدة» و«مرفوضة» بسببها)، ونموذج تأكيد الزيت',
+        await page.getByText('مطلوب ·',{exact:false}).count()>=1&&await page.getByText('حُوِّل ·',{exact:false}).count()>=1&&await page.getByText('معتمدة ·',{exact:false}).count()===1
+        &&await page.getByText('الفاتورة غير واضحة — أعد تصويرها',{exact:false}).count()===1&&await page.locator('#oc_tech').count()===1&&await page.getByRole('button',{name:'أكّد تغيير الزيت'}).count()===1);
       const txt=await page.locator('.bp-content').innerText();
       ok('لا أرقام تحليلية للدرّاج (لا كم/لتر، لا استهلاك، لا مخصّص شهري)',!/كم\s*\/|كم لكل|استهلاك|متوسط|مخصّص|تجاوز|280/.test(txt));
+    }
+    if(key==='fuellow'){
+      ok('رصيد منخفض بلا طلب مفتوح: آخر طلب «رُفض» بسببه، وزر «دفعة مستعجلة» بلغتين',
+        await page.getByText('رُفض طلب الدفعة — تُدمج مع دفعة الأسبوع').count()===1&&await page.getByRole('button',{name:/دفعة مستعجلة/}).count()===1
+        &&(await page.locator('.bp-content').innerText()).includes('জরুরি টাকা'));
+      await page.getByRole('button',{name:/دفعة مستعجلة/}).click();await page.waitForTimeout(300);
+      const o=await page.evaluate(overflow);await page.screenshot({path:path.join(OUT,'fuel-urgent.png'),fullPage:true});
+      ok('نموذج سبب الدفعة المستعجلة مفتوح @360 بلا تجاوز',o.doc<=o.w&&o.bad.length===0&&await page.locator('#fw_reason').count()===1&&await page.getByRole('button',{name:'أرسل الطلب'}).count()===1);
     }
     if(key==='test')ok('الحساب التجريبي: «🧪 حساب تجريبي» في الرأس وعلى الدراجة، بالعربي والبنغالي',
       await page.getByText('🧪 حساب تجريبي',{exact:false}).count()===1&&await page.locator('.bp-pcell .k',{hasText:'🧪 تجريبي'}).count()===1&&await page.locator('.bn',{hasText:'পরীক্ষামূলক অ্যাকাউন্ট'}).count()===1&&await page.locator('.bn',{hasText:/^পরীক্ষামূলক$/}).count()===1);
