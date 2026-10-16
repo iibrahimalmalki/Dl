@@ -1,5 +1,5 @@
 -- ═══ fuel_wallet.sql — القسم A (يُلصق في SQL Editor كما هو) ═══
--- الحالة: **لم يُطبَّق**. يسبق القسم B من docs/sql/fuel_wallet.sql (فيه drop constraint / drop not null وأداة MCP تتعطل عليها).
+-- الحالة: **طُبِّق 2026-10-16** (المالك من SQL Editor؛ تحقق YES | YES | true | true). يسبق القسم B من docs/sql/fuel_wallet.sql.
 -- آمن لإعادة التشغيل. معاملة واحدة: إن فشل سطر لا يتغير شيء.
 
 begin;
