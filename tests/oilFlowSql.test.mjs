@@ -26,6 +26,9 @@ ps(`do $$ begin create role anon; exception when others then null; end $$;
 do $$ begin create role authenticated; exception when others then null; end $$;
 create schema auth; create function auth.uid() returns uuid language sql stable as $f$ select nullif(current_setting('test.uid',true),'')::uuid $f$;
 grant usage on schema auth to authenticated, anon;
+create schema storage; create table storage.objects (bucket_id text, name text); alter table storage.objects enable row level security;
+create function storage.foldername(name text) returns text[] language sql immutable as $f$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'),1)-1] $f$;
+grant usage on schema storage to authenticated, anon; grant select, insert on storage.objects to authenticated;
 create table public.app_users (id uuid primary key, is_owner boolean not null default false, biker_employee_id text, active boolean not null default true);
 create table public.user_permissions (user_id uuid, module text, can_view boolean, can_edit boolean);
 create table public.employees (id uuid primary key, full_name text, employee_id text, operator_id uuid);
@@ -71,7 +74,10 @@ ok('oil_flow_A.sql: أوامر حقيقية (begin … commit) فيها drop con
 ok('القسم B بلا drop ولا delete ولا truncate (عبر الأداة)، وبلا تعديل بيانات',!/\b(drop|delete|truncate)\b/i.test(B)&&!/^\s*update /m.test(B.replace(/^.*update public\.maintenance_requests set.*$/gm,'')));
 ok('قبل A: «cancelled» مرفوضة بقيد الحالة القديم',/check constraint/.test(err(`update maintenance_requests set status='cancelled' where id='${M.req}'`)||''));
 const eA=err(A),eA2=err(A);ok('oil_flow_A.sql يُطبَّق مرتين بلا خطأ'+(eA||eA2?' — '+String(eA||eA2).slice(0,300):''),!eA&&!eA2);
-ok('استعلام تحقق A يعطي true | 3',ps(A.slice(A.indexOf('═══ التحقق')).split('\n').slice(1).join('\n'))==='t|3');
+ok('استعلام تحقق A يعطي true | true | 3',ps(A.slice(A.indexOf('═══ التحقق')).split('\n').slice(1).join('\n'))==='t|t|3');
+const up=(u,path)=>asErr(u,`insert into storage.objects values ('field-evidence','${path}')`);
+ok('سياسة رفع صور الإدارة: محرّر fleet_alerts يرفع تحت fleet-admin/ فقط، والعرض فقط وغيره لا',!up(FA_EDIT,'fleet-admin/oil/x/1.jpg')&&/row-level security/.test(up(FA_EDIT,'biker-portal/x/1.jpg')||'')
+  &&/row-level security/.test(up(FA_VIEW,'fleet-admin/oil/x/1.jpg')||'')&&/row-level security/.test(up(FLEET,'fleet-admin/oil/x/1.jpg')||''));
 const eB=err(B);ok('القسم B يُطبَّق بلا خطأ'+(eB?' — '+eB.slice(0,400):''),!eB);if(eA||eB)process.exit(1);
 const eB2=err(B);ok('القسم B آمن لإعادة التشغيل'+(eB2?' — '+eB2.slice(0,200):''),!eB2);
 ok('بعد B: الصفوف الثلاثة كما هي (sent/approved/requested، المصدر biker، بلا رفض)',ps(`select string_agg(status||':'||source||':'||jsonb_array_length(exec_rejections), ',' order by requested_at) from maintenance_requests`)==='sent:biker:0,approved:biker:0,requested:biker:0');
