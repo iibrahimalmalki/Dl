@@ -14,9 +14,6 @@ ok('riyadhMonth: منتصف الليل بتوقيت الرياض يبدأ الش
 ok('parseNum: أرقام عربية وبنغالية وفاصلة عربية، والنص غير الرقمي ⇒ null',F.parseNum('١٤٢٣٠')===14230&&F.parseNum('১২')===12&&F.parseNum('8٫5')===8.5&&F.parseNum(' 50 ')===50&&F.parseNum('12a')===null&&F.parseNum('')===null&&F.parseNum(null)===null);
 
 // النماذج: الرفض لنقص حقل إلزامي فقط، بلا حدود ولا مقارنات
-ok('طلب الزيت: عدّاد + صورة',F.oilRequestError({odometer:'',odoPhoto:1}).field==='odometer'&&F.oilRequestError({odometer:'9',odoPhoto:1})===null);
-ok('تأكيد الزيت: صورة العدّاد ثم الفاتورة/الملصق ثم اسم مسؤول سويتر',F.oilConfirmError({odometer:'9',odoPhoto:1,proof:null,tech:'x'}).field==='proof'
-  &&F.oilConfirmError({odometer:'9',odoPhoto:1,proof:1,tech:'  '}).field==='tech'&&F.oilConfirmError({odometer:'9',odoPhoto:1,proof:1,tech:'Rashed'})===null);
 
 // رسائل أخطاء الدوال
 const be=F.bikerRpcError({message:'NO_BIKE'});
@@ -25,16 +22,13 @@ ok('خطأ غير معروف أو خطأ شبكة ⇒ null (يُترك لـ huma
 ok('أخطاء الإدارة بالعربي، وغير المعروف يعرض نصه',F.adminRpcError({message:'P0001: REF_REQUIRED'})==='أدخل مرجع التحويل.'&&/boom/.test(F.adminRpcError({message:'boom'})));
 
 // الحالات
-ok('حالات الوقود والزيت بلغتين',['requested','transferred','closed'].every(s=>F.FUEL_STATUS[s].ar&&F.FUEL_STATUS[s].bn)&&['requested','sent','done','approved'].every(s=>F.OIL_STATUS[s].ar&&F.OIL_STATUS[s].bn));
+ok('حالات الوقود والزيت بلغتين',['requested','transferred','closed'].every(s=>F.FUEL_STATUS[s].ar&&F.FUEL_STATUS[s].bn)&&['requested','sent','done','approved','cancelled'].every(s=>F.OIL_STATUS[s].ar&&F.OIL_STATUS[s].bn)&&F.OIL_STATUS.sent.ar==='قيد المتابعة مع سويتر'&&F.OIL_STATUS.requested===F.OIL_STATUS.sent);
 ok('حالة غير معروفة لا تكسر العرض',F.statusOf(F.FUEL_STATUS,'x').ar==='x');
 
 // الإدارة: «المطلوبة» غير المحوَّلة أولاً والأقدم أولاً
 const R=[{id:'a',status:'transferred',transferred_at:'2026-10-02'},{id:'b',status:'requested',requested_at:'2026-10-05'},{id:'c',status:'requested',requested_at:'2026-10-01'},{id:'d',status:'closed',requested_at:'2026-09-01'}];
 const S=F.splitRequests(R);
 ok('splitRequests: المطلوبة الأقدم أولاً، ثم المحوَّلة، ثم المغلقة',S.pending.map(x=>x.id).join()==='c,b'&&S.transferred.map(x=>x.id).join()==='a'&&S.closed.map(x=>x.id).join()==='d');
-const O=F.splitOil([{id:1,status:'requested',requested_at:'2026-10-03'},{id:2,status:'done',requested_at:'2026-10-01'},{id:3,status:'sent',requested_at:'2026-10-02'},{id:4,status:'approved',approved_at:'2026-09-01'}]);
-ok('splitOil يوزّع الحالات الأربع',O.requested.length===1&&O.sent[0].id===3&&O.done[0].id===2&&O.approved[0].id===4);
-ok('openOil: أحدث طلب مطلوب/مُرسل، والمعتمد أو المنفّذ لا يُعد مفتوحاً',F.openOil([{id:1,status:'approved',requested_at:'2026-10-09'},{id:2,status:'sent',requested_at:'2026-10-05'},{id:3,status:'requested',requested_at:'2026-10-06'}]).id===3&&F.openOil([{status:'done'}])===null);
 const now=Date.parse('2026-10-12T12:00:00Z');
 ok('since: ساعات ثم أيام',F.since('2026-10-12T11:30:00Z',now)==='أقل من ساعة'&&F.since('2026-10-12T02:00:00Z',now)==='10 ساعة'&&F.since('2026-10-08T12:00:00Z',now)==='4 يوم');
 

@@ -3,15 +3,17 @@ import { supabase } from "./supabase";
 import { useToast } from "./ui";
 import { humanError } from "./errors";
 import { Btn, ErrorNote, FieldErr, UploadBar, Skel, OfflineHint, useOnline, loadDraft, saveDraft } from "./uiKit";
-import { FUEL_STATUS, OIL_STATUS, statusOf, parseNum, intInput, decInput, oilRequestError, oilConfirmError, bikerRpcError, openOil } from "./fleetRequests";
+import { FUEL_STATUS, OIL_STATUS, statusOf, parseNum, intInput, decInput, bikerRpcError } from "./fleetRequests";
+import { bikerOil, oilRequestFormError, oilExecFormError } from "./oilFlow";
 import { walletOf, nextTopup, canUrgent, walletFillError, walletRpcError, fillStatus, sar } from "./fuelWallet";
 
 /*  بوابة البايكر — الوقود والزيت | জ্বালানি ও তেল
     ١) رصيد وقود متجدد: يستلم دفعة 50﷼ ويسجّل كل تعبئة بفاتورتها؛ تحت 10﷼ تُنشأ دفعة تلقائياً للإدارة (بلا نموذج طلب وقود).
        «دفعة مستعجلة» فقط برصيد تحت العتبة وبلا طلب مفتوح. ٢) سجّل تعبئة (اللترات إلزامية).
-    ٣) تغيير الزيت: اطلب (عدّاد + صورة) ← ترسله الإدارة لسويتر ← أكّد التنفيذ (عدّاد + فاتورة/ملصق + اسم مسؤول سويتر).
+    ٣) تغيير الزيت (docs/sql/oil_flow.sql): البايكر يرفع الطلب في تطبيق سويتر، ثم هنا لقطة الطلب + العدّاد وصورته ⇒ «قيد المتابعة مع سويتر»؛
+       بعد التنفيذ: لقطة من سويتر تثبته + العدّاد وصورته (اسم الفني اختياري) ⇒ تراجعها الإدارة فتعتمد أو ترفض بسبب فيعيد الرفع.
     مبدأ ثابت: الطلب يُقبل دائماً، ولا يرى الدرّاج أي رقم استهلاك أو تعليق أو مقارنة — التحليل للإدارة فقط.
-    كل الكتابة عبر دوال القاعدة (add_fuel_fill, request_urgent_topup, request_oil_change, confirm_oil_change): الهوية والدراجة من القاعدة.
+    كل الكتابة عبر دوال القاعدة (add_fuel_fill, request_urgent_topup, request_oil_change بثلاثة معاملات, confirm_oil_change): الهوية والدراجة من القاعدة.
     الرصيد من my_fuel_balance() (docs/sql/fuel_wallet.sql).
 */
 
@@ -52,7 +54,7 @@ export default function FuelOil({ me, myBike, kit }) {
     const [a, b, c] = await Promise.all([
       supabase.from("fuel_requests").select("id,plate,amount,amount_actual,status,source,requested_at,transferred_at,rejected_at,reject_reason").eq("biker_employee_id", bid).order("requested_at", { ascending: false }).limit(8),
       supabase.from("fuel_logs").select("id,plate,odometer,amount,liters,fill_at,status,reject_reason").eq("biker_employee_id", bid).eq("legacy", false).order("fill_at", { ascending: false }).limit(8),
-      supabase.from("maintenance_requests").select("id,plate,status,odometer,requested_at,sent_at,done_at,approved_at").eq("biker_employee_id", bid).order("requested_at", { ascending: false }).limit(6),
+      supabase.from("maintenance_requests").select("id,plate,status,odometer,requested_at,done_at,approved_at,exec_reject_reason").eq("biker_employee_id", bid).order("requested_at", { ascending: false }).limit(6),
     ]);
     const bad = [a, b, c].find(x => x.error);
     if (bad) throw bad.error;
@@ -203,13 +205,16 @@ function MyFuel({ reqs, fills }) {
 
 /* ---------- ٣) تغيير الزيت ---------- */
 function Oil({ me, kit, oils, onSaved }) {
-  const open = oils ? openOil(oils) : null;
+  const o = oils ? bikerOil(oils) : null;
   return <div className="bp-card g-card bp-free"><div className="bp-sec">
     <h2 className="bp-wiz-h" style={{ marginTop: 0 }}>🛢️ تغيير الزيت<span className="bn">তেল পরিবর্তন</span></h2>
-    {oils === null ? <Skel rows={2} card={false} /> : open ? <OilConfirm me={me} kit={kit} req={open} onSaved={onSaved} /> : <OilRequest me={me} kit={kit} onSaved={onSaved} />}
-    {oils && oils.length > 0 && <>
+    {o === null ? <Skel rows={2} card={false} /> : o.open ? <OilExec me={me} kit={kit} req={o.open} onSaved={onSaved} />
+      : o.review ? <div className="bp-item"><div className="t">العدّاد · <span className="bn" style={{ display: "inline" }}>ওডোমিটার</span> {o.review.odometer}<Badge st={statusOf(OIL_STATUS, o.review.status)} /></div>
+          <div className="m">تراجع الإدارة الصور الآن. <span className="bn" style={{ display: "inline" }}>ম্যানেজমেন্ট এখন ছবি যাচাই করছে।</span></div></div>
+      : <OilRequest me={me} kit={kit} onSaved={onSaved} />}
+    {o && o.list.length > 0 && <>
       <label className="bp-lbl">طلبات الزيت <span className="bn">/ তেলের অনুরোধ</span></label>
-      <div className="bp-list">{oils.map(r => <div className="bp-item" key={r.id}>
+      <div className="bp-list">{o.list.map(r => <div className="bp-item" key={r.id}>
         <div className="t">العدّاد · <span className="bn" style={{ display: "inline" }}>ওডোমিটার</span> {r.odometer}<Badge st={statusOf(OIL_STATUS, r.status)} /></div>
         <div className="m">{day(r.requested_at)}</div>
       </div>)}</div>
@@ -217,77 +222,87 @@ function Oil({ me, kit, oils, onSaved }) {
   </div></div>;
 }
 
+// ١) الطلب: يُرفع في تطبيق سويتر أولاً، ثم لقطة الطلب + العدّاد وصورته
 function OilRequest({ me, kit, onSaved }) {
   const bid = me.biker_employee_id;
-  const [odometer, setOdometer] = useState(""), [photo, setPhoto] = useState(null);
+  const [odometer, setOdometer] = useState(""), [photo, setPhoto] = useState(null), [shot, setShot] = useState(null);
   const [fe, setFe] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false);
   const up = useUploads(bid, kit.uploadPhoto); const { PhotoBox } = kit; const toast = useToast(); const online = useOnline();
   async function submit() {
     setErr(null);
-    const v = oilRequestError({ odometer, odoPhoto: photo });
-    if (v) { setFe(v); focusField(v.field === "odometer" ? "or_odo" : "or_ph"); return; }
+    const v = oilRequestFormError({ odometer, odoPhoto: photo, shot });
+    if (v) { setFe(v); focusField({ shot: "or_shot", odometer: "or_odo", odoPhoto: "or_ph" }[v.field]); return; }
     setFe(null); setBusy(true);
     try {
-      const [url] = await up.run([[photo, "oil-request-odometer"]]);
-      const { error } = await supabase.rpc("request_oil_change", { p_odometer: parseNum(odometer), p_odometer_photo_url: url });
+      const [s, o] = await up.run([[shot, "oil-request-shot"], [photo, "oil-request-odometer"]]);
+      const { error } = await supabase.rpc("request_oil_change", { p_odometer: parseNum(odometer), p_odometer_photo_url: o, p_request_shot_url: s });
       if (error) throw error;
-      toast.ok("تم إرسال طلب تغيير الزيت ✓", "তেল পরিবর্তনের অনুরোধ পাঠানো হয়েছে", 3500);
-      up.reset(); setOdometer(""); setPhoto(null); onSaved();
+      toast.ok("تم رفع طلب تغيير الزيت ✓", "তেল পরিবর্তনের অনুরোধ আপলোড হয়েছে", 3500);
+      up.reset(); setOdometer(""); setPhoto(null); setShot(null); onSaved();
     } catch (e) { setErr(toErr(e)); }
     setBusy(false); up.clear();
   }
   const errAt = f => fe && fe.field === f ? <FieldErr t={fe} /> : null;
+  const inv = f => fe && fe.field === f ? " k-inv" : "";
   return <>
-    <label className="bp-lbl" htmlFor="or_odo" style={{ marginTop: 0 }}>العدّاد (كم) <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার</span></label>
-    <input id="or_odo" className={"g-input bp-in" + (fe && fe.field === "odometer" ? " k-inv" : "")} inputMode="numeric" value={odometer} onChange={e => { setOdometer(intInput(e.target.value)); setFe(null); }} placeholder="14230" dir="ltr" style={{ textAlign: "right" }} />{errAt("odometer")}
+    <div className="bp-note" style={{ marginTop: 0 }}>١) ارفع طلب تغيير الزيت في تطبيق سويتر. ٢) ارفع هنا لقطة الشاشة مع العدّاد وصورته.
+      <span className="bn" style={{ display: "block" }}>১) সুইটার অ্যাপে তেল পরিবর্তনের অনুরোধ দিন। ২) এখানে স্ক্রিনশট, ওডোমিটার ও তার ছবি দিন।</span></div>
+    <label className="bp-lbl">لقطة طلب سويتر <span className="bp-req">*</span> <span className="bn">/ সুইটার অনুরোধের স্ক্রিনশট</span></label>
+    <div className={"bp-pgrid" + inv("shot")} style={{ gridTemplateColumns: "1fr" }}><PhotoBox id="or_shot" cap="لقطة الشاشة من سويتر" capBn="সুইটারের স্ক্রিনশট" tag="سويتر *" file={shot} onPick={x => { setShot(x); setFe(null); }} /></div>
+    {errAt("shot")}
+    <label className="bp-lbl" htmlFor="or_odo">العدّاد (كم) <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার</span></label>
+    <input id="or_odo" className={"g-input bp-in" + inv("odometer")} inputMode="numeric" value={odometer} onChange={e => { setOdometer(intInput(e.target.value)); setFe(null); }} placeholder="14230" dir="ltr" style={{ textAlign: "right" }} />{errAt("odometer")}
     <label className="bp-lbl">صورة العدّاد <span className="bp-req">*</span> <span className="bn">/ ওডোমিটারের ছবি</span></label>
-    <div className="bp-pgrid" style={{ gridTemplateColumns: "1fr" }}><PhotoBox id="or_ph" cap="صورة العدّاد" capBn="ওডোমিটার" tag="العداد *" file={photo} onPick={x => { setPhoto(x); setFe(null); }} /></div>
+    <div className={"bp-pgrid" + inv("odoPhoto")} style={{ gridTemplateColumns: "1fr" }}><PhotoBox id="or_ph" cap="صورة العدّاد" capBn="ওডোমিটার" tag="العداد *" file={photo} onPick={x => { setPhoto(x); setFe(null); }} /></div>
     {errAt("odoPhoto")}
     {err && <div style={{ marginTop: 12 }}><ErrorNote e={err} who={bid} busy={busy} onRetry={submit} onLogin={() => supabase.auth.signOut()} /></div>}
     {busy && up.prog && <UploadBar done={up.prog.done} total={up.prog.total} />}
-    <Btn kind="primary" block big busy={busy} disabled={!online} style={{ marginTop: 12 }} onClick={submit} bn="তেল পরিবর্তনের অনুরোধ">{busy ? "جارٍ الإرسال…" : "اطلب تغيير الزيت"}</Btn>
+    <Btn kind="primary" block big busy={busy} disabled={!online} style={{ marginTop: 12 }} onClick={submit} bn="অনুরোধ আপলোড করুন">{busy ? "جارٍ الإرسال…" : "ارفع طلب تغيير الزيت"}</Btn>
     {!online && <OfflineHint />}
   </>;
 }
 
-function OilConfirm({ me, kit, req, onSaved }) {
+// ٢) تحديث التنفيذ: لقطة من سويتر تثبته + العدّاد وصورته؛ اسم الفني اختياري. لا في دقيقة الطلب، ولا بعدّاد أقل منه.
+function OilExec({ me, kit, req, onSaved }) {
   const bid = me.biker_employee_id;
-  const [odometer, setOdometer] = useState(""), [odoPh, setOdoPh] = useState(null), [proof, setProof] = useState(null), [tech, setTech] = useState("");
+  const [odometer, setOdometer] = useState(""), [odoPh, setOdoPh] = useState(null), [shot, setShot] = useState(null), [tech, setTech] = useState("");
   const [fe, setFe] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false);
   const up = useUploads(bid, kit.uploadPhoto); const { PhotoBox } = kit; const toast = useToast(); const online = useOnline();
   async function submit() {
     setErr(null);
-    const v = oilConfirmError({ odometer, odoPhoto: odoPh, proof, tech });
-    if (v) { setFe(v); focusField({ odometer: "oc_odo", odoPhoto: "oc_odo_ph", proof: "oc_proof", tech: "oc_tech" }[v.field]); return; }
+    const v = oilExecFormError({ odometer, odoPhoto: odoPh, shot }, req);
+    if (v) { setFe(v); if (v.field !== "form") focusField({ execShot: "oc_shot", odometer: "oc_odo", odoPhoto: "oc_odo_ph" }[v.field]); return; }
     setFe(null); setBusy(true);
     try {
-      const [o, p] = await up.run([[odoPh, "oil-done-odometer"], [proof, "oil-done-proof"]]);
-      const { error } = await supabase.rpc("confirm_oil_change", { p_id: req.id, p_odometer: parseNum(odometer), p_odometer_photo_url: o, p_proof_url: p, p_tech_name: tech.trim() });
+      const [s, o] = await up.run([[shot, "oil-done-shot"], [odoPh, "oil-done-odometer"]]);
+      const { error } = await supabase.rpc("confirm_oil_change", { p_id: req.id, p_odometer: parseNum(odometer), p_odometer_photo_url: o, p_proof_url: s, p_tech_name: tech.trim() || null });
       if (error) throw error;
-      toast.ok("تم تأكيد تغيير الزيت ✓", "তেল পরিবর্তন নিশ্চিত হয়েছে", 3500);
+      toast.ok("تم رفع إثبات التنفيذ ✓", "কাজ সম্পন্নের প্রমাণ আপলোড হয়েছে", 3500);
       up.reset(); onSaved();
     } catch (e) { setErr(toErr(e)); }
     setBusy(false); up.clear();
   }
   const errAt = f => fe && fe.field === f ? <FieldErr t={fe} /> : null;
   const inv = f => fe && fe.field === f ? " k-inv" : "";
-  const st = statusOf(OIL_STATUS, req.status);
   return <>
-    <div className="bp-item" style={{ marginBottom: 4 }}><div className="t">طلبك الحالي · <span className="bn" style={{ display: "inline" }}>আপনার বর্তমান অনুরোধ</span> · {req.odometer}<Badge st={st} /></div><div className="m">{day(req.requested_at)}</div></div>
-    <div className="bp-note">بعد تغيير الزيت أكّد هنا. <span className="bn" style={{ display: "inline" }}>তেল পরিবর্তনের পর এখানে নিশ্চিত করুন।</span></div>
+    <div className="bp-item" style={{ marginBottom: 4 }}><div className="t">طلبك الحالي · <span className="bn" style={{ display: "inline" }}>আপনার বর্তমান অনুরোধ</span> · {req.odometer}<Badge st={statusOf(OIL_STATUS, req.status)} /></div><div className="m">{day(req.requested_at)}</div></div>
+    {req.exec_reject_reason && <div className="fw-next bad"><b>رُفض إثبات التنفيذ: {req.exec_reject_reason}</b><span className="bn">প্রমাণ প্রত্যাখ্যাত — আবার আপলোড করুন</span></div>}
+    <div className="bp-note">بعد تغيير الزيت ارفع لقطة من تطبيق سويتر تثبت التنفيذ، مع العدّاد وصورته.
+      <span className="bn" style={{ display: "block" }}>তেল পরিবর্তনের পর সুইটার অ্যাপের স্ক্রিনশট, ওডোমিটার ও তার ছবি দিন।</span></div>
+    <label className="bp-lbl">لقطة التنفيذ من سويتر <span className="bp-req">*</span> <span className="bn">/ সুইটারে সম্পন্নের স্ক্রিনশট</span></label>
+    <div className={"bp-pgrid" + inv("execShot")} style={{ gridTemplateColumns: "1fr" }}><PhotoBox id="oc_shot" cap="لقطة التنفيذ" capBn="সম্পন্নের স্ক্রিনশট" tag="سويتر *" file={shot} onPick={x => { setShot(x); setFe(null); }} /></div>
+    {errAt("execShot")}
     <label className="bp-lbl" htmlFor="oc_odo">العدّاد بعد التغيير (كم) <span className="bp-req">*</span> <span className="bn">/ পরিবর্তনের পর ওডোমিটার</span></label>
-    <input id="oc_odo" className={"g-input bp-in" + inv("odometer")} inputMode="numeric" value={odometer} onChange={e => { setOdometer(intInput(e.target.value)); setFe(null); }} placeholder="14240" dir="ltr" style={{ textAlign: "right" }} />{errAt("odometer")}
-    <label className="bp-lbl">صورة العدّاد والفاتورة أو ملصق الزيت <span className="bp-req">*</span> <span className="bn">/ ওডোমিটার ও রসিদ বা স্টিকারের ছবি</span></label>
-    <div className="bp-pgrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-      <div className={inv("odoPhoto")}><PhotoBox id="oc_odo_ph" cap="صورة العدّاد" capBn="ওডোমিটার" tag="العداد *" file={odoPh} onPick={x => { setOdoPh(x); setFe(null); }} /></div>
-      <div className={inv("proof")}><PhotoBox id="oc_proof" cap="الفاتورة أو الملصق" capBn="রসিদ বা স্টিকার" tag="الإثبات *" file={proof} onPick={x => { setProof(x); setFe(null); }} /></div>
-    </div>
-    {errAt("odoPhoto")}{errAt("proof")}
-    <label className="bp-lbl" htmlFor="oc_tech">اسم مسؤول الصيانة في سويتر <span className="bp-req">*</span> <span className="bn">/ সুইটারের মেইনটেন্যান্স দায়িত্বশীলের নাম</span></label>
-    <input id="oc_tech" className={"g-input bp-in" + inv("tech")} value={tech} maxLength={120} onChange={e => { setTech(e.target.value); setFe(null); }} />{errAt("tech")}
+    <input id="oc_odo" className={"g-input bp-in" + inv("odometer")} inputMode="numeric" value={odometer} onChange={e => { setOdometer(intInput(e.target.value)); setFe(null); }} placeholder={String(req.odometer ?? "14240")} dir="ltr" style={{ textAlign: "right" }} />{errAt("odometer")}
+    <label className="bp-lbl">صورة العدّاد <span className="bp-req">*</span> <span className="bn">/ ওডোমিটারের ছবি</span></label>
+    <div className={"bp-pgrid" + inv("odoPhoto")} style={{ gridTemplateColumns: "1fr" }}><PhotoBox id="oc_odo_ph" cap="صورة العدّاد" capBn="ওডোমিটার" tag="العداد *" file={odoPh} onPick={x => { setOdoPh(x); setFe(null); }} /></div>
+    {errAt("odoPhoto")}
+    <label className="bp-lbl" htmlFor="oc_tech">اسم الفني (اختياري) <span className="bn">/ টেকনিশিয়ানের নাম (ঐচ্ছিক)</span></label>
+    <input id="oc_tech" className="g-input bp-in" value={tech} maxLength={120} onChange={e => setTech(e.target.value)} />
+    {errAt("form")}
     {err && <div style={{ marginTop: 12 }}><ErrorNote e={err} who={bid} busy={busy} onRetry={submit} onLogin={() => supabase.auth.signOut()} /></div>}
     {busy && up.prog && <UploadBar done={up.prog.done} total={up.prog.total} />}
-    <Btn kind="primary" block big busy={busy} disabled={!online} style={{ marginTop: 12 }} onClick={submit} bn="নিশ্চিত করুন">{busy ? "جارٍ الحفظ…" : "أكّد تغيير الزيت"}</Btn>
+    <Btn kind="primary" block big busy={busy} disabled={!online} style={{ marginTop: 12 }} onClick={submit} bn="সম্পন্ন আপডেট করুন">{busy ? "جارٍ الحفظ…" : "حدّث التنفيذ"}</Btn>
     {!online && <OfflineHint />}
   </>;
 }
