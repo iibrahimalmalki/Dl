@@ -22,3 +22,10 @@ commit;
 select (select pg_get_constraintdef(oid) like '%cancelled%' from pg_constraint where conname = 'maintenance_requests_status_check') as status_ok,
        exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'fe_upload_fleet_admin') as upload_ok,
        (select count(*) from public.maintenance_requests) as rows_unchanged;
+
+-- ═══ تراجع A وحده (قبل تطبيق B؛ بعد B: انظر «تراجع» في docs/sql/oil_flow.sql) ═══
+-- begin;
+-- drop policy if exists fe_upload_fleet_admin on storage.objects;
+-- alter table public.maintenance_requests drop constraint if exists maintenance_requests_status_check;
+-- alter table public.maintenance_requests add constraint maintenance_requests_status_check check (status in ('requested', 'sent', 'done', 'approved'));
+-- commit;

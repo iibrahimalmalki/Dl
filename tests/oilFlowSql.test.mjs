@@ -81,7 +81,7 @@ ok('سياسة رفع صور الإدارة: محرّر fleet_alerts يرفع ت
 const eB=err(B);ok('القسم B يُطبَّق بلا خطأ'+(eB?' — '+eB.slice(0,400):''),!eB);if(eA||eB)process.exit(1);
 const eB2=err(B);ok('القسم B آمن لإعادة التشغيل'+(eB2?' — '+eB2.slice(0,200):''),!eB2);
 ok('بعد B: الصفوف الثلاثة كما هي (sent/approved/requested، المصدر biker، بلا رفض)',ps(`select string_agg(status||':'||source||':'||jsonb_array_length(exec_rejections), ',' order by requested_at) from maintenance_requests`)==='sent:biker:0,approved:biker:0,requested:biker:0');
-ok('fleet_alerts() بعد B: الفرق عن الإنتاج أربعة أسطر فقط (الملغاة ونص المتابعة)',(()=>{const s=ps(`select prosrc from pg_proc where proname='fleet_alerts'`);return (s.match(/status <> 'cancelled'/g)||[]).length===4&&s.includes('قيد المتابعة مع سويتر')&&!s.includes('أُرسل لسويتر');})());
+ok('fleet_alerts() بعد B: الفرق عن الإنتاج خمسة أسطر فقط (الملغاة، ونص المتابعة، وترتيب آخر تغيير بالتنفيذ)',(()=>{const s=ps(`select prosrc from pg_proc where proname='fleet_alerts'`);return (s.match(/status <> 'cancelled'/g)||[]).length===4&&s.includes('قيد المتابعة مع سويتر')&&!s.includes('أُرسل لسويتر')&&s.includes("order by coalesce(m.done_at, m.requested_at) desc limit 1) last_oil")&&!s.includes('order by m.approved_at desc');})());
 
 // ── الصلاحيات ──
 ok('الجديدة للمسجّل لا لـ anon، و_oil_since داخلية، والقديمتان مسحوبتان',ps(`select string_agg(x::text,',') from (values
@@ -90,7 +90,8 @@ ok('الجديدة للمسجّل لا لـ anon، و_oil_since داخلية، �
   (has_function_privilege('authenticated','public._oil_since(uuid,numeric,timestamp with time zone)','execute')),(has_function_privilege('anon','public.cancel_oil_request(uuid,text)','execute')),
   (has_function_privilege('authenticated','public.admin_add_oil_change(uuid,numeric,text,boolean,timestamp with time zone,text,text,text)','execute'))) t(x)`)==='true,false,false,false,false,false,true');
 ok('الدوال السبع security definer',ps(`select count(*) from pg_proc where proname in ('request_oil_change','confirm_oil_change','reject_oil_execution','cancel_oil_request','admin_add_oil_change','_oil_since') and prosecdef`)==='7');
-ok('request_oil_change القديمة ترفض بـ USE_NEW_OIL_REQUEST حتى لو نُفّذت',code(err(`select request_oil_change(1,'u')`))==='USE_NEW_OIL_REQUEST');
+ok('request_oil_change القديمة: المسجّل ⇒ permission denied (التنفيذ مسحوب)، وبلا قيد الصلاحية ⇒ USE_NEW_OIL_REQUEST',/permission denied for function/.test(asErr(MIDUL,`select request_oil_change(1,'u')`)||'')&&code(err(`select request_oil_change(1,'u')`))==='USE_NEW_OIL_REQUEST'
+  &&/permission denied for function/.test(asErr(OWNER,`select send_oil_to_sweater('${M.req}','whatsapp')`)||''));
 ok('الكتابة المباشرة في maintenance_requests ممنوعة على المسجّل حتى المالك (إدراج وتعديل)',/row-level security|permission denied/.test(asErr(OWNER,`insert into maintenance_requests (vehicle_id,biker_employee_id,odometer,odometer_photo_url) values ('${V.a}','1624',1,'u')`)||'')
   &&/permission denied/.test(asErr(OWNER,`update maintenance_requests set status='cancelled' where id='${M.req}'`)||''));
 for(const [who,u] of [['عرض فقط',FA_VIEW],['وحدة الأسطول (لا fleet_alerts)',FLEET],['بايكر',MIDUL],['بلا صلاحية',NOBODY]]){
@@ -121,6 +122,8 @@ ps(`update maintenance_requests set requested_at=requested_at + interval '30 day
 // ── ٢) و ٣) تحديث التنفيذ ──
 const conf=(u,id,odo,shot="'https://x/p.jpg'",tech='null')=>asErr(u,`select confirm_oil_change('${id}',${odo},'https://x/o2.jpg',${shot},${tech})`);
 ok('٣) في نفس دقيقة رفع الطلب ⇒ SAME_MINUTE',code(conf(MIDUL,mid,9110))==='SAME_MINUTE');
+ps(`update maintenance_requests set requested_at=now()-interval '59 seconds' where id='${mid}'`);
+ok('٣) بعد 59 ثانية (ولو تغيّرت دقيقة الساعة) ⇒ SAME_MINUTE',code(conf(MIDUL,mid,9110))==='SAME_MINUTE');
 ps(`update maintenance_requests set requested_at=now()-interval '2 minutes' where id in ('${mid}','${mid2}','${ark}')`);
 ok('٣) عدّاد أقل من عدّاد الطلب ⇒ ODOMETER_BELOW_REQUEST',code(conf(MIDUL,mid,9099))==='ODOMETER_BELOW_REQUEST');
 ok('٢) بلا لقطة التنفيذ من سويتر ⇒ SHOT_REQUIRED',code(conf(MIDUL,mid,9110,'null'))==='SHOT_REQUIRED');
@@ -157,8 +160,9 @@ ok('إلغاء طلب معتمد مسموح (بلا إشعار للبايكر) �
 // ── ٦) الإضافة نيابة عن البايكر ──
 const add=(u,args)=>asErr(u,`select admin_add_oil_change(${args})`);
 ok('دراجة بلا بايكر ⇒ NO_BIKER، ودراجة غير موجودة ⇒ NOT_FOUND',code(add(FA_EDIT,`'${V.x}',100,'o'`))==='NO_BIKER'&&code(add(FA_EDIT,`'${M.req}',100,'o'`))==='NOT_FOUND');
-ok('بلا صورة العدّاد ⇒ PHOTO_REQUIRED، وتاريخ مستقبلي ⇒ BAD_DATE، وأقدم من 400 يوم ⇒ BAD_DATE',code(add(FA_EDIT,`'${V.r}',100,null`))==='PHOTO_REQUIRED'
-  &&code(add(FA_EDIT,`'${V.r}',100,'o',false,now()+interval '2 hours'`))==='BAD_DATE'&&code(add(FA_EDIT,`'${V.r}',100,'o',false,now()-interval '401 days'`))==='BAD_DATE');
+ok('بلا صورة العدّاد ⇒ PHOTO_REQUIRED، وتاريخ مستقبلي (> دقيقتين) ⇒ BAD_DATE، وأقدم من 400 يوم ⇒ BAD_DATE، ولقطة تنفيذ لطلب مفتوح ⇒ PROOF_NEEDS_DONE، ودراجة غير نشطة ⇒ INACTIVE_VEHICLE',code(add(FA_EDIT,`'${V.r}',100,null`))==='PHOTO_REQUIRED'
+  &&code(add(FA_EDIT,`'${V.r}',100,'o',false,now()+interval '3 minutes'`))==='BAD_DATE'&&code(add(FA_EDIT,`'${V.r}',100,'o',false,now(),null,'p'`))==='PROOF_NEEDS_DONE'
+  &&(()=>{ps(`update fleet_vehicles set active=false where id='${V.x}'`);const e=code(add(FA_EDIT,`'${V.x}',100,'o'`));ps(`update fleet_vehicles set active=true where id='${V.x}'`);return e==='INACTIVE_VEHICLE';})()&&code(add(FA_EDIT,`'${V.r}',100,'o',false,now()-interval '401 days'`))==='BAD_DATE');
 const done=as(FA_EDIT,`select admin_add_oil_change('${V.r}',29000,'https://x/o.jpg',true,'2026-10-01 09:00+03','https://x/s.jpg','https://x/p.jpg','من فاتورة سويتر')`);
 ok('إضافة تغيير منفّذ: معتمد مباشرة باسم المُضيف، بتاريخ التنفيذ المُدخل، لبايكر الدراجة (رقيب «1700» بلا مسافات)',ps(`select status||'|'||source||'|'||biker_employee_id||'|'||biker_name||'|'||done_odometer||'|'||(approved_by='${FA_EDIT}')||'|'||(done_at='2026-10-01 06:00+00')||'|'||note from maintenance_requests where id='${done}'`)
   ==='approved|admin|1700|Mohamad Rakib|29000|true|true|من فاتورة سويتر');
@@ -170,6 +174,16 @@ ok('إضافة طلب مفتوح: لحائز الدراجة الحالي (عري
   &&ps(`select title from notif_log where dedupe like 'oil-add-${open}-%'`)==='سُجِّل لك طلب تغيير زيت · আপনার জন্য তেল পরিবর্তনের অনুরোধ নথিভুক্ত হয়েছে');
 ps(`update fleet_vehicles set held_by=null where id='${V.r}'`);
 ok('تاريخ قديم: المسافة تُحسب من تغيير معتمد قبله فقط (لا بعده)',(()=>{const x=as(FA_EDIT,`select admin_add_oil_change('${V.r}',28000,'o',true,'2026-09-01 09:00+03')`);return ps(`select since_km is null from maintenance_requests where id='${x}'`)==='t';})());
+
+ok('تاريخ بعد الآن بدقيقة (هامش الساعة) يُقبل ويُقصّ إلى الآن',(()=>{const x=as(FA_EDIT,`select admin_add_oil_change('${V.r}',29600,'o',false,now()+interval '1 minute')`);return ps(`select requested_at<=now() from maintenance_requests where id='${x}'`)==='t';})());
+ok('٨) عدّاد أقل من آخر تغيير معتمد ⇒ «⚠️ عدّاد أقل من آخر تغيير معتمد» لا «زيت مبكر»، بلا ذكر الحد',(()=>{const x=as(RAKIB,`select request_oil_change(28500,'o','s')`);const t=ps(`select title||' / '||body from notif_log where dedupe='oil-req-${x}-owner'`);
+  return t.startsWith('⚠️ عدّاد أقل من آخر تغيير معتمد — 5532 ق ب')&&t.includes('-500 كم')&&!t.includes('الحد');})());
+ok('استحقاق الزيت: تغيير قديم مُضاف لاحقاً لا يصير «آخر تغيير» (الترتيب بتاريخ التنفيذ)',(()=>{
+  const v='20000000-0000-0000-0000-00000000000b';ps(`insert into fleet_vehicles values ('${v}',null,'7777 تجربة','${E.r}',null,true)`);
+  as(FA_EDIT,`select admin_add_oil_change('${v}',14000,'o',true,now()-interval '7 days')`);
+  as(FA_EDIT,`select admin_add_oil_change('${v}',10000,'o',true,now()-interval '90 days')`);
+  ps(`insert into fuel_requests (vehicle_id,plate,biker_employee_id,odometer,odometer_photo_url,amount,status,requested_at) values ('${v}','7777 تجربة','1700',14500,'u',50,'requested',now())`);
+  return as(OWNER,`select count(*) from fleet_alerts() where kind='oil_due' and vehicle_id='${v}'`)==='0';})());
 
 // ── fleet_alerts بعد الإلغاء ──
 ps(`insert into maintenance_requests (id,vehicle_id,plate,biker_employee_id,status,odometer,odometer_photo_url,requested_at) values ('${'99999999-0000-4000-8000-000000000001'}','${V.a}','5530 ق ب','1624','requested',139000,'u',now()-interval '1 day')`);

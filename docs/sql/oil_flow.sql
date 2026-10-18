@@ -26,22 +26,26 @@
 -- ترتيب التطبيق:
 --   القسم A — من SQL Editor: docs/sql/oil_flow_A.sql كما هو (drop constraint لإضافة «cancelled»، وسياسة رفع صور الإدارة تحت fleet-admin/؛ تحقق: true | true | 3).
 --   القسم B — عبر الأداة (معاملة واحدة، آمن لإعادة التشغيل، بلا تعديل بيانات).
---   ثم دمج PR الواجهة مباشرة. بين B والدمج: «اطلب تغيير الزيت» في الواجهة القديمة يرفض (USE_NEW_OIL_REQUEST — النسخة القديمة
---   بلا لقطة سويتر مسحوبة)، و«أُرسل لسويتر» يرفض (permission denied)، و«أكّد» يعمل بالقواعد الجديدة.
+--   ثم دمج PR الواجهة مباشرة. بين B والدمج: «اطلب تغيير الزيت» و«أُرسل لسويتر» في الواجهة القديمة يرفضان
+--   (permission denied for function — النسختان مسحوبتان؛ ولو نُفّذت القديمة بلا قيد الصلاحية لرفضت بـ USE_NEW_OIL_REQUEST)،
+--   و«أكّد» يعمل بالقواعد الجديدة (لقطة التنفيذ إلزامية، والاسم في الواجهة القديمة مطلوب فيُرسل).
 --
 -- قرارات تفصيلية (للمراجعة):
 --   1) رفض التنفيذ يعيد الحالة إلى requested (لا حالة جديدة) ويفرّغ حقول التنفيذ بعد نسخها إلى exec_rejections (jsonb):
 --      {at, by, reason, done_at, odometer, odometer_photo_url, proof_url, tech}. سبب آخر رفض في exec_reject_reason يراه البايكر.
---   2) «نفس الدقيقة»: date_trunc('minute', now()) <= date_trunc('minute', requested_at) ⇒ SAME_MINUTE (الدقيقة نفسها على الساعة).
+--   2) «نفس الدقيقة»: أقل من 60 ثانية منذ رفع الطلب ⇒ SAME_MINUTE (فرق زمني فعلي لا دقيقة الساعة: 10:00:59 ثم 10:01:00 مرفوض أيضاً).
 --   3) الإلغاء مسموح لأي حالة غير ملغاة (حتى المعتمد إن سُجّل خطأ ⇒ يخرج من أساس «استحقاق الزيت»). cancelled_from تحفظ الحالة السابقة.
 --      يصل البايكرَ إشعار بالإلغاء إن كان الطلب مفتوحاً (requested/sent/done).
 --   4) الإضافة نيابة عن البايكر: البايكر = حائز الدراجة الحالي، وإلا المخصّصة له (نفس قاعدة البوابة). صورة العدّاد إلزامية (العمود not null)،
---      ولقطتا سويتر اختياريتان للإدارة. التاريخ: لا مستقبل (> ساعة)، ولا أقدم من 400 يوم. «منفّذ» ⇒ approved مباشرة (approved_by = المُضيف)،
+--      ولقطتا سويتر اختياريتان للإدارة. التاريخ: لا مستقبل (هامش دقيقتين لفرق الساعة، ثم يُقصّ إلى الآن)، ولا أقدم من 400 يوم. «منفّذ» ⇒ approved مباشرة (approved_by = المُضيف)،
 --      done_at = التاريخ المُدخل. «طلب» ⇒ requested بالتاريخ المُدخل، ويصل البايكرَ إشعار ليؤكد التنفيذ لاحقاً.
 --   5) آخر تغيير معتمد = الأحدث بتاريخ التنفيذ (done_at، وإلا requested_at) لا تاريخ الاعتماد، وقبل تاريخ الطلب الجديد.
 --   6) سبب الرفض أو الإلغاء نص حرّ يكتبه المراجع فيصل كما كُتب؛ الجملة الثابتة حوله بالعربي والبنغالي.
---   7) fleet_alerts(): الطلبات الملغاة خارج قراءات العدّاد و«استحقاق الزيت»، ونص «طلب زيت لم يُنفَّذ» صار «قيد المتابعة مع سويتر».
---      لا تغيير آخر فيها (مطابقة للإنتاج حرفياً عدا هذه الأسطر الأربعة).
+--   7) fleet_alerts(): الطلبات الملغاة خارج قراءات العدّاد و«استحقاق الزيت»، ونص «طلب زيت لم يُنفَّذ» صار «قيد المتابعة مع سويتر»،
+--      و«آخر تغيير معتمد» في «استحقاق الزيت» بتاريخ التنفيذ لا الاعتماد (كما في 5 — وإلا صار تغيير قديم مُضاف لاحقاً هو «الأخير»).
+--      لا تغيير آخر فيها (مطابقة للإنتاج حرفياً عدا هذه الأسطر الخمسة).
+--   8) عدّاد أقل من آخر تغيير معتمد (since_km سالب) ليس «زيتاً مبكراً»: عنوان الإشعار «⚠️ عدّاد أقل من آخر تغيير معتمد».
+--   9) «إضافة» الإدارة: الدراجة نشطة فقط (INACTIVE_VEHICLE)، ولقطة التنفيذ مع «منفّذ» فقط (PROOF_NEEDS_DONE).
 
 -- ════════════════════════════════════════════════════════════════════════
 -- ═══ A) من SQL Editor (معاملة واحدة) ═══
@@ -97,11 +101,11 @@ begin
           'biker', v_km, v_days, v_int, auth.uid())
   returning id into v_id;
   perform public._fleet_notify_admins(
-    case when v_km < v_int then '⚠️ زيت مبكر — ' else 'طلب تغيير زيت — ' end || coalesce(v.plate, '—'),
+    case when v_km < 0 then '⚠️ عدّاد أقل من آخر تغيير معتمد — ' when v_km < v_int then '⚠️ زيت مبكر — ' else 'طلب تغيير زيت — ' end || coalesce(v.plate, '—'),
     coalesce(v_name, v_bid) || ' · العدّاد ' || trim_scale(p_odometer)::text
       || case when v_km is null then ' · لا تغيير معتمد سابق'
               else ' · ' || trim_scale(v_km)::text || ' كم و' || v_days::text || ' يوم منذ آخر تغيير معتمد'
-                   || case when v_km < v_int then ' (الحد ' || trim_scale(v_int)::text || ' كم)' else '' end end,
+                   || case when v_km >= 0 and v_km < v_int then ' (الحد ' || trim_scale(v_int)::text || ' كم)' else '' end end,
     v_id::text, 'oil-req-' || v_id);
   return v_id;
 end $$;
@@ -123,7 +127,7 @@ begin
   if coalesce(btrim(p_odometer_photo_url), '') = '' or length(p_odometer_photo_url) > 1000 then raise exception 'PHOTO_REQUIRED'; end if;
   if coalesce(btrim(p_proof_url), '') = '' or length(p_proof_url) > 1000 then raise exception 'SHOT_REQUIRED'; end if;
   if length(p_tech_name) > 120 then raise exception 'TECH_NAME_TOO_LONG'; end if;
-  if date_trunc('minute', now()) <= date_trunc('minute', r.requested_at) then raise exception 'SAME_MINUTE'; end if;
+  if now() - r.requested_at < interval '1 minute' then raise exception 'SAME_MINUTE'; end if;
   if p_odometer < r.odometer then raise exception 'ODOMETER_BELOW_REQUEST'; end if;
   update public.maintenance_requests set status = 'done', done_at = now(), done_odometer = p_odometer,
     done_odometer_photo_url = btrim(p_odometer_photo_url), done_proof_url = btrim(p_proof_url), sweater_tech_name = nullif(btrim(p_tech_name), ''),
@@ -187,13 +191,16 @@ begin
   if not public.has_perm('fleet_alerts', true) then raise exception 'FORBIDDEN'; end if;
   select * into v from public.fleet_vehicles where id = p_vehicle_id;
   if not found then raise exception 'NOT_FOUND'; end if;
+  if not v.active then raise exception 'INACTIVE_VEHICLE'; end if;
   select btrim(e.employee_id), e.full_name into v_bid, v_name from public.employees e where e.id = coalesce(v.held_by, v.biker_employee_id);
   if coalesce(v_bid, '') = '' then raise exception 'NO_BIKER'; end if;
   if p_odometer is null or p_odometer < 0 then raise exception 'ODOMETER_REQUIRED'; end if;
   if coalesce(btrim(p_odometer_photo_url), '') = '' or length(p_odometer_photo_url) > 1000 then raise exception 'PHOTO_REQUIRED'; end if;
   if length(p_request_shot_url) > 1000 or length(p_proof_url) > 1000 then raise exception 'BAD_URL'; end if;
   if length(p_note) > 1000 then raise exception 'NOTE_TOO_LONG'; end if;
-  if v_at > now() + interval '1 hour' or v_at < now() - interval '400 days' then raise exception 'BAD_DATE'; end if;
+  if not v_done and coalesce(btrim(p_proof_url), '') <> '' then raise exception 'PROOF_NEEDS_DONE'; end if;
+  if v_at > now() + interval '2 minutes' or v_at < now() - interval '400 days' then raise exception 'BAD_DATE'; end if;
+  v_at := least(v_at, now());   -- هامش فرق الساعة لا يصنع تاريخاً مستقبلياً
   select s.km, s.days into v_km, v_days from public._oil_since(v.id, p_odometer, v_at) s;
   insert into public.maintenance_requests (operator_id, vehicle_id, plate, biker_employee_id, biker_name, status, odometer, odometer_photo_url, request_shot_url,
       requested_at, done_at, done_odometer, done_odometer_photo_url, done_proof_url, approved_at, approved_by,
@@ -299,7 +306,7 @@ begin
          'تغيير الزيت مستحق: ' || (cur.odo - last_oil.odo) || ' كم منذ آخر تغيير (' || last_oil.odo || ')'
   from public.fleet_vehicles v
   join lateral (select coalesce(m.done_odometer, m.odometer) as odo from public.maintenance_requests m
-                where m.vehicle_id = v.id and m.kind = 'oil_change' and m.status = 'approved' order by m.approved_at desc limit 1) last_oil on true
+                where m.vehicle_id = v.id and m.kind = 'oil_change' and m.status = 'approved' order by coalesce(m.done_at, m.requested_at) desc limit 1) last_oil on true
   join lateral (select max(y.odo) as odo from (
                   select r.odometer as odo from public.fuel_requests r where r.vehicle_id = v.id
                   union all select l.odometer from public.fuel_logs l where l.vehicle_id = v.id and not l.legacy
@@ -338,13 +345,24 @@ revoke all on function public.request_oil_change(numeric, text), public.send_oil
 -- select count(*) from fleet_alerts();   -- بجلسة المالك: لا خطأ
 
 -- ═══ تراجع ═══
--- (عبر الأداة) يغلق الجديد ويعيد القديم:
+-- 1) (عبر الأداة) يغلق الجديد ويعيد القديم:
 --   revoke execute on function public.request_oil_change(numeric,text,text), public.reject_oil_execution(uuid,text), public.cancel_oil_request(uuid,text),
 --     public.admin_add_oil_change(uuid,numeric,text,boolean,timestamptz,text,text,text) from authenticated;
 --   ثم إعادة تعريف request_oil_change(numeric,text) و confirm_oil_change و fleet_alerts() من docs/sql/fleet_requests.sql (2.7 و2.8 و2.13)،
 --   و grant execute on function public.request_oil_change(numeric,text), public.send_oil_to_sweater(uuid,text,timestamptz) to authenticated;
---   الطلبات الملغاة تبقى بحالة cancelled (تُعاد يدوياً بـ cancelled_from إن لزم).
--- (من SQL Editor، بعد ألا يبقى صف cancelled) الأعمدة الجديدة وقيد الحالة:
---   alter table public.maintenance_requests drop column if exists request_shot_url, drop column if exists source, drop column if exists note, … ;
+-- 2) (عبر الأداة) الملغاة تعود لحالتها السابقة (قبل إعادة قيد الحالة القديم):
+--   update public.maintenance_requests set status = cancelled_from, cancel_reason = null, cancelled_at = null, cancelled_by = null, cancelled_from = null
+--    where status = 'cancelled';
+-- 3) (من SQL Editor) القسم A والأعمدة:
+--   begin;
+--   drop policy if exists fe_upload_fleet_admin on storage.objects;
+--   alter table public.maintenance_requests drop constraint if exists maintenance_requests_status_check;
+--   alter table public.maintenance_requests add constraint maintenance_requests_status_check check (status in ('requested', 'sent', 'done', 'approved'));
 --   drop function if exists public.request_oil_change(numeric,text,text), public.reject_oil_execution(uuid,text), public.cancel_oil_request(uuid,text),
 --     public.admin_add_oil_change(uuid,numeric,text,boolean,timestamptz,text,text,text), public._oil_since(uuid,numeric,timestamptz);
+--   alter table public.maintenance_requests drop column if exists request_shot_url, drop column if exists source, drop column if exists note,
+--     drop column if exists since_km, drop column if exists since_days, drop column if exists interval_km, drop column if exists exec_reject_reason,
+--     drop column if exists exec_rejected_at, drop column if exists exec_rejected_by, drop column if exists exec_rejections, drop column if exists cancel_reason,
+--     drop column if exists cancelled_at, drop column if exists cancelled_by, drop column if exists cancelled_from;
+--   commit;
+--   (صفوف أضافتها الإدارة تبقى صفوفاً عادية؛ إثبات التنفيذ المرفوض في exec_rejections يضيع بحذف العمود — يُنسخ قبلها إن لزم.)
