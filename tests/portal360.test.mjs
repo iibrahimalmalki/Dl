@@ -55,8 +55,10 @@ const SCEN={
 };
 
 // محاكاة Supabase: auth + rest. كل جدول غير معروف ⇒ []
+const viewUrls=[];   // استعلامات my_custody_assets: الـ view بلا عمود sweater_id ⇒ أي فلتر عليه يرجع 400 في الإنتاج
 function restReply(url,headers,scen){
   const table=url.pathname.split('/rest/v1/')[1]||'';
+  if(table==='my_custody_assets'){viewUrls.push(url.search);if(url.searchParams.has('sweater_id'))return{status:400,body:JSON.stringify({code:'42703',message:'column my_custody_assets.sweater_id does not exist'})};}
   const single=/vnd\.pgrst\.object/.test(headers['accept']||'');
   const rows={
     biker_tab_rules:tabRules,
@@ -190,6 +192,7 @@ try{
     if(key==='rejected')ok('سبب الرفض ظاهر بالعربي والبنغالي',await page.getByText('أعد التسجيل مع صورة لكل قطعة').count()===1&&await page.locator('.bp-asrej .bn').count()>=1);
     await ctx.close();
   }
+  ok('my_custody_assets تُقرأ بلا فلتر sweater_id (الـ view تفلتر بـ my_employee_uuid())',viewUrls.length>0&&viewUrls.every(s=>!/sweater_id/.test(s)));
   // أخطاء console: نتجاهل ما ينتج عن المحاكاة نفسها (صور وهمية، 406 للصفوف المفقودة)
   const real=errors.filter(e=>!/brand-mark|favicon|406|Failed to load resource/.test(e));
   ok('لا أخطاء console أو JS في أي شاشة'+(real.length?' — '+real.slice(0,3).join(' | '):''),real.length===0);
