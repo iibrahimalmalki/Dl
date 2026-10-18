@@ -87,6 +87,7 @@ const NEED = {
   receipt: { ar: "التقط صورة الفاتورة.", bn: "রসিদের ছবি তুলুন।" },
   liters: { ar: "أدخل اللترات (رقم موجب).", bn: "লিটার লিখুন (ধনাত্মক সংখ্যা)।" },
 };
+export const need = field => ({ field, ...NEED[field] });
 // نماذج الزيت: oilRequestFormError / oilExecFormError في oilFlow.js
 
 // ── رسائل أخطاء الدوال (raise exception 'CODE') ──
@@ -95,6 +96,7 @@ const RPC_BIKER = {
   NO_BIKE: { ar: "لا توجد دراجة مخصّصة لك الآن. تواصل مع الإدارة.", bn: "এখন আপনার নামে কোনো বাইক নেই। ম্যানেজমেন্টকে জানান।", action: "whatsapp" },
   ODOMETER_REQUIRED: NEED.odometer, PHOTO_REQUIRED: { ar: "الصور المطلوبة ناقصة.", bn: "প্রয়োজনীয় ছবি নেই।" },
   AMOUNT_REQUIRED: NEED.amount, BAD_LITERS: NEED.liters,
+  TECH_NAME_REQUIRED: { ar: "اكتب اسم الفني.", bn: "টেকনিশিয়ানের নাম লিখুন।" },   // confirm_oil_change القديمة (قبل oil_flow.sql)
   NOTES_TOO_LONG: { ar: "الملاحظات طويلة جداً.", bn: "নোট খুব লম্বা।" },
   ALREADY_DONE: { ar: "هذا الطلب لم يعد مفتوحاً — حدّث الصفحة.", bn: "এই অনুরোধ আর খোলা নেই — পেজ রিফ্রেশ করুন।" },
   // الزيت (docs/sql/oil_flow.sql)
@@ -136,6 +138,8 @@ const RPC_ADMIN = {
   PHOTO_REQUIRED: "أرفق صورة العدّاد.",
   ODOMETER_REQUIRED: "أدخل قراءة العدّاد.",
   BAD_URL: "رابط صورة غير صالح.",
+  INACTIVE_VEHICLE: "الدراجة غير نشطة.",
+  PROOF_NEEDS_DONE: "لقطة التنفيذ مع «تغيير منفّذ» فقط.",
 };
 export const adminRpcError = err => { const c = errCode(err); return (c && RPC_ADMIN[c]) || ("خطأ: " + String((err && err.message) || err || "")); };
 

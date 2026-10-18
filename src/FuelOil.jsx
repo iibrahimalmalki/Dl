@@ -54,7 +54,7 @@ export default function FuelOil({ me, myBike, kit }) {
     const [a, b, c] = await Promise.all([
       supabase.from("fuel_requests").select("id,plate,amount,amount_actual,status,source,requested_at,transferred_at,rejected_at,reject_reason").eq("biker_employee_id", bid).order("requested_at", { ascending: false }).limit(8),
       supabase.from("fuel_logs").select("id,plate,odometer,amount,liters,fill_at,status,reject_reason").eq("biker_employee_id", bid).eq("legacy", false).order("fill_at", { ascending: false }).limit(8),
-      supabase.from("maintenance_requests").select("id,plate,status,odometer,requested_at,done_at,approved_at,exec_reject_reason").eq("biker_employee_id", bid).order("requested_at", { ascending: false }).limit(6),
+      supabase.from("maintenance_requests").select("id,plate,status,odometer,requested_at,done_at,approved_at,exec_reject_reason").eq("biker_employee_id", bid).neq("status", "cancelled").order("requested_at", { ascending: false }).limit(6),
     ]);
     const bad = [a, b, c].find(x => x.error);
     if (bad) throw bad.error;
@@ -271,7 +271,7 @@ function OilExec({ me, kit, req, onSaved }) {
   async function submit() {
     setErr(null);
     const v = oilExecFormError({ odometer, odoPhoto: odoPh, shot }, req);
-    if (v) { setFe(v); if (v.field !== "form") focusField({ execShot: "oc_shot", odometer: "oc_odo", odoPhoto: "oc_odo_ph" }[v.field]); return; }
+    if (v) { setFe(v); focusField({ execShot: "oc_shot", odometer: "oc_odo", odoPhoto: "oc_odo_ph" }[v.field]); return; }
     setFe(null); setBusy(true);
     try {
       const [s, o] = await up.run([[shot, "oil-done-shot"], [odoPh, "oil-done-odometer"]]);
@@ -299,7 +299,6 @@ function OilExec({ me, kit, req, onSaved }) {
     {errAt("odoPhoto")}
     <label className="bp-lbl" htmlFor="oc_tech">اسم الفني (اختياري) <span className="bn">/ টেকনিশিয়ানের নাম (ঐচ্ছিক)</span></label>
     <input id="oc_tech" className="g-input bp-in" value={tech} maxLength={120} onChange={e => setTech(e.target.value)} />
-    {errAt("form")}
     {err && <div style={{ marginTop: 12 }}><ErrorNote e={err} who={bid} busy={busy} onRetry={submit} onLogin={() => supabase.auth.signOut()} /></div>}
     {busy && up.prog && <UploadBar done={up.prog.done} total={up.prog.total} />}
     <Btn kind="primary" block big busy={busy} disabled={!online} style={{ marginTop: 12 }} onClick={submit} bn="সম্পন্ন আপডেট করুন">{busy ? "جارٍ الحفظ…" : "حدّث التنفيذ"}</Btn>

@@ -1,5 +1,5 @@
-import{useState,useEffect,useMemo}from"react";
-import{supabase}from"./supabase";
+import{useState,useEffect,useMemo,useRef}from"react";
+import{supabase,ensureFreshToken}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import TestBadge from"./TestBadge";
@@ -15,6 +15,7 @@ import{pendingFills,pricePerLiter,SOURCE_AR,transferFormError,fillStatus,sar}fro
 // كل كتابة عبر دوال القاعدة (docs/sql/fleet_requests.sql). التنبيهات لكل دراجة لا لكل درّاج، ولا تصل الدرّاج.
 const fmt=iso=>{const d=new Date(iso);if(!iso||isNaN(d))return"—";const p=n=>String(n).padStart(2,"0");return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
 const Badge=({st})=><span className={"g-badge "+st.tone}><i/>{st.ar}</span>;
+const SENT_VIA={sweater_portal:"بوابة سويتر",whatsapp:"واتساب",call:"اتصال",other:"أخرى"};   // طلبات sent القديمة (قبل oil_flow.sql)
 const Ph=({u,t})=>u?<a className="fq-ph" href={u} target="_blank" rel="noopener noreferrer"><Icon n="eye" s={12}/> {t}</a>:null;
 
 // tv: معرّفات الدراجات التجريبية (من صفحة الأسطول) — تظهر بشارة وآخر القوائم، وخارج كل عدّاد ومجموع
@@ -53,7 +54,8 @@ export default function FleetRequests({owner,tv}){
   const testBikers=useMemo(()=>new Set(d&&tv?[...d.fr,...d.fl].filter(x=>tv.has(x.vehicle_id)).map(x=>x.biker_employee_id):[]),[d,tv]);
   const BL=useMemo(()=>d?[...d.bl].sort((a,b)=>Number(testBikers.has(a.biker_employee_id))-Number(testBikers.has(b.biker_employee_id))||Number(a.balance)-Number(b.balance)):[],[d,testBikers]);
   const O=useMemo(()=>d?splitOilAdmin(d.mr):null,[d]);
-  const bikes=useMemo(()=>!d?[]:d.fv||[...new Map(d.mr.map(r=>[r.vehicle_id,{id:r.vehicle_id,plate:r.plate}])).values()],[d]);
+  // بلا قراءة للأسطول (خطأ أو صفر صفوف بالسياسات) ⇒ الدراجات من طلبات الزيت نفسها
+  const bikes=useMemo(()=>!d?[]:d.fv&&d.fv.length?d.fv:[...new Map(d.mr.filter(r=>r.vehicle_id).map(r=>[r.vehicle_id,{id:r.vehicle_id,plate:r.plate}])).values()],[d]);
   const G=useMemo(()=>d?markTest(alertsByVehicle(d.al),tv):[],[d,tv]);
   const C=useMemo(()=>d?markTest(monthlyCostPerKm(month,d.fr,d.fl),tv):[],[d,month,tv]);
   const nr=a=>realBy(a,tv).length,tb=r=>tv&&tv.has(r.vehicle_id)&&<TestBadge/>;
@@ -79,9 +81,9 @@ export default function FleetRequests({owner,tv}){
   const approve=r=>call("ap"+r.id,"approve_oil_change",{p_id:r.id,p_note:(notes[r.id]||"").trim()||null},"اعتُمد تغيير الزيت — أُضيف لسجل صيانة الدراجة");
   const rejectExec=r=>{const w=(why["x"+r.id]||"").trim();if(!w){toast.bad("اكتب سبب الرفض");return;}call("rx"+r.id,"reject_oil_execution",{p_id:r.id,p_reason:w},"رُفض التنفيذ — وصل البايكرَ السبب ليعيد الرفع");};
   const cancelOil=r=>{const w=(why["c"+r.id]||"").trim();if(!w){toast.bad("اكتب سبب الإلغاء");return;}call("cn"+r.id,"cancel_oil_request",{p_id:r.id,p_reason:w},"أُلغي الطلب — باقٍ في السجل بسببه");};
-  const cancelBox=r=>ed&&<><input className="g-input" placeholder="سبب الإلغاء" value={why["c"+r.id]||""} onChange={e=>setWhy(p=>({...p,["c"+r.id]:e.target.value}))} maxLength={500}/>
+  const cancelBox=r=><><input className="g-input" placeholder="سبب الإلغاء" value={why["c"+r.id]||""} onChange={e=>setWhy(p=>({...p,["c"+r.id]:e.target.value}))} maxLength={500}/>
     <button className="g-btn" disabled={busy==="cn"+r.id} onClick={()=>cancelOil(r)}><Icon n="x" s={14}/> إلغاء</button></>;
-  const oilHead=r=>{const s=sinceLast(r);return<b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/>{s&&s.early&&<span className="g-badge warn"><i/>⚠️ مبكر: {s.km} كم و{s.days??"—"} يوم (الحد {s.interval})</span>}{r.source==="admin"&&<span className="g-badge info"><i/>أضافته الإدارة</span>} {tb(r)}</b>;};
+  const oilHead=r=>{const s=sinceLast(r);return<b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/>{s&&s.early&&<span className="g-badge warn"><i/>⚠️ مبكر: {s.km} كم و{s.days??"—"} يوم (الحد {s.interval})</span>}{s&&s.below&&<span className="g-badge bad"><i/>⚠️ العدّاد أقل من آخر تغيير معتمد ({s.km} كم)</span>}{r.source==="admin"&&<span className="g-badge info"><i/>أضافته الإدارة</span>} {tb(r)}</b>;};
   const saveSet=k=>{const v=vals[k];const e=settingError(k,v);if(e){toast.bad(e);return;}call("st"+k,"set_fleet_alert_setting",{p_key:k,p_value:parseNum(v)},"حُفظ الحدّ").then(ok=>{if(ok)setVals(p=>({...p,[k]:undefined}));});};
 
   if(perm===null)return<div className="fq"><style>{CSS}</style><div className="fq-empty">…</div></div>;
@@ -156,6 +158,7 @@ export default function FleetRequests({owner,tv}){
       {O.follow.map(r=><div className="fq-row" key={r.id}>
         <div className="fq-main">{oilHead(r)}
           <span>العدّاد {r.odometer} · منذ {since(r.requested_at)} · {fmt(r.requested_at)} · {sinceAr(r)}</span>
+          {r.status==="sent"&&r.sent_at&&<span>أُرسل لسويتر سابقاً {fmt(r.sent_at)}{SENT_VIA[r.sent_channel]?" عبر "+SENT_VIA[r.sent_channel]:""}</span>}
           {r.exec_reject_reason&&<span>آخر رفض للتنفيذ: {r.exec_reject_reason}</span>}
           {r.note&&<span>ملاحظة: {r.note}</span>}
           <span className="fq-phs"><Ph u={r.request_shot_url} t="لقطة طلب سويتر"/><Ph u={r.odometer_photo_url} t="صورة العدّاد"/></span></div>
@@ -163,7 +166,7 @@ export default function FleetRequests({owner,tv}){
       </div>)}
       {O.approved.length>0&&<details className="fq-more"><summary>آخر التغييرات المعتمدة ({O.approved.length})</summary>
         {O.approved.slice(0,15).map(r=><div className="fq-row" key={r.id}>
-          <div className="fq-main">{oilHead(r)}<span>العدّاد {r.done_odometer??r.odometer} · نُفّذ {fmt(r.done_at||r.approved_at)}{r.note?" · "+r.note:""}</span>
+          <div className="fq-main">{oilHead(r)}<span>العدّاد {r.done_odometer??r.odometer} · نُفّذ {fmt(r.done_at||r.approved_at)}{r.note?" · "+r.note:""}{r.approve_note?" · ملاحظة الاعتماد: "+r.approve_note:""}</span>
             <span className="fq-phs"><Ph u={r.request_shot_url} t="لقطة الطلب"/><Ph u={r.done_proof_url} t="لقطة التنفيذ"/><Ph u={r.done_odometer_photo_url||r.odometer_photo_url} t="العدّاد"/></span></div>
           {ed&&<div className="fq-act">{cancelBox(r)}</div>}</div>)}</details>}
       {O.cancelled.length>0&&<details className="fq-more"><summary>الملغاة ({O.cancelled.length}) — باقية في السجل</summary>
@@ -214,6 +217,7 @@ export default function FleetRequests({owner,tv}){
 
 // إضافة زيت نيابة عن البايكر: طلب مفتوح أو تغيير منفّذ (يُعتمد مباشرة). الصور تُرفع تحت fleet-admin/ (سياسة fe_upload_fleet_admin).
 async function upAdmin(file,vid){
+  await ensureFreshToken();   // رمز منتهٍ ⇒ الرفع يصل مجهولاً فترفضه السياسة
   const ext=(String(file.name||"").split(".").pop()||"jpg").toLowerCase();
   const path=`fleet-admin/oil/${vid}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
   const{error}=await supabase.storage.from("field-evidence").upload(path,file,{upsert:false,contentType:file.type||"image/jpeg"});
@@ -224,12 +228,14 @@ function AddOil({bikes,onClose,onDone,toast}){
   const[f,setF]=useState({vehicle:"",done:false,at:"",odometer:"",note:""});const[ph,setPh]=useState({odo:null,shot:null,exec:null});const[busy,setBusy]=useState(false);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const pick=k=>e=>{const x=(e.target.files||[])[0]||null;setPh(p=>({...p,[k]:x}));};
+  const done=useRef(new Map());   // إعادة الحفظ بعد رفض القاعدة لا تعيد رفع الصور نفسها
+  const up=async x=>{if(!x)return null;if(!done.current.has(x))done.current.set(x,await upAdmin(x,f.vehicle));return done.current.get(x);};
   async function save(){
     const at=f.at?new Date(f.at):null;
     const e=addOilFormError({vehicle:f.vehicle,odometer:f.odometer,odoPhoto:ph.odo,at,done:f.done});if(e){toast.bad(e);return;}
     setBusy(true);
     try{
-      const odo=await upAdmin(ph.odo,f.vehicle),shot=ph.shot?await upAdmin(ph.shot,f.vehicle):null,exec=f.done&&ph.exec?await upAdmin(ph.exec,f.vehicle):null;
+      const[odo,shot,exec]=await Promise.all([up(ph.odo),up(ph.shot),f.done?up(ph.exec):null]);
       const{error}=await supabase.rpc("admin_add_oil_change",{p_vehicle_id:f.vehicle,p_odometer:parseNum(f.odometer),p_odometer_photo_url:odo,p_done:f.done,
         p_at:(at||new Date()).toISOString(),p_request_shot_url:shot,p_proof_url:exec,p_note:f.note.trim()||null});
       if(error)throw error;

@@ -1,7 +1,7 @@
 // مسار تغيير الزيت كما يجري فعلاً — منطق نقي بلا DOM ولا Supabase.
 // القاعدة: docs/sql/oil_flow.sql. البايكر يرفع الطلب في تطبيق سويتر ثم في البوابة (لقطة الطلب + العدّاد وصورته)،
 // ثم يحدّث التنفيذ (لقطة التنفيذ من سويتر + العدّاد وصورته). الإدارة تراجع الصور فتعتمد أو ترفض بسبب، وتضيف نيابة عن البايكر، وتلغي بسبب.
-import { parseNum } from "./fleetRequests.js";
+import { parseNum, need } from "./fleetRequests.js";
 
 const t = v => (v ? new Date(v).getTime() : 0);
 // الطلب المفتوح: requested، أو sent القديم (قبل إلغاء خطوة «أُرسل لسويتر») — كلاهما «قيد المتابعة مع سويتر»
@@ -25,14 +25,12 @@ export function splitOilAdmin(rows) {
   };
 }
 
-// «نفس الدقيقة» كما تفرضها confirm_oil_change: الدقيقة الحالية لا تتجاوز دقيقة رفع الطلب
-export const sameMinute = (requestedAt, now = Date.now()) => Math.floor(t(now) / 60000) <= Math.floor(t(requestedAt) / 60000);
-
-// المسافة والأيام منذ آخر تغيير معتمد (محفوظة لحظة الطلب) ⇒ {km, days, interval, early} أو null بلا تغيير سابق
+// المسافة والأيام منذ آخر تغيير معتمد (محفوظة لحظة الطلب) ⇒ {km, days, interval, early, below} أو null بلا تغيير سابق
+// below: عدّاد أقل من آخر تغيير معتمد (قراءة خاطئة) — ليس «مبكراً»
 export function sinceLast(r) {
   if (!r || r.since_km == null) return null;
   const km = Number(r.since_km), days = r.since_days == null ? null : Number(r.since_days), interval = r.interval_km == null ? null : Number(r.interval_km);
-  return { km, days, interval, early: interval != null && km < interval };
+  return { km, days, interval, below: km < 0, early: km >= 0 && interval != null && km < interval };
 }
 export const sinceAr = r => {
   const s = sinceLast(r);
@@ -40,26 +38,24 @@ export const sinceAr = r => {
 };
 
 // ── تحقق نماذج البوابة ⇒ {field, ar, bn} أو null ──
-const NEED = {
-  odometer: { ar: "أدخل قراءة العدّاد.", bn: "ওডোমিটার লিখুন।" },
-  odoPhoto: { ar: "التقط صورة العدّاد.", bn: "ওডোমিটারের ছবি তুলুন।" },
+// «نفس الدقيقة» (أقل من 60 ثانية منذ الطلب) تفرضها القاعدة وحدها (SAME_MINUTE) — ساعة الجوال قد تخالف ساعة الخادم
+const OIL_NEED = {
   shot: { ar: "ارفع لقطة شاشة طلب تغيير الزيت من تطبيق سويتر.", bn: "সুইটার অ্যাপে তেল পরিবর্তনের অনুরোধের স্ক্রিনশট দিন।" },
   execShot: { ar: "ارفع لقطة من تطبيق سويتر تثبت التنفيذ.", bn: "কাজ সম্পন্নের প্রমাণ হিসেবে সুইটার অ্যাপের স্ক্রিনশট দিন।" },
 };
-const need = field => ({ field, ...NEED[field] });
+const needOil = field => (OIL_NEED[field] ? { field, ...OIL_NEED[field] } : need(field));
 export function oilRequestFormError({ odometer, odoPhoto, shot }) {
-  if (!shot) return need("shot");
-  if (parseNum(odometer) == null) return need("odometer");
-  if (!odoPhoto) return need("odoPhoto");
+  if (!shot) return needOil("shot");
+  if (parseNum(odometer) == null) return needOil("odometer");
+  if (!odoPhoto) return needOil("odoPhoto");
   return null;
 }
-export function oilExecFormError({ odometer, odoPhoto, shot }, req, now = Date.now()) {
-  if (req && sameMinute(req.requested_at, now)) return { field: "form", ar: "انتظر دقيقة بعد رفع الطلب ثم حدّث التنفيذ.", bn: "অনুরোধের পর এক মিনিট অপেক্ষা করে আপডেট দিন।" };
-  if (!shot) return need("execShot");
+export function oilExecFormError({ odometer, odoPhoto, shot }, req) {
+  if (!shot) return needOil("execShot");
   const n = parseNum(odometer);
-  if (n == null) return need("odometer");
+  if (n == null) return needOil("odometer");
   if (req && req.odometer != null && n < Number(req.odometer)) return { field: "odometer", ar: `العدّاد أقل من عدّاد الطلب (${req.odometer}).`, bn: `ওডোমিটার অনুরোধের রিডিং (${req.odometer}) থেকে কম।` };
-  if (!odoPhoto) return need("odoPhoto");
+  if (!odoPhoto) return needOil("odoPhoto");
   return null;
 }
 
@@ -69,7 +65,7 @@ export function addOilFormError({ vehicle, odometer, odoPhoto, at, done }, now =
   if (parseNum(odometer) == null) return "أدخل قراءة العدّاد.";
   if (!odoPhoto) return "أرفق صورة العدّاد.";
   const d = at ? t(at) : now;
-  if (isNaN(d) || d > now + 3600e3) return done ? "تاريخ التنفيذ في المستقبل." : "تاريخ الطلب في المستقبل.";
+  if (isNaN(d) || d > now + 120e3) return done ? "تاريخ التنفيذ في المستقبل." : "تاريخ الطلب في المستقبل.";
   if (d < now - 400 * 864e5) return "التاريخ أقدم من 400 يوم.";
   return null;
 }
