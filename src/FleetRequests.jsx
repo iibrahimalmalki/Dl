@@ -1,18 +1,21 @@
-import{useState,useEffect,useMemo}from"react";
-import{supabase}from"./supabase";
+import{useState,useEffect,useMemo,useRef}from"react";
+import{supabase,ensureFreshToken}from"./supabase";
 import Icon from"./Icon";
 import{useToast}from"./ui";
 import TestBadge from"./TestBadge";
 import{markTest,realBy}from"./testSandbox";
-import{FUEL_STATUS,OIL_STATUS,statusOf,CHANNELS,channelAr,alertAr,ALERT_KINDS,SETTINGS,settingError,parseNum,adminRpcError,splitRequests,splitOil,since,alertsByVehicle,monthlyCostPerKm,riyadhMonth}from"./fleetRequests";
+import{FUEL_STATUS,OIL_STATUS,statusOf,alertAr,ALERT_KINDS,SETTINGS,settingError,parseNum,intInput,adminRpcError,splitRequests,since,alertsByVehicle,monthlyCostPerKm,riyadhMonth}from"./fleetRequests";
+import{splitOilAdmin,sinceLast,sinceAr,addOilFormError}from"./oilFlow";
 import{pendingFills,pricePerLiter,SOURCE_AR,transferFormError,fillStatus,sar}from"./fuelWallet";
 
 // «الأسطول ← الطلبات والتنبيهات»: رصيد الوقود (دفعات بانتظار التحويل، تعبئات بانتظار الاعتماد، رصيد كل بايكر) + الزيت + fleet_alerts() + الحدود.
-// الصلاحية: وحدة fleet_alerts (عرض = القراءة، تعديل = التحويل/الرفض ومراجعة التعبئات والإرسال لسويتر والاعتماد وضبط الحدود) — المالك دائماً.
+// الصلاحية: وحدة fleet_alerts (عرض = القراءة، تعديل = التحويل/الرفض ومراجعة التعبئات، والزيت: الاعتماد/رفض التنفيذ/الإلغاء/الإضافة، وضبط الحدود) — المالك دائماً.
+// الزيت: docs/sql/oil_flow.sql — لا خطوة «أُرسل لسويتر»: البايكر يرفع الطلب في سويتر، والإدارة تتابع وتراجع الصور. الإلغاء بسبب لا حذف.
 // الرصيد والدفعات: docs/sql/fuel_wallet.sql (fuel_balances، transfer_fuel_request بالأسماء، reject_fuel_request، review_fuel_fill).
 // كل كتابة عبر دوال القاعدة (docs/sql/fleet_requests.sql). التنبيهات لكل دراجة لا لكل درّاج، ولا تصل الدرّاج.
 const fmt=iso=>{const d=new Date(iso);if(!iso||isNaN(d))return"—";const p=n=>String(n).padStart(2,"0");return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
 const Badge=({st})=><span className={"g-badge "+st.tone}><i/>{st.ar}</span>;
+const SENT_VIA={sweater_portal:"بوابة سويتر",whatsapp:"واتساب",call:"اتصال",other:"أخرى"};   // طلبات sent القديمة (قبل oil_flow.sql)
 const Ph=({u,t})=>u?<a className="fq-ph" href={u} target="_blank" rel="noopener noreferrer"><Icon n="eye" s={12}/> {t}</a>:null;
 
 // tv: معرّفات الدراجات التجريبية (من صفحة الأسطول) — تظهر بشارة وآخر القوائم، وخارج كل عدّاد ومجموع
@@ -20,7 +23,7 @@ export default function FleetRequests({owner,tv}){
   const toast=useToast();
   const[perm,setPerm]=useState(owner?{view:true,edit:true}:null);
   const[d,setD]=useState(null);const[err,setErr]=useState(null);const[busy,setBusy]=useState(null);
-  const[refs,setRefs]=useState({});const[amts,setAmts]=useState({});const[fees,setFees]=useState({});const[why,setWhy]=useState({});const[chans,setChans]=useState({});const[notes,setNotes]=useState({});const[vals,setVals]=useState({});
+  const[refs,setRefs]=useState({});const[amts,setAmts]=useState({});const[fees,setFees]=useState({});const[why,setWhy]=useState({});const[notes,setNotes]=useState({});const[vals,setVals]=useState({});const[adding,setAdding]=useState(false);
   const[month,setMonth]=useState(()=>riyadhMonth());
   useEffect(()=>{if(owner)return;(async()=>{const{data:{user}}=await supabase.auth.getUser();
     const{data}=await supabase.from("user_permissions").select("can_view,can_edit").eq("user_id",user&&user.id).eq("module","fleet_alerts").maybeSingle();
@@ -28,7 +31,7 @@ export default function FleetRequests({owner,tv}){
   async function load(){
     setErr(null);
     const from=new Date(Date.now()-120*864e5).toISOString();
-    const[fr,mr,al,st,fl,bl,pf]=await Promise.all([
+    const[fr,mr,al,st,fl,bl,pf,fv]=await Promise.all([
       supabase.from("fuel_requests").select("*").gte("requested_at",from).order("requested_at",{ascending:false}),
       supabase.from("maintenance_requests").select("*").order("requested_at",{ascending:false}).limit(200),
       supabase.rpc("fleet_alerts"),
@@ -37,9 +40,11 @@ export default function FleetRequests({owner,tv}){
       supabase.rpc("fuel_balances"),
       // بانتظار الاعتماد: كل submitted بلا حدّ زمني (لا تُفقد تعبئة قديمة لم تُراجَع)
       supabase.from("fuel_logs").select("id,vehicle_id,plate,biker_employee_id,biker_name,odometer,amount,liters,fill_at,request_id,legacy,status,price_warn,reject_reason,receipt_photo_url,odometer_photo_url").eq("legacy",false).eq("status","submitted").order("fill_at",{ascending:true}).limit(300),
+      // دراجات «إضافة زيت» — فشلها (لا صلاحية أسطول) لا يوقف الصفحة: تُشتق من الطلبات
+      supabase.from("fleet_vehicles").select("id,plate,active").eq("active",true).order("plate"),
     ]);
     const e=[fr,mr,al,st,fl,bl,pf].find(x=>x.error);if(e)setErr(adminRpcError(e.error));
-    setD({fr:fr.data||[],mr:mr.data||[],al:al.data||[],st:st.data||[],fl:fl.data||[],bl:bl.data||[],pf:pf.data||[]});
+    setD({fr:fr.data||[],mr:mr.data||[],al:al.data||[],st:st.data||[],fl:fl.data||[],bl:bl.data||[],pf:pf.data||[],fv:fv.error?null:fv.data||[]});
   }
   useEffect(()=>{if(perm&&perm.view)load();},[perm]);
 
@@ -48,7 +53,9 @@ export default function FleetRequests({owner,tv}){
   // بايكر تجريبي: من له طلب أو تعبئة على دراجة تجريبية
   const testBikers=useMemo(()=>new Set(d&&tv?[...d.fr,...d.fl].filter(x=>tv.has(x.vehicle_id)).map(x=>x.biker_employee_id):[]),[d,tv]);
   const BL=useMemo(()=>d?[...d.bl].sort((a,b)=>Number(testBikers.has(a.biker_employee_id))-Number(testBikers.has(b.biker_employee_id))||Number(a.balance)-Number(b.balance)):[],[d,testBikers]);
-  const O=useMemo(()=>d?splitOil(d.mr):null,[d]);
+  const O=useMemo(()=>d?splitOilAdmin(d.mr):null,[d]);
+  // بلا قراءة للأسطول (خطأ أو صفر صفوف بالسياسات) ⇒ الدراجات من طلبات الزيت نفسها
+  const bikes=useMemo(()=>!d?[]:d.fv&&d.fv.length?d.fv:[...new Map(d.mr.filter(r=>r.vehicle_id).map(r=>[r.vehicle_id,{id:r.vehicle_id,plate:r.plate}])).values()],[d]);
   const G=useMemo(()=>d?markTest(alertsByVehicle(d.al),tv):[],[d,tv]);
   const C=useMemo(()=>d?markTest(monthlyCostPerKm(month,d.fr,d.fl),tv):[],[d,month,tv]);
   const nr=a=>realBy(a,tv).length,tb=r=>tv&&tv.has(r.vehicle_id)&&<TestBadge/>;
@@ -71,8 +78,12 @@ export default function FleetRequests({owner,tv}){
   const review=(f,okk)=>{const w=(why["f"+f.id]||"").trim();if(!okk&&!w){toast.bad("اكتب سبب الرفض");return;}
     call("rv"+f.id,"review_fuel_fill",{p_id:f.id,p_ok:okk,p_reason:okk?null:w},okk?"اعتُمدت التعبئة":"رُفضت التعبئة — عاد مبلغها لرصيد البايكر");};
   const tbB=id=>testBikers.has(id)&&<TestBadge/>;
-  const send=r=>{const ch=chans[r.id];if(!ch){toast.bad("اختر قناة الإرسال");return;}call("se"+r.id,"send_oil_to_sweater",{p_id:r.id,p_channel:ch},"سُجِّل الإرسال لسويتر");};
   const approve=r=>call("ap"+r.id,"approve_oil_change",{p_id:r.id,p_note:(notes[r.id]||"").trim()||null},"اعتُمد تغيير الزيت — أُضيف لسجل صيانة الدراجة");
+  const rejectExec=r=>{const w=(why["x"+r.id]||"").trim();if(!w){toast.bad("اكتب سبب الرفض");return;}call("rx"+r.id,"reject_oil_execution",{p_id:r.id,p_reason:w},"رُفض التنفيذ — وصل البايكرَ السبب ليعيد الرفع");};
+  const cancelOil=r=>{const w=(why["c"+r.id]||"").trim();if(!w){toast.bad("اكتب سبب الإلغاء");return;}call("cn"+r.id,"cancel_oil_request",{p_id:r.id,p_reason:w},"أُلغي الطلب — باقٍ في السجل بسببه");};
+  const cancelBox=r=><><input className="g-input" placeholder="سبب الإلغاء" value={why["c"+r.id]||""} onChange={e=>setWhy(p=>({...p,["c"+r.id]:e.target.value}))} maxLength={500}/>
+    <button className="g-btn" disabled={busy==="cn"+r.id} onClick={()=>cancelOil(r)}><Icon n="x" s={14}/> إلغاء</button></>;
+  const oilHead=r=>{const s=sinceLast(r);return<b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/>{s&&s.early&&<span className="g-badge warn"><i/>⚠️ مبكر: {s.km} كم و{s.days??"—"} يوم (الحد {s.interval})</span>}{s&&s.below&&<span className="g-badge bad"><i/>⚠️ العدّاد أقل من آخر تغيير معتمد ({s.km} كم)</span>}{r.source==="admin"&&<span className="g-badge info"><i/>أضافته الإدارة</span>} {tb(r)}</b>;};
   const saveSet=k=>{const v=vals[k];const e=settingError(k,v);if(e){toast.bad(e);return;}call("st"+k,"set_fleet_alert_setting",{p_key:k,p_value:parseNum(v)},"حُفظ الحدّ").then(ok=>{if(ok)setVals(p=>({...p,[k]:undefined}));});};
 
   if(perm===null)return<div className="fq"><style>{CSS}</style><div className="fq-empty">…</div></div>;
@@ -84,8 +95,8 @@ export default function FleetRequests({owner,tv}){
     <div className="fq-kpis">
       <div className={"fq-kpi"+(nr(R.pending)?" hot":"")}><b>{nr(R.pending)}</b><span>دفعات بانتظار التحويل</span></div>
       <div className={"fq-kpi"+(nr(PF)?" hot":"")}><b>{nr(PF)}</b><span>تعبئات بانتظار الاعتماد</span></div>
-      <div className="fq-kpi"><b>{nr(O.requested)}</b><span>زيت بانتظار الإرسال</span></div>
-      <div className="fq-kpi"><b>{nr(O.done)}</b><span>زيت بانتظار الاعتماد</span></div>
+      <div className="fq-kpi"><b>{nr(O.follow)}</b><span>زيت قيد المتابعة مع سويتر</span></div>
+      <div className={"fq-kpi"+(nr(O.review)?" hot":"")}><b>{nr(O.review)}</b><span>زيت بانتظار المراجعة</span></div>
       <div className="fq-kpi"><b>{realBy(d.al,tv).filter(a=>a.severity==="warn").length}</b><span>تحذيرات</span></div>
     </div>
 
@@ -129,26 +140,38 @@ export default function FleetRequests({owner,tv}){
           <td><b>{sar(b.balance)}﷼</b></td><td>{b.pending_fills||0}</td><td>{b.open_request_id?`${SOURCE_AR[b.open_source]||""} · منذ ${since(b.open_since)}`:"—"}</td></tr>)}</tbody></table></div>}
     </section>
 
-    {/* ٢) الزيت */}
-    <section className="fq-sec">
-      <h3><Icon n="bike" s={16}/> طلبات تغيير الزيت</h3>
-      {O.requested.length+O.sent.length+O.done.length===0&&<div className="fq-none">لا طلبات زيت مفتوحة.</div>}
-      {O.requested.map(r=><div className="fq-row" key={r.id}>
-        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/> {tb(r)}</b>
-          <span>العدّاد {r.odometer} · منذ {since(r.requested_at)}</span><Ph u={r.odometer_photo_url} t="صورة العدّاد"/></div>
-        {ed&&<div className="fq-act"><select className="g-input" value={chans[r.id]||""} onChange={e=>setChans(p=>({...p,[r.id]:e.target.value}))}><option value="">القناة…</option>{CHANNELS.map(c=><option key={c.k} value={c.k}>{c.ar}</option>)}</select>
-          <button className="g-btn primary" disabled={busy==="se"+r.id} onClick={()=>send(r)}><Icon n="send" s={14}/> أُرسل لسويتر</button></div>}
-      </div>)}
-      {O.sent.map(r=><div className="fq-row" key={r.id}>
-        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/> {tb(r)}</b>
-          <span>أُرسل {fmt(r.sent_at)} عبر {channelAr(r.sent_channel)} · بانتظار تأكيد الدرّاج</span></div></div>)}
-      {O.done.map(r=><div className="fq-row" key={r.id}>
-        <div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} <Badge st={statusOf(OIL_STATUS,r.status)}/> {tb(r)}</b>
-          <span>العدّاد بعد التغيير {r.done_odometer} · مسؤول سويتر: {r.sweater_tech_name||"—"} · {fmt(r.done_at)}</span>
-          <span className="fq-phs"><Ph u={r.done_odometer_photo_url} t="العدّاد"/><Ph u={r.done_proof_url} t="الفاتورة/الملصق"/></span></div>
+    {/* ٢) الزيت: قيد المتابعة مع سويتر (لقطة الطلب + العدّاد) ← بانتظار المراجعة (اعتماد أو رفض بسبب) — والإضافة نيابة عن البايكر، والإلغاء بسبب */}
+    <section className={"fq-sec"+(nr(O.review)?" hot":"")}>
+      <h3><Icon n="bike" s={16}/> طلبات تغيير الزيت {ed&&!adding&&<button className="g-btn fq-add" onClick={()=>setAdding(true)}><Icon n="plus" s={14}/> إضافة</button>}</h3>
+      {adding&&<AddOil bikes={bikes} onClose={()=>setAdding(false)} onDone={()=>{setAdding(false);load();}} toast={toast}/>}
+      {O.follow.length+O.review.length===0&&<div className="fq-none">لا طلبات زيت مفتوحة.</div>}
+      {O.review.map(r=><div className="fq-row" key={r.id}>
+        <div className="fq-main">{oilHead(r)}
+          <span>عدّاد الطلب {r.odometer} ← التنفيذ {r.done_odometer} · الفني: {r.sweater_tech_name||"—"} · {fmt(r.done_at)}</span>
+          <span>{sinceAr(r)}</span>
+          <span className="fq-phs"><Ph u={r.request_shot_url} t="لقطة طلب سويتر"/><Ph u={r.done_proof_url} t="لقطة التنفيذ"/><Ph u={r.odometer_photo_url} t="عدّاد الطلب"/><Ph u={r.done_odometer_photo_url} t="عدّاد التنفيذ"/></span></div>
         {ed&&<div className="fq-act"><input className="g-input" placeholder="ملاحظة (اختياري)" value={notes[r.id]||""} onChange={e=>setNotes(p=>({...p,[r.id]:e.target.value}))} maxLength={1000}/>
-          <button className="g-btn primary" disabled={busy==="ap"+r.id} onClick={()=>approve(r)}><Icon n="check" s={14}/> اعتماد</button></div>}
+          <button className="g-btn primary" disabled={busy==="ap"+r.id} onClick={()=>approve(r)}><Icon n="check" s={14}/> اعتماد</button>
+          <input className="g-input" placeholder="سبب رفض التنفيذ" value={why["x"+r.id]||""} onChange={e=>setWhy(p=>({...p,["x"+r.id]:e.target.value}))} maxLength={500}/>
+          <button className="g-btn" disabled={busy==="rx"+r.id} onClick={()=>rejectExec(r)}><Icon n="x" s={14}/> ارفض</button>{cancelBox(r)}</div>}
       </div>)}
+      {O.follow.map(r=><div className="fq-row" key={r.id}>
+        <div className="fq-main">{oilHead(r)}
+          <span>العدّاد {r.odometer} · منذ {since(r.requested_at)} · {fmt(r.requested_at)} · {sinceAr(r)}</span>
+          {r.status==="sent"&&r.sent_at&&<span>أُرسل لسويتر سابقاً {fmt(r.sent_at)}{SENT_VIA[r.sent_channel]?" عبر "+SENT_VIA[r.sent_channel]:""}</span>}
+          {r.exec_reject_reason&&<span>آخر رفض للتنفيذ: {r.exec_reject_reason}</span>}
+          {r.note&&<span>ملاحظة: {r.note}</span>}
+          <span className="fq-phs"><Ph u={r.request_shot_url} t="لقطة طلب سويتر"/><Ph u={r.odometer_photo_url} t="صورة العدّاد"/></span></div>
+        {ed&&<div className="fq-act">{cancelBox(r)}</div>}
+      </div>)}
+      {O.approved.length>0&&<details className="fq-more"><summary>آخر التغييرات المعتمدة ({O.approved.length})</summary>
+        {O.approved.slice(0,15).map(r=><div className="fq-row" key={r.id}>
+          <div className="fq-main">{oilHead(r)}<span>العدّاد {r.done_odometer??r.odometer} · نُفّذ {fmt(r.done_at||r.approved_at)}{r.note?" · "+r.note:""}{r.approve_note?" · ملاحظة الاعتماد: "+r.approve_note:""}</span>
+            <span className="fq-phs"><Ph u={r.request_shot_url} t="لقطة الطلب"/><Ph u={r.done_proof_url} t="لقطة التنفيذ"/><Ph u={r.done_odometer_photo_url||r.odometer_photo_url} t="العدّاد"/></span></div>
+          {ed&&<div className="fq-act">{cancelBox(r)}</div>}</div>)}</details>}
+      {O.cancelled.length>0&&<details className="fq-more"><summary>الملغاة ({O.cancelled.length}) — باقية في السجل</summary>
+        {O.cancelled.slice(0,30).map(r=><div className="fq-row" key={r.id}><div className="fq-main"><b>{r.plate||"—"} · {r.biker_name||r.biker_employee_id} {tb(r)}</b>
+          <span>أُلغي {fmt(r.cancelled_at)} · كان «{statusOf(OIL_STATUS,r.cancelled_from).ar}» · السبب: {r.cancel_reason||"—"}</span></div></div>)}</details>}
     </section>
 
     {/* ٣) تنبيهات الأسطول — لكل دراجة */}
@@ -192,6 +215,48 @@ export default function FleetRequests({owner,tv}){
   </div>);
 }
 
+// إضافة زيت نيابة عن البايكر: طلب مفتوح أو تغيير منفّذ (يُعتمد مباشرة). الصور تُرفع تحت fleet-admin/ (سياسة fe_upload_fleet_admin).
+async function upAdmin(file,vid){
+  await ensureFreshToken();   // رمز منتهٍ ⇒ الرفع يصل مجهولاً فترفضه السياسة
+  const ext=(String(file.name||"").split(".").pop()||"jpg").toLowerCase();
+  const path=`fleet-admin/oil/${vid}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+  const{error}=await supabase.storage.from("field-evidence").upload(path,file,{upsert:false,contentType:file.type||"image/jpeg"});
+  if(error)throw error;
+  return supabase.storage.from("field-evidence").getPublicUrl(path).data.publicUrl;
+}
+function AddOil({bikes,onClose,onDone,toast}){
+  const[f,setF]=useState({vehicle:"",done:false,at:"",odometer:"",note:""});const[ph,setPh]=useState({odo:null,shot:null,exec:null});const[busy,setBusy]=useState(false);
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const pick=k=>e=>{const x=(e.target.files||[])[0]||null;setPh(p=>({...p,[k]:x}));};
+  const done=useRef(new Map());   // إعادة الحفظ بعد رفض القاعدة لا تعيد رفع الصور نفسها
+  const up=async x=>{if(!x)return null;if(!done.current.has(x))done.current.set(x,await upAdmin(x,f.vehicle));return done.current.get(x);};
+  async function save(){
+    const at=f.at?new Date(f.at):null;
+    const e=addOilFormError({vehicle:f.vehicle,odometer:f.odometer,odoPhoto:ph.odo,at,done:f.done});if(e){toast.bad(e);return;}
+    setBusy(true);
+    try{
+      const[odo,shot,exec]=await Promise.all([up(ph.odo),up(ph.shot),f.done?up(ph.exec):null]);
+      const{error}=await supabase.rpc("admin_add_oil_change",{p_vehicle_id:f.vehicle,p_odometer:parseNum(f.odometer),p_odometer_photo_url:odo,p_done:f.done,
+        p_at:(at||new Date()).toISOString(),p_request_shot_url:shot,p_proof_url:exec,p_note:f.note.trim()||null});
+      if(error)throw error;
+      toast.ok(f.done?"أُضيف تغيير الزيت المنفّذ (معتمد)":"أُضيف الطلب — وصل البايكرَ إشعار");onDone();
+    }catch(err){toast.bad(adminRpcError(err),undefined,6000);}
+    setBusy(false);
+  }
+  return<div className="fq-addf">
+    <div className="fq-seg"><button className={"g-btn"+(!f.done?" primary":"")} onClick={()=>set("done",false)}>طلب مفتوح</button><button className={"g-btn"+(f.done?" primary":"")} onClick={()=>set("done",true)}>تغيير منفّذ</button></div>
+    <label>الدراجة<select className="g-input" value={f.vehicle} onChange={e=>set("vehicle",e.target.value)}><option value="">اختر…</option>{bikes.map(b=><option key={b.id} value={b.id}>{b.plate||b.id}</option>)}</select></label>
+    <label>العدّاد (كم)<input className="g-input" inputMode="numeric" value={f.odometer} onChange={e=>set("odometer",intInput(e.target.value))}/></label>
+    <label>{f.done?"تاريخ التنفيذ":"تاريخ الطلب"}<input className="g-input" type="datetime-local" value={f.at} onChange={e=>set("at",e.target.value)}/></label>
+    <label>صورة العدّاد *<input type="file" accept="image/*" onChange={pick("odo")}/></label>
+    <label>لقطة طلب سويتر (اختياري)<input type="file" accept="image/*" onChange={pick("shot")}/></label>
+    {f.done&&<label>لقطة التنفيذ من سويتر (اختياري)<input type="file" accept="image/*" onChange={pick("exec")}/></label>}
+    <label>ملاحظة<input className="g-input" value={f.note} maxLength={1000} onChange={e=>set("note",e.target.value)}/></label>
+    <div className="fq-act"><button className="g-btn primary" disabled={busy} onClick={save}><Icon n="check" s={14}/> {busy?"جارٍ الحفظ…":"حفظ"}</button><button className="g-btn" disabled={busy} onClick={onClose}>إلغاء</button></div>
+    <span className="fq-none">البايكر = حائز الدراجة الحالي، وإلا المخصّصة له. التاريخ بتوقيت جهازك؛ فارغ = الآن.</span>
+  </div>;
+}
+
 const CSS=`
 .fq{display:flex;flex-direction:column;gap:14px;max-width:980px}
 .fq-msg{padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:700}.fq-msg.err{background:var(--bad-bg);color:var(--bad-ink)}
@@ -220,8 +285,13 @@ const CSS=`
 .fq-al div{display:flex;flex-direction:column;gap:1px}.fq-al b{font-size:12.5px}.fq-al span{font-size:12px;color:var(--ink-2)}.fq-al small{font-size:10.5px;opacity:.75}
 .fq-mon{width:auto;min-height:32px;margin-inline-start:auto;font-size:12px}
 .fq-tw{overflow-x:auto}.fq-t{width:100%;border-collapse:collapse;font-size:12.5px}.fq-t th,.fq-t td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--line)}.fq-t th{color:var(--mut);font-weight:700;font-size:11.5px}
+.fq-add{margin-inline-start:auto;min-height:32px;font-size:12px}
+.fq-more{border-top:1px solid var(--line);padding-top:8px;margin-top:4px}.fq-more summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--mut);padding:4px 0}
+.fq-addf{display:grid;grid-template-columns:1fr 1fr;gap:9px;border:1px solid var(--line);border-radius:12px;padding:11px;margin-bottom:10px}
+.fq-addf label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:700;color:var(--mut);min-width:0}.fq-addf input[type=file]{font-size:11.5px;max-width:100%}
+.fq-addf .fq-seg,.fq-addf .fq-act,.fq-addf>.fq-none{grid-column:1/-1}.fq-seg{display:flex;gap:6px}
 .fq-sets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .fq-set{display:flex;flex-direction:column;gap:5px;border:1px solid var(--line);border-radius:11px;padding:9px 10px;font-size:12px;font-weight:600}
 .fq-setv{display:flex;align-items:center;gap:6px}.fq-setv .g-input{width:110px;min-height:36px}.fq-setv em{font-style:normal;color:var(--mut);font-size:11.5px}
-@media(max-width:640px){.fq-kpis{grid-template-columns:1fr 1fr}.fq-sets{grid-template-columns:1fr}.fq-act{width:100%}.fq-act .g-input{flex:1;width:auto}}
+@media(max-width:640px){.fq-kpis{grid-template-columns:1fr 1fr}.fq-addf{grid-template-columns:1fr}.fq-sets{grid-template-columns:1fr}.fq-act{width:100%}.fq-act .g-input{flex:1;width:auto}}
 `;

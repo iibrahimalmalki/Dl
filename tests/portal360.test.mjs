@@ -29,14 +29,19 @@ const SCEN={
     custody_assets:[{...asset('20000000-0000-0000-0000-000000000009','الجوال','Mobile Phone','2026-10-14','2028-10-14',24),item_type:'device',category:'أجهزة',serial_no:'490154203237518',specs:{brand_model:'Samsung A15',acc:{charger:true,holder:true,case:false}}}]},
   rejected:{label:'العهدة — مرفوض (السبب ظاهر)',biker_assets:[decl('baseline','rejected',{reject_reason:'أعد التسجيل مع صورة لكل قطعة'})],custody_assets:[]},
   // رصيد الوقود: رصيد 7 ﷼ ودفعة تلقائية «مطلوبة» (لا زر مستعجلة)، ودفعة «حُوِّل»، وتعبئة معتمدة وأخرى مرفوضة بسببها،
-  // وطلب زيت «أُرسل لسويتر» ⇒ نموذج تأكيد التنفيذ ظاهر
+  // وطلب زيت sent قديم ⇒ «قيد المتابعة مع سويتر» ونموذج «حدّث التنفيذ»، وسبب آخر رفض للإثبات ظاهر
   fuel:{label:'الوقود والزيت — الرصيد ودفعة تلقائية وتعبئات وتأكيد الزيت',tabs:[['fuel','الوقود']],biker_assets:[],custody_assets:[],
     wallet:[{balance:7,threshold:10,topup_amount:50,tolerance:10}],
     fuel_requests:[{id:'50000000-0000-0000-0000-000000000001',plate:'5531 BG',amount:50,amount_actual:null,source:'auto',odometer:14230,status:'requested',requested_at:'2026-10-12T08:00:00Z',transferred_at:null},
       {id:'50000000-0000-0000-0000-000000000002',plate:'5531 BG',amount:50,amount_actual:50,source:'manual',odometer:13410,status:'transferred',requested_at:'2026-10-05T08:00:00Z',transferred_at:'2026-10-05T10:00:00Z'}],
     fuel_logs:[{id:'60000000-0000-0000-0000-000000000001',plate:'5531 BG',odometer:13420,amount:25,liters:11,status:'approved',fill_at:'2026-10-05T12:00:00Z'},
       {id:'60000000-0000-0000-0000-000000000002',plate:'5531 BG',odometer:13500,amount:18,liters:6,status:'rejected',reject_reason:'الفاتورة غير واضحة — أعد تصويرها',fill_at:'2026-10-06T12:00:00Z'}],
-    maintenance_requests:[{id:'70000000-0000-0000-0000-000000000001',plate:'5531 BG',status:'sent',odometer:14100,requested_at:'2026-10-10T08:00:00Z',sent_at:'2026-10-10T09:00:00Z',done_at:null,approved_at:null}]},
+    maintenance_requests:[{id:'70000000-0000-0000-0000-000000000001',plate:'5531 BG',status:'sent',odometer:14100,requested_at:'2026-10-10T08:00:00Z',done_at:null,approved_at:null,exec_reject_reason:'لقطة التنفيذ لا تظهر التاريخ — أعد رفعها'}]},
+  // الزيت: تنفيذ بانتظار المراجعة (لا نموذج)، وطلب ملغى لا يظهر، ومعتمد في السجل
+  oilwait:{label:'الزيت — بانتظار المراجعة',tabs:[['fuel','الوقود']],biker_assets:[],custody_assets:[],
+    maintenance_requests:[{id:'70000000-0000-0000-0000-000000000002',plate:'5531 BG',status:'done',odometer:14300,requested_at:'2026-10-15T08:00:00Z',done_at:'2026-10-15T10:00:00Z',approved_at:null},
+      {id:'70000000-0000-0000-0000-000000000003',plate:'5531 BG',status:'cancelled',odometer:99999,requested_at:'2026-10-14T08:00:00Z',done_at:null,approved_at:null},
+      {id:'70000000-0000-0000-0000-000000000004',plate:'5531 BG',status:'approved',odometer:12100,requested_at:'2026-09-01T08:00:00Z',done_at:'2026-09-01T10:00:00Z',approved_at:'2026-09-02T08:00:00Z'}]},
   // رصيد منخفض بلا طلب مفتوح (آخر طلب رُفض) ⇒ زر «دفعة مستعجلة» ونموذج السبب
   fuellow:{label:'الوقود — رصيد منخفض ودفعة مستعجلة',tabs:[['fuel','الوقود']],biker_assets:[],custody_assets:[],
     wallet:[{balance:4.5,threshold:10,topup_amount:50,tolerance:10}],
@@ -161,18 +166,28 @@ try{
         await page.locator('.fw-num').innerText().then(x=>/50/.test(x))&&await page.locator('.fw-lbl .bn',{hasText:'আপনার ব্যালেন্স'}).count()===1
         &&await page.getByText('اطلب وقوداً').count()===0&&await page.locator('#fr_amt').count()===0&&await page.getByRole('button',{name:/دفعة مستعجلة/}).count()===0
         &&await page.getByText('سجّل تعبئة').count()===1&&await page.locator('label[for=ff_lit] .bp-req').count()===1
-        &&await page.getByRole('button',{name:'اطلب تغيير الزيت'}).count()===1&&await page.getByRole('radio',{name:/زيت/}).count()===0);
+        &&await page.getByRole('button',{name:'ارفع طلب تغيير الزيت'}).count()===1&&await page.locator('#or_shot').count()===1&&await page.getByRole('radio',{name:/زيت/}).count()===0);
     }
     if(key==='fuel'){
       ok('الوقود: «رصيدك 7 ﷼» منخفض، و«طلب 50 ﷼ أُرسل للإدارة» بلغتين، بلا زر مستعجلة (طلب مفتوح)',
         await page.locator('.fw-bal.low .fw-num').innerText().then(x=>/7/.test(x))&&await page.getByText('طلب 50 ﷼ أُرسل للإدارة').count()===1
         &&await page.locator('.fw-next .bn',{hasText:'ম্যানেজমেন্টে পাঠানো'}).count()===1&&await page.getByRole('button',{name:/دفعة مستعجلة/}).count()===0);
-      ok('الوقود: الحالات ظاهرة بلغتين («مطلوب» و«حُوِّل» و«معتمدة» و«مرفوضة» بسببها)، ونموذج تأكيد الزيت',
+      ok('الوقود: الحالات ظاهرة بلغتين («مطلوب» و«حُوِّل» و«معتمدة» و«مرفوضة» بسببها)، ونموذج «حدّث التنفيذ» للزيت',
         await page.getByText('مطلوب ·',{exact:false}).count()>=1&&await page.getByText('حُوِّل ·',{exact:false}).count()>=1&&await page.getByText('معتمدة ·',{exact:false}).count()===1
-        &&await page.getByText('الفاتورة غير واضحة — أعد تصويرها',{exact:false}).count()===1&&await page.locator('#oc_tech').count()===1&&await page.getByRole('button',{name:'أكّد تغيير الزيت'}).count()===1);
+        &&await page.getByText('الفاتورة غير واضحة — أعد تصويرها',{exact:false}).count()===1&&await page.locator('#oc_shot').count()===1&&await page.locator('#oc_tech').count()===1
+        &&await page.getByRole('button',{name:'حدّث التنفيذ'}).count()===1);
+      const oil=await page.locator('.bp-free').last().innerText();
+      ok('الزيت: «قيد المتابعة مع سويتر» بلغتين، وسبب رفض الإثبات ظاهر بلغتين، واسم الفني اختياري',oil.includes('قيد المتابعة مع سويتر')&&oil.includes('সুইটারের সাথে ফলো-আপ চলছে')
+        &&oil.includes('رُفض إثبات التنفيذ: لقطة التنفيذ لا تظهر التاريخ — أعد رفعها')&&oil.includes('আবার আপলোড করুন')&&oil.includes('اسم الفني (اختياري)')&&!oil.includes('أُرسل لسويتر'));
+      await page.getByRole('button',{name:'حدّث التنفيذ'}).click();await page.waitForTimeout(250);
+      ok('حدّث التنفيذ بلا لقطة ⇒ يتوقف بخطأ بلغتين ولا يُرسل',(await page.locator('.bp-free').last().innerText()).includes('ارفع لقطة من تطبيق سويتر تثبت التنفيذ'));
       const txt=await page.locator('.bp-content').innerText();
       ok('لا أرقام تحليلية للدرّاج (لا كم/لتر، لا استهلاك، لا مخصّص شهري)',!/كم\s*\/|كم لكل|استهلاك|متوسط|مخصّص|تجاوز|280/.test(txt));
     }
+    if(key==='oilwait'){const oil=await page.locator('.bp-free').last().innerText();
+      ok('الزيت بانتظار المراجعة: لا نموذج طلب ولا تنفيذ، و«نُفّذ — بانتظار المراجعة» بلغتين، والملغى (99999) لا يظهر، والمعتمد في السجل',
+        await page.locator('#or_shot').count()===0&&await page.locator('#oc_shot').count()===0&&oil.includes('نُفّذ — بانتظار المراجعة')&&oil.includes('যাচাইয়ের অপেক্ষায়')
+        &&!oil.includes('99999')&&!oil.includes('ملغى')&&oil.includes('12100')&&oil.includes('معتمد'));}
     if(key==='fuellow'){
       ok('رصيد منخفض بلا طلب مفتوح: آخر طلب «رُفض» بسببه، وزر «دفعة مستعجلة» بلغتين',
         await page.getByText('رُفض طلب الدفعة — تُدمج مع دفعة الأسبوع').count()===1&&await page.getByRole('button',{name:/دفعة مستعجلة/}).count()===1

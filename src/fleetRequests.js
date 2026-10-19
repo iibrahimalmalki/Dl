@@ -10,21 +10,16 @@ export const FUEL_STATUS = {
   rejected: { ar: "مرفوض", bn: "প্রত্যাখ্যাত", tone: "bad" },
   cancelled: { ar: "ملغى", bn: "বাতিল", tone: "info" },
 };
+// الزيت (docs/sql/oil_flow.sql): لا خطوة «أُرسل لسويتر» — المفتوح (requested، أو sent القديم) «قيد المتابعة مع سويتر»
+const OIL_FOLLOW = { ar: "قيد المتابعة مع سويتر", bn: "সুইটারের সাথে ফলো-আপ চলছে", tone: "info" };
 export const OIL_STATUS = {
-  requested: { ar: "مطلوب", bn: "অনুরোধ করা হয়েছে", tone: "warn" },
-  sent: { ar: "أُرسل لسويتر", bn: "সুইটারে পাঠানো হয়েছে", tone: "info" },
-  done: { ar: "نُفّذ — بانتظار الاعتماد", bn: "সম্পন্ন — অনুমোদনের অপেক্ষায়", tone: "info" },
+  requested: OIL_FOLLOW,
+  sent: OIL_FOLLOW,
+  done: { ar: "نُفّذ — بانتظار المراجعة", bn: "সম্পন্ন — যাচাইয়ের অপেক্ষায়", tone: "warn" },
   approved: { ar: "معتمد", bn: "অনুমোদিত", tone: "ok" },
+  cancelled: { ar: "ملغى", bn: "বাতিল", tone: "bad" },
 };
 export const statusOf = (map, s) => map[s] || { ar: s || "—", bn: "", tone: "info" };
-
-export const CHANNELS = [
-  { k: "sweater_portal", ar: "بوابة سويتر" },
-  { k: "whatsapp", ar: "واتساب" },
-  { k: "call", ar: "اتصال" },
-  { k: "other", ar: "أخرى" },
-];
-export const channelAr = k => (CHANNELS.find(c => c.k === k) || {}).ar || k || "—";
 
 // أنواع التنبيهات كما تعيدها fleet_alerts() — للإدارة فقط
 export const ALERT_KINDS = {
@@ -90,32 +85,26 @@ const NEED = {
   odoPhoto: { ar: "التقط صورة العدّاد.", bn: "ওডোমিটারের ছবি তুলুন।" },
   amount: { ar: "أدخل المبلغ.", bn: "পরিমাণ লিখুন।" },
   receipt: { ar: "التقط صورة الفاتورة.", bn: "রসিদের ছবি তুলুন।" },
-  proof: { ar: "التقط صورة الفاتورة أو ملصق الزيت.", bn: "রসিদ বা তেলের স্টিকারের ছবি তুলুন।" },
-  tech: { ar: "اكتب اسم مسؤول الصيانة في سويتر.", bn: "সুইটারের মেইনটেন্যান্স দায়িত্বশীলের নাম লিখুন।" },
   liters: { ar: "أدخل اللترات (رقم موجب).", bn: "লিটার লিখুন (ধনাত্মক সংখ্যা)।" },
 };
-const need = field => ({ field, ...NEED[field] });
-export function oilRequestError({ odometer, odoPhoto }) {
-  if (parseNum(odometer) == null) return need("odometer");
-  if (!odoPhoto) return need("odoPhoto");
-  return null;
-}
-export function oilConfirmError({ odometer, odoPhoto, proof, tech }) {
-  if (parseNum(odometer) == null) return need("odometer");
-  if (!odoPhoto) return need("odoPhoto");
-  if (!proof) return need("proof");
-  if (!String(tech || "").trim()) return need("tech");
-  return null;
-}
+export const need = field => ({ field, ...NEED[field] });
+// نماذج الزيت: oilRequestFormError / oilExecFormError في oilFlow.js
 
 // ── رسائل أخطاء الدوال (raise exception 'CODE') ──
 const RPC_BIKER = {
   NOT_A_BIKER: { ar: "هذا الحساب غير مرتبط برقم بايكر. تواصل مع الإدارة.", bn: "এই অ্যাকাউন্ট বাইকার নম্বরের সাথে যুক্ত নয়। ম্যানেজমেন্টকে জানান।", action: "whatsapp" },
   NO_BIKE: { ar: "لا توجد دراجة مخصّصة لك الآن. تواصل مع الإدارة.", bn: "এখন আপনার নামে কোনো বাইক নেই। ম্যানেজমেন্টকে জানান।", action: "whatsapp" },
   ODOMETER_REQUIRED: NEED.odometer, PHOTO_REQUIRED: { ar: "الصور المطلوبة ناقصة.", bn: "প্রয়োজনীয় ছবি নেই।" },
-  AMOUNT_REQUIRED: NEED.amount, BAD_LITERS: NEED.liters, TECH_NAME_REQUIRED: NEED.tech,
+  AMOUNT_REQUIRED: NEED.amount, BAD_LITERS: NEED.liters,
+  TECH_NAME_REQUIRED: { ar: "اكتب اسم الفني.", bn: "টেকনিশিয়ানের নাম লিখুন।" },   // confirm_oil_change القديمة (قبل oil_flow.sql)
   NOTES_TOO_LONG: { ar: "الملاحظات طويلة جداً.", bn: "নোট খুব লম্বা।" },
-  ALREADY_DONE: { ar: "سبق تأكيد هذا الطلب.", bn: "এই অনুরোধ আগেই নিশ্চিত করা হয়েছে।" },
+  ALREADY_DONE: { ar: "هذا الطلب لم يعد مفتوحاً — حدّث الصفحة.", bn: "এই অনুরোধ আর খোলা নেই — পেজ রিফ্রেশ করুন।" },
+  // الزيت (docs/sql/oil_flow.sql)
+  SHOT_REQUIRED: { ar: "لقطة سويتر ناقصة.", bn: "সুইটারের স্ক্রিনশট নেই।" },
+  SAME_MINUTE: { ar: "انتظر دقيقة بعد رفع الطلب ثم حدّث التنفيذ.", bn: "অনুরোধের পর এক মিনিট অপেক্ষা করে আপডেট দিন।" },
+  ODOMETER_BELOW_REQUEST: { ar: "العدّاد أقل من عدّاد الطلب.", bn: "ওডোমিটার অনুরোধের রিডিং থেকে কম।" },
+  TECH_NAME_TOO_LONG: { ar: "اسم الفني طويل جداً.", bn: "টেকনিশিয়ানের নাম খুব লম্বা।" },
+  USE_NEW_OIL_REQUEST: { ar: "حدّث الصفحة ثم أعد المحاولة.", bn: "পেজ রিফ্রেশ করে আবার চেষ্টা করুন।" },
   NOT_FOUND: { ar: "الطلب غير موجود.", bn: "অনুরোধ পাওয়া যায়নি।", action: "whatsapp" },
 };
 export const errCode = err => { const m = String((err && (err.message || err.details)) || err || ""); const x = m.match(/\b([A-Z][A-Z_]{3,})\b/); return x ? x[1] : null; };
@@ -129,8 +118,7 @@ const RPC_ADMIN = {
   REF_REQUIRED: "أدخل مرجع التحويل.",
   BAD_DATE: "التاريخ غير منطقي (مستقبلي أو قبل الطلب).",
   NOT_REQUESTED: "حالة الطلب تغيّرت — حدّث الصفحة.",
-  CHANNEL_REQUIRED: "اختر قناة الإرسال.",
-  NOT_DONE: "لم يؤكد الدرّاج التنفيذ بعد.",
+  NOT_DONE: "لم يرفع البايكر التنفيذ بعد — حدّث الصفحة.",
   NOT_FOUND: "الطلب غير موجود.",
   BAD_KEY: "حدّ غير معروف.",
   BAD_VALUE: "قيمة غير صالحة (موجبة، والنسبة أقل من 100).",
@@ -140,10 +128,18 @@ const RPC_ADMIN = {
   DUPLICATE_TXN: "رقم العملية مستعمل لدفعة أخرى.",
   BAD_AMOUNT: "المبلغ غير صالح.",
   BAD_FEE: "الرسوم غير صالحة.",
-  REASON_REQUIRED: "اكتب سبب الرفض.",
+  REASON_REQUIRED: "اكتب السبب.",
   REASON_TOO_LONG: "السبب طويل جداً.",
   ALREADY_REVIEWED: "رُوجعت هذه التعبئة من قبل — حدّث الصفحة.",
   DECISION_REQUIRED: "اختر اعتماد أو رفض.",
+  // الزيت (docs/sql/oil_flow.sql)
+  ALREADY_CANCELLED: "أُلغي هذا الطلب من قبل — حدّث الصفحة.",
+  NO_BIKER: "لا بايكر مخصّص لهذه الدراجة ولا حائز لها.",
+  PHOTO_REQUIRED: "أرفق صورة العدّاد.",
+  ODOMETER_REQUIRED: "أدخل قراءة العدّاد.",
+  BAD_URL: "رابط صورة غير صالح.",
+  INACTIVE_VEHICLE: "الدراجة غير نشطة.",
+  PROOF_NEEDS_DONE: "لقطة التنفيذ مع «تغيير منفّذ» فقط.",
 };
 export const adminRpcError = err => { const c = errCode(err); return (c && RPC_ADMIN[c]) || ("خطأ: " + String((err && err.message) || err || "")); };
 
@@ -158,14 +154,7 @@ export function splitRequests(rows) {
     closed: r.filter(x => ["closed", "rejected", "cancelled"].includes(x.status)).sort((a, b) => t(b.requested_at) - t(a.requested_at)),
   };
 }
-// طلبات الزيت المفتوحة للإدارة: بانتظار الإرسال، ثم بانتظار التنفيذ، ثم بانتظار الاعتماد
-export function splitOil(rows) {
-  const r = rows || [];
-  const by = s => r.filter(x => x.status === s).sort((a, b) => t(a.requested_at) - t(b.requested_at));
-  return { requested: by("requested"), sent: by("sent"), done: by("done"), approved: r.filter(x => x.status === "approved").sort((a, b) => t(b.approved_at) - t(a.approved_at)) };
-}
-// طلب الزيت المفتوح للدرّاج (مطلوب أو أُرسل) — الأحدث
-export const openOil = rows => (rows || []).filter(x => x.status === "requested" || x.status === "sent").sort((a, b) => t(b.requested_at) - t(a.requested_at))[0] || null;
+// طلبات الزيت: bikerOil / splitOilAdmin في oilFlow.js
 // منذ متى (ساعات/أيام) — نص عربي قصير
 export function since(iso, now = Date.now()) {
   const h = Math.max(0, Math.floor((now - t(iso)) / 3600000));
