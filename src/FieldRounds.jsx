@@ -145,8 +145,8 @@ export default function FieldRounds({opId,onGo}){
       const cleanPhotos={};Object.entries(photos).forEach(([k,arr])=>{const f=(arr||[]).filter(Boolean);if(f.length)cleanPhotos[k]=f;});
       const cleanNotes={};Object.entries(itemNotes).forEach(([k,v])=>{if(v&&String(v).trim())cleanNotes[k]=v.trim();});
       const cleanParts={};Object.entries(itemParts).forEach(([k,v])=>{const a=(v||[]).filter(Boolean);if(a.length)cleanParts[k]=a;});
-      // تاريخ جولات البايكر للتحليل (نستبعد الجولة الجاري تعديلها كي لا تُقارن بنفسها)
-      let histQ=supabase.from("field_rounds").select("results,compliance_pct,round_date").eq("sweater_id",hd.sweater_id).order("round_date",{ascending:false}).limit(13);
+      // تاريخ جولات البايكر الأقدم فقط للتحليل (جولة قديمة تُعدَّل لا تُقارن بجولات أحدث، ولا بنفسها)
+      let histQ=supabase.from("field_rounds").select("results,compliance_pct,round_date").eq("sweater_id",hd.sweater_id).lt("round_date",hd.date).order("round_date",{ascending:false}).limit(13);
       if(editId)histQ=histQ.neq("id",editId);
       const{data:hist}=await histQ;
       const roundObj={results:res,item_notes:cleanNotes,compliance_pct:comp.pct,round_date:hd.date,biker_name:emp?.full_name||"",sweater_id:hd.sweater_id,action_items:comp.actions};
@@ -199,14 +199,14 @@ export default function FieldRounds({opId,onGo}){
     if(onGo)setTimeout(()=>onGo("supply_requests"),400);
   };
 
-  // تجهيز بيانات التقرير v2: آخر 3 جولات، صورة البايكر الرسمية، طلب الإمداد المرتبط، الفريق
+  // تجهيز بيانات التقرير v2: آخر جولات أقدم من الجولة المفتوحة، صورة البايكر الرسمية، طلب الإمداد المرتبط، الفريق
   const[reporting,setReporting]=useState(null);
   const openReportV2=async(r)=>{
     setReporting(r.id);setMsg(null);
     const extras={};
     try{
       const[{data:hist},{data:sreq},{data:emp}]=await Promise.all([
-        supabase.from("field_rounds").select("round_date,compliance_pct,results").eq("sweater_id",r.sweater_id).neq("status","requested").order("round_date",{ascending:false}).limit(4),
+        supabase.from("field_rounds").select("round_date,compliance_pct,results").eq("sweater_id",r.sweater_id).neq("status","requested").lt("round_date",r.round_date).neq("id",r.id).order("round_date",{ascending:false}).limit(4),
         supabase.from("supply_requests").select("ref,created_at,status,items").eq("round_id",r.id).order("created_at",{ascending:false}).limit(1),
         r.employee_id?supabase.from("employees").select("applicant_id,team_id").eq("id",r.employee_id).maybeSingle():Promise.resolve({data:null}),
       ]);

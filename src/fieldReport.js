@@ -258,8 +258,10 @@ export function buildReportHTML(round,analysis,opName,imgMap,extras={}){
   const dS=iso=>{const d=new Date(String(iso||"")+"T00:00:00");return isNaN(d)?(iso||"—"):`${DAY_AR[d.getDay()]} ${d.getDate()} ${MON_AR[d.getMonth()]}`;};
   const dl=deadline?dS(deadline):"—";
   const hist=(extras.history||[]).filter(h=>h.round_date&&h.compliance_pct!=null);
-  const series=[...hist.filter(h=>h.round_date!==round.round_date).sort((a,b)=>a.round_date<b.round_date?-1:1).slice(-2).map(h=>({label:shortDate(h.round_date),pct:Number(h.compliance_pct)})),{label:shortDate(round.round_date),pct:pct}];
-  const prevRound=hist.filter(h=>h.round_date&&h.round_date<round.round_date).sort((a,b)=>a.round_date<b.round_date?1:-1)[0]||null;
+  // الجولات الأقدم فقط (لا اللاحقة ولا نفس اليوم): مصدر واحد للسلسلة والمقارنة ومتابعة الإجراءات
+  const older=hist.filter(h=>h.round_date<round.round_date).sort((a,b)=>a.round_date<b.round_date?-1:1);
+  const series=[...older.slice(-2).map(h=>({label:shortDate(h.round_date),pct:Number(h.compliance_pct)})),{label:shortDate(round.round_date),pct:pct}];
+  const prevRound=older[older.length-1]||null;
   const prevActions=an.prevActions&&an.prevActions.length?an.prevActions:(prevRound?Object.entries(prevRound.results||{}).filter(([,v])=>v==="fail"||v==="half").map(([k])=>{const n=Number(k);const it=ITEMS.find(i=>i.n===n);const nowV=results[n];return{n,ar:it?it.ar:"#"+n,resp:it?it.resp:"biker",prev:prevRound.results[k],now:nowV||null,status:nowV==="pass"?"closed":nowV==null?"unknown":(nowV==="fail"||nowV==="half")?"recurring":"open"};}):[]);
   const recurringSet=new Set(prevActions.filter(a=>a.status==="recurring").map(a=>a.n));
   const inspector=round.inspector||"";

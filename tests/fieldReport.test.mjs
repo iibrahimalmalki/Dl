@@ -37,4 +37,20 @@ ok('evidence: gaps before compliant',html.indexOf('تحتاج تصحيحاً')<h
 ok('employee page bilingual',html.includes('صفحة الموظف')&&html.includes('ভালো করেছেন')&&html.includes('ليست عليك'));
 ok('PDF capture never zoomed',html.includes('onclone')&&html.includes('if(busy||'));
 ok('two PDF sizes: mobile + A4',html.includes('id="btn-pdf-m"')&&html.includes('id="btn-pdf"')&&html.includes('m:{w:108,h:234')&&html.includes('a4:{w:210,h:297'));
+
+// «الجولة السابقة» = أقدم من الجولة الحالية فقط (لا جولة لاحقة) — حالة عريف 1624
+const R=(d,pct)=>({id:'r'+d,sweater_id:'1624',biker_name:'Ariful Islam',round_date:d,round_time:'10:00',inspector:'سلمان المالكي',compliance_pct:pct,
+  results:{1:'pass',2:'pass',3:'fail',4:'pass',5:'pass',6:'pass',7:'pass',8:'pass',9:'pass',10:'pass',11:'pass',12:'pass',13:'pass'},item_notes:{},item_parts:{},photos:{}});
+const OCT=R('2026-10-01',83.3),NOV=R('2026-11-04',94.4),SEP=R('2026-09-02',72.2);
+const rep=(r,h)=>buildReportHTML(r,analyzeRound(r,h),'دلو ورغوة',{},{history:h,qrSvg:'<svg></svg>'});
+const h1=rep(OCT,[{round_date:NOV.round_date,compliance_pct:NOV.compliance_pct,results:NOV.results}]);
+ok('جولة أكتوبر مع جولة نوفمبر لاحقة ⇒ «أول جولة موثقة» بلا «تراجع»',h1.includes('أول جولة موثقة')&&!h1.includes('تراجع 11.1')&&!h1.includes('عن الجولة السابقة'));
+ok('التحليل لا يقارن بجولة لاحقة',analyzeRound(OCT,[{round_date:NOV.round_date,compliance_pct:94.4,results:NOV.results}]).trend.dir==='flat'&&analyzeRound(OCT,[{round_date:NOV.round_date,compliance_pct:94.4,results:NOV.results}]).trend.text.includes('لا توجد جولة سابقة'));
+const h2=rep(NOV,[{round_date:OCT.round_date,compliance_pct:OCT.compliance_pct,results:OCT.results}]);
+ok('جولة نوفمبر مع أكتوبر ⇒ «تحسّن 11.1 نقطة عن الجولة السابقة (83.3%)»',h2.includes('تحسّن 11.1 نقطة عن الجولة السابقة (83.3%)'));
+const all3=[NOV,OCT,SEP].map(r=>({round_date:r.round_date,compliance_pct:r.compliance_pct,results:r.results}));
+const h3=rep(OCT,all3);
+ok('تقرير أكتوبر مع 3 جولات ⇒ يقارن بسبتمبر فقط',h3.includes('تحسّن 11.1 نقطة عن الجولة السابقة (72.2%)')&&!h3.includes('94.4'));
+ok('نوفمبر لا يظهر في السلسلة ولا الرسم (لا أثر لـ 94.4 في التقرير)',!h3.includes('94.4'));
+ok('التحليل لأكتوبر يقارن بسبتمبر',analyzeRound(OCT,all3).trend.dir==='up'&&analyzeRound(OCT,all3).trend.text.includes('2026-09-02'));
 fs.rmSync(tmp,{recursive:true,force:true});

@@ -19,7 +19,7 @@ export function analyzeRound(round,history=[]){
   const excused=bikerItems.filter(i=>results[i.n]==="excused");
 
   // الاتجاه مقابل آخر جولة سابقة
-  const prev=history.find(h=>h.round_date&&h.round_date!==round.round_date&&h.compliance_pct!=null);
+  const prev=history.filter(h=>h.round_date&&h.round_date<round.round_date&&h.compliance_pct!=null).sort((a,b)=>a.round_date<b.round_date?1:-1)[0];
   let trend={dir:"flat",delta:0,text:"لا توجد جولة سابقة للمقارنة."};
   if(prev&&pct!=null){
     const d=Math.round((pct-Number(prev.compliance_pct))*10)/10;
