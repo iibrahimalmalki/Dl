@@ -1,11 +1,11 @@
 // الشريط الجانبي الزجاجي القابل للطي (RTL) — منصة دلو ورغوة
 // React + Framer Motion + lucide-react، CSS عادي (بدون Tailwind) ليتوافق مع بقية المنصة.
-// ≥1024px: مثبّت، يُطوى من 240 إلى 72 بكسل (تُحفظ الحالة) · <1024px: درج ينزلق من اليمين مع خلفية مضببة.
-// props: items[{k,ar,ic,g?,lock?,soon?}] (نفس NAV)، active، onGo(k)، user{name,role}، badges{k:n}، open، onOpenChange، theme ("light"|"dark")، onLogout، onSettings
+// ≥1024px: مثبّت، يُطوى من 320 إلى 80 بكسل (تُحفظ الحالة) · <1024px: درج ينزلق من اليمين مع خلفية مضببة.
+// props: items[{k,ar,ic,g?,lock?,soon?}] (نفس NAV)، active|activeId، onGo|onNavigate(k)، user{name,role,status?,avatarUrl?}، badges{k:n}، defaultExpanded، onToggle(isExpanded)، open، onOpenChange، theme ("light"|"dark")، onLogout، onSettings
 // extra: عقدة اختيارية تظهر أعلى القائمة في وضع الدرج على الجوال فقط (≤640px) — مثل اختيار المشغّل المخفي من الرأس
 import{useCallback,useEffect,useId,useMemo,useRef,useState}from"react";
 import{AnimatePresence,motion,useReducedMotion}from"framer-motion";
-import{MessageCircle,ListChecks,SlidersHorizontal,GraduationCap,PackageCheck,CircleUser,Fuel,LayoutDashboard,Megaphone,UserPlus,MessagesSquare,Compass,ClipboardCheck,Users,UserMinus,Sparkles,Activity,Gauge,MapPinned,MessageSquareWarning,ShieldAlert,UsersRound,Wallet,CalendarCheck,BadgeDollarSign,Scale,FileCheck2,CarFront,Receipt,ShieldCheck,Bike,House,FileBadge,Package,PackagePlus,KeyRound,Network,ChartColumn,UserCog,ScrollText,Settings,LogOut,Circle,Lock,PanelRightClose,PanelRightOpen,Search,X}from"lucide-react";
+import{ChevronRight,MessageCircle,ListChecks,SlidersHorizontal,GraduationCap,PackageCheck,CircleUser,Fuel,LayoutDashboard,Megaphone,UserPlus,MessagesSquare,Compass,ClipboardCheck,Users,UserMinus,Sparkles,Activity,Gauge,MapPinned,MessageSquareWarning,ShieldAlert,UsersRound,Wallet,CalendarCheck,BadgeDollarSign,Scale,FileCheck2,CarFront,Receipt,ShieldCheck,Bike,House,FileBadge,Package,PackagePlus,KeyRound,Network,ChartColumn,UserCog,ScrollText,Settings,LogOut,Circle,Lock,Search,X}from"lucide-react";
 
 // أيقونة كل صفحة حسب مفتاحها في NAV | Lucide icon per NAV key
 const ICON_BY_KEY={support:MessageCircle,relaunch:ListChecks,biker_tabs:SlidersHorizontal,dashboard:LayoutDashboard,job_ad:Megaphone,recruitment:UserPlus,interviews:MessagesSquare,sourcing:Compass,onboarding:ClipboardCheck,academy:GraduationCap,daily:PackageCheck,
@@ -14,7 +14,7 @@ const ICON_BY_KEY={support:MessageCircle,relaunch:ListChecks,biker_tabs:SlidersH
   close:CalendarCheck,payroll:Wallet,pricing:BadgeDollarSign,settlement:Scale,reconciliation:FileCheck2,damage_claims:CarFront,vendors:Receipt,gosi:ShieldCheck,
   fleet:Bike,housing:House,renewals:FileBadge,supply:Package,supply_requests:PackagePlus,custody:KeyRound,
   org:Network,reports:ChartColumn,users:UserCog,audit:ScrollText,settings:Settings,logout:LogOut};
-const EXPANDED=240,COLLAPSED=72;
+export const EXPANDED=320,COLLAPSED=80;
 const SPRING={type:"spring",stiffness:300,damping:30};
 const STORE="dw.sidebar.collapsed";
 
@@ -40,11 +40,13 @@ function useBreakpoint(){
 }
 const readStored=()=>{try{const v=localStorage.getItem(STORE);return v==null?null:v==="1";}catch(_){return null;}};
 const writeStored=v=>{try{localStorage.setItem(STORE,v?"1":"0");}catch(_){}};
-const initials=n=>String(n||"").trim().split(/\s+/).slice(0,2).map(s=>s[0]||"").join("")||"—";
+const initials=n=>String(n||"").trim().split(/\s+/).slice(0,2).map(s=>s.replace(/^ال(?=\S{2})/,"")[0]||"").join("")||"—"; // «المالكي» ⇒ م
 
-export default function GlassSidebar({items,active,onGo,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,onSearch,extra,noSettings,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
+export default function GlassSidebar({items,active:activeProp,activeId,onGo:onGoProp,onNavigate,defaultExpanded=true,onToggle,user,badges={},open:openProp,onOpenChange,theme="light",onLogout,onSettings,onSearch,extra,noSettings,platform={name:"دلو ورغوة",subtitle:"المنصّة التشغيلية · شريك 47"}}){
   const bp=useBreakpoint();const narrow=useNarrow();const canHover=useCanHover();const reduce=useReducedMotion();
-  const[collapsed,setCollapsed]=useState(()=>readStored()??false);
+  const active=activeId??activeProp;const onGo=onNavigate||onGoProp||(()=>{});
+  const[collapsed,setCollapsed]=useState(()=>readStored()??!defaultExpanded);
+  const toggle=()=>setCollapsed(c=>{const n=!c;onToggle&&onToggle(!n);return n;});
   const[openState,setOpenState]=useState(false);
   const open=openProp??openState;
   const setOpen=useCallback(v=>{onOpenChange&&onOpenChange(v);if(openProp==null)setOpenState(v);},[onOpenChange,openProp]);
@@ -94,11 +96,10 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
         onClick={()=>{if(locked)return;if(bottom&&n.k==="logout"){onLogout&&onLogout();return;}if(bottom&&n.k==="settings"){onSettings&&onSettings();return;}go(n.k);}}
         whileHover={locked||reduce||!canHover?undefined:{x:-4}} whileTap={locked?undefined:{scale:0.97}} transition={{type:"spring",stiffness:500,damping:30}}
         className={"gs-item"+(isActive?" on":"")+(showLabels?"":" icon-only")+(locked?" locked":"")+(bottom&&n.k==="logout"?" danger":"")}>
-        {isActive&&<span aria-hidden className="gs-ind"/>}
-        <span className="gs-ic"><Ic size={20} strokeWidth={1.9}/>{badge?<span className="gs-dot">{badge>99?"99+":badge}</span>:null}</span>
+        {isActive&&<motion.span layoutId={`${uid}-active`} transition={reduce?{duration:0}:SPRING} aria-hidden className="gs-act"><span className="gs-ind"/></motion.span>}
+        <span className="gs-ic"><Ic size={20} strokeWidth={1.9}/>{badge?<span className="gs-dot" role="status" aria-label={`${badge} إشعار جديد`}>{badge>99?"99+":badge}</span>:null}</span>
         <AnimatePresence initial={false}>{showLabels&&<motion.span key="l" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:8}} transition={{duration:reduce?0:0.18}} className="gs-lbl">{narrow&&n.sh?n.sh:n.ar}{n.bn?<small className="gs-bn" lang="bn">{n.bn}</small>:null}</motion.span>}</AnimatePresence>
         {showLabels&&(locked||ownerOnly)&&<span className="gs-lock" title={ownerOnly?"للمالك فقط":"قريباً"}><Lock size={13} aria-hidden/></span>}
-        {showLabels&&badge&&!locked?<span className="gs-badge">{badge}</span>:null}
       </motion.button>
       {!showLabels&&<span role="tooltip" id={tipId} className="gs-tip">{n.ar}{locked?" · قريباً":ownerOnly?" · للمالك فقط":""}</span>}
     </div>);
@@ -111,12 +112,8 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
           <span className="gs-logo"><img src="/brand-mark.png" alt=""/></span>
           {showLabels&&<div className="gs-brand"><b>{platform.name}</b><span className="gs-sub">{String(platform.subtitle||"").split(" · ").map((t,i)=><i key={i}>{i?<em> · </em>:null}{t}</i>)}</span></div>}
           {isDocked
-            ?<button type="button" onClick={()=>setCollapsed(c=>!c)} aria-expanded={!collapsed} aria-label={collapsed?"توسيع القائمة":"طيّ القائمة"} className={"gs-tgl"+(showLabels?"":" float")}>{collapsed?<PanelRightOpen size={18}/>:<PanelRightClose size={18}/>}</button>
+            ?<button type="button" onClick={toggle} aria-expanded={!collapsed} aria-label={collapsed?"توسيع القائمة":"طيّ القائمة"} className={"gs-tgl"+(showLabels?"":" float")}><motion.span animate={{rotate:collapsed?180:0}} transition={reduce?{duration:0}:SPRING} style={{display:"grid"}}><ChevronRight size={18} aria-hidden/></motion.span></button>
             :<button type="button" onClick={()=>setOpen(false)} aria-label="إغلاق القائمة" className="gs-tgl"><X size={18}/></button>}
-        </div>
-        <div className={"gs-prof"+(showLabels?"":" c")}>
-          <span className="gs-ring"><span className="gs-av">{user&&user.avatarUrl?<img src={user.avatarUrl} alt=""/>:initials(user&&user.name)}</span></span>
-          {showLabels&&<div className="gs-who"><b>{(user&&user.name)||"—"}</b><span>{(user&&user.role)||""}</span></div>}
         </div>
         {extra&&!isDocked&&<div className="gs-extra">{extra}</div>}
         {onSearch&&!isDocked&&<button type="button" className="gs-gsrch" onClick={()=>{setOpen(false);onSearch();}} aria-label="بحث شامل"><Search size={16} aria-hidden/><span>بحث شامل…</span></button>}
@@ -135,6 +132,10 @@ export default function GlassSidebar({items,active,onGo,user,badges={},open:open
         <div className="gs-foot">
           {!noSettings&&<Item n={{k:"settings",ar:"الإعدادات"}} bottom/>}
           <Item n={{k:"logout",ar:"تسجيل الخروج"}} bottom/>
+          <div className={"gs-prof"+(showLabels?"":" c")} title={showLabels?undefined:(user&&user.name)||undefined}>
+            <span className="gs-ring"><span className="gs-av">{user&&user.avatarUrl?<img src={user.avatarUrl} alt=""/>:initials(user&&user.name)}</span><span className="gs-on" aria-hidden/></span>
+            <AnimatePresence initial={false}>{showLabels&&<motion.div key="who" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:8}} transition={{duration:reduce?0:0.18}} className="gs-who"><b>{(user&&user.name)||"—"}</b><span>{(user&&(user.status||user.role))||""}</span></motion.div>}</AnimatePresence>
+          </div>
         </div>
       </div>
     </motion.aside>);
@@ -152,7 +153,7 @@ const CSS=`
   --gs-bg:#F5F6FA;--gs-glass:rgba(255,255,255,.62);--gs-line:rgba(15,23,42,.10);--gs-txt:#0F172A;--gs-mut:#64748B;--gs-hover:rgba(15,23,42,.05);--gs-tipbg:rgba(255,255,255,.97);--gs-shadow:-12px 0 40px -24px rgba(15,23,42,.35);color:var(--gs-txt);background:rgba(255,255,255,.35);box-shadow:var(--gs-shadow)}
 .gs-panel[data-theme=dark]{--gs-bg:#0A0E27;--gs-glass:rgba(255,255,255,.08);--gs-line:rgba(255,255,255,.14);--gs-txt:#F8FAFC;--gs-mut:#94A3B8;--gs-hover:rgba(255,255,255,.06);--gs-tipbg:rgba(12,17,45,.94);--gs-shadow:-12px 0 40px -20px rgba(0,0,0,.7);background:rgba(10,14,39,.92)}
 .gs-panel::after{content:"";position:absolute;top:0;bottom:0;left:0;width:1px;background:linear-gradient(180deg,rgba(245,158,11,.9),rgba(232,113,43,.35) 45%,rgba(251,113,133,.85));box-shadow:0 0 14px rgba(232,113,43,.55);pointer-events:none}
-.gs-glass{display:flex;flex-direction:column;height:100%;background:var(--gs-glass);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%)}
+.gs-glass{display:flex;flex-direction:column;height:100%;background:linear-gradient(rgba(59,130,246,.2),rgba(59,130,246,.2)),var(--gs-glass);border-inline-start:1px solid rgba(255,255,255,.2);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%)}
 .gs-panel *{box-sizing:border-box}
 .gs-panel button{font-family:inherit;-webkit-tap-highlight-color:transparent}
 .gs-gsrch{display:none}
@@ -177,16 +178,19 @@ const CSS=`
 .gs-logo{width:40px;height:40px;border-radius:12px;background:#fff;display:grid;place-items:center;flex:none;box-shadow:0 6px 16px rgba(var(--p-rgb),.3)}
 .gs-logo img{width:28px;height:28px;object-fit:contain}
 .gs-brand{min-width:0;flex:1}.gs-brand b{display:block;font-size:15px;font-weight:800;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gs-brand span{display:block;font-size:11px;color:var(--gs-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gs-tgl{width:32px;height:32px;border-radius:9px;border:none;background:none;color:var(--gs-mut);display:grid;place-items:center;cursor:pointer;flex:none}
+.gs-tgl{width:32px;height:32px;border-radius:9px;border:none;background:none;color:var(--gs-mut);display:grid;place-items:center;cursor:pointer;flex:none;transition:all .3s}
 @media(hover:hover){.gs-tgl:hover{color:var(--gs-txt);background:var(--gs-hover)}}
 .gs-tgl.float{position:absolute;top:64px;left:50%;transform:translateX(-50%)}
-.gs-prof{margin:0 12px 12px;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--gs-line);border-radius:16px;background:rgba(255,255,255,.04)}
-.gs-prof.c{justify-content:center;padding:8px 0;margin-top:34px;border:none;background:none}
-.gs-ring{width:40px;height:40px;border-radius:50%;padding:2px;background:conic-gradient(from 180deg,var(--a),var(--p),var(--s),var(--a));box-shadow:0 0 18px rgba(var(--p-rgb),.45);flex:none;display:grid;place-items:center}
+/* الملف الشخصي مثبّت أسفل القائمة، يفصله خط علوي */
+.gs-prof{margin:8px -8px -8px;display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid rgba(255,255,255,.2);transition:all .3s}
+@media(hover:hover){.gs-prof:hover{background:var(--gs-hover)}}
+.gs-prof.c{justify-content:center;padding:12px 0}
+.gs-ring{position:relative;width:40px;height:40px;border-radius:50%;padding:2px;background:conic-gradient(from 180deg,var(--a),var(--p),var(--s),var(--a));box-shadow:0 0 18px rgba(var(--p-rgb),.45);flex:none;display:grid;place-items:center}
 .gs-av{width:100%;height:100%;border-radius:50%;background:var(--gs-bg);display:grid;place-items:center;font-size:13px;font-weight:800;overflow:hidden;color:var(--gs-txt)}
 .gs-av img{width:100%;height:100%;object-fit:cover}
+.gs-on{position:absolute;bottom:0;left:0;width:11px;height:11px;border-radius:50%;background:#22C55E;box-shadow:0 0 0 2px var(--gs-bg)}
 .gs-who{min-width:0;flex:1}.gs-who b{display:block;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gs-who span{display:block;font-size:11px;color:var(--gs-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gs-srch{margin:0 12px 8px}.gs-srch.c{display:flex;justify-content:center}
+.gs-srch{margin:0 12px 8px}.gs-srch.c{display:flex;justify-content:center;margin-top:34px}
 .gs-sbox{display:flex;align-items:center;gap:8px;border:1px solid var(--gs-line);border-radius:12px;padding:8px 12px;color:var(--gs-mut);background:rgba(255,255,255,.05)}
 .gs-sbox:focus-within{border-color:var(--p);color:var(--gs-txt)}
 .gs-sbox input{flex:1;min-width:0;border:none;background:none;outline:none;font:inherit;font-size:13px;color:var(--gs-txt)}
@@ -200,19 +204,22 @@ const CSS=`
 .gs-cat{margin:12px 0 4px;padding:0 12px;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--gs-mut)}
 .gs-sep{margin:10px 12px;height:1px;background:var(--gs-line)}
 .gs-wrap{position:relative}
-.gs-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;margin:1px 0;border:none;border-radius:12px;background:none;color:var(--gs-mut);font-size:13.5px;font-weight:600;cursor:pointer;text-align:right;outline:none}
+.gs-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;margin:1px 0;border:none;border-radius:12px;background:none;color:var(--gs-mut);font-size:13.5px;font-weight:600;cursor:pointer;text-align:right;outline:none;transition:all .3s}
+.gs-item>:not(.gs-act){position:relative;z-index:1}
 .gs-item.icon-only{justify-content:center;padding:10px 0}
 @media(hover:hover){.gs-item:hover:not([disabled]){color:var(--gs-txt);background:var(--gs-hover)}}
-.gs-item.on{color:var(--gs-txt);background:rgba(var(--p-rgb),.15)}
+.gs-item.on{color:var(--gs-txt)}
+/* مؤشّر العنصر النشط: ينتقل بين العناصر بحركة (layoutId) */
+.gs-act{position:absolute;inset:0;border-radius:12px;background:rgba(var(--p-rgb),.15);z-index:0}
 .gs-item.locked{opacity:.45;cursor:not-allowed}
 @media(hover:hover){.gs-item.danger:hover{color:#B42318;background:rgba(240,68,56,.10)}}
 @media(hover:hover){.gs-panel[data-theme=dark] .gs-item.danger:hover{color:#FCA5A5}}
 .gs-item:focus-visible{box-shadow:0 0 0 2px var(--gs-bg),0 0 0 4px var(--p)}
 .gs-ind{position:absolute;right:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:linear-gradient(180deg,var(--a),var(--p) 45%,var(--s));box-shadow:0 0 12px rgba(var(--p-rgb),.8)}
-.gs-ic{position:relative;flex:none;display:grid;place-items:center}
+.gs-ic{position:relative;flex:none;display:grid;place-items:center;transition:all .3s}
 .gs-item.on .gs-ic{color:var(--p);filter:drop-shadow(0 0 6px rgba(var(--p-rgb),.9))}
-@media(hover:hover){.gs-item:hover:not([disabled]) .gs-ic{color:var(--p);filter:drop-shadow(0 0 6px rgba(var(--p-rgb),.85))}}
-.gs-dot{position:absolute;top:-6px;left:-6px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--p);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;line-height:1;font-variant-numeric:tabular-nums}
+@media(hover:hover){.gs-item:hover:not([disabled]) .gs-ic{color:var(--p);filter:drop-shadow(0 0 6px rgba(var(--p-rgb),.85));transform:scale(1.1)}}
+.gs-dot{position:absolute;top:-6px;left:-6px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:#EF4444;color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;line-height:1;font-variant-numeric:tabular-nums}
 .gs-lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gs-bn{display:block;font-size:10.5px;font-weight:600;opacity:.75;line-height:1.3;font-family:system-ui,-apple-system,"Noto Sans Bengali","Segoe UI",sans-serif}
 .gs-lock{flex:none;opacity:.7;display:inline-flex;align-items:center}
